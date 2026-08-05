@@ -47,3 +47,30 @@ class PostResponse(PostBase):
     feeders: List[FeederResponse] = []
 
     model_config = {"from_attributes": True}
+
+
+from pydantic import BaseModel
+from typing import Optional
+
+class LinkBase(BaseModel):
+    name: str
+    from_post_id: int
+    to_post_id: int
+    cable_type: Optional[str] = None
+    cross_section: Optional[float] = None
+    allowed_current: Optional[float] = None
+
+class LinkCreate(LinkBase):
+    pass
+
+class LinkUpdate(BaseModel):
+    name: Optional[str] = None
+    cable_type: Optional[str] = None
+    cross_section: Optional[float] = None
+    allowed_current: Optional[float] = None
+
+class LinkResponse(LinkBase):
+    id: int
+
+    class Config:
+        from_attributes = True

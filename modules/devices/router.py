@@ -6,11 +6,12 @@ from modules.devices.repository import DeviceRepository
 from modules.devices.service import DeviceService
 from modules.devices.schemas import (
     PostCreate, PostUpdate, PostResponse,
-    FeederCreate, FeederUpdate, FeederResponse
+    FeederCreate, FeederUpdate, FeederResponse,
+    LinkCreate, LinkUpdate, LinkResponse # اضافه شدن اسکیماهای لینک
 )
 from modules.auth.dependencies import get_current_user, get_tech_or_admin_user
 
-router = APIRouter(prefix="/devices", tags=["مدیریت تجهیزات (پست و فیدر)"])
+router = APIRouter(prefix="/devices", tags=["مدیریت تجهیزات (پست، فیدر، لینک)"])
 
 def get_device_service(db: AsyncSession = Depends(get_db)) -> DeviceService:
     repo = DeviceRepository(db)
@@ -104,3 +105,48 @@ async def delete_feeder(
     current_user = Depends(get_tech_or_admin_user)
 ):
     return await service.delete_feeder(feeder_id)
+
+
+# ================= Endpoints: Links =================
+
+@router.post("/links", response_model=LinkResponse, status_code=status.HTTP_201_CREATED, summary="ایجاد لینک جدید بین دو پست (ادمین/اپراتور)")
+async def create_link(
+    data: LinkCreate,
+    service: DeviceService = Depends(get_device_service),
+    current_user = Depends(get_tech_or_admin_user)
+):
+    return await service.create_link(data)
+
+@router.get("/links", response_model=List[LinkResponse], summary="دریافت لیست لینک‌ها")
+async def get_links(
+    skip: int = Query(0, ge=0),
+    limit: int = Query(100, ge=1),
+    service: DeviceService = Depends(get_device_service),
+    current_user = Depends(get_current_user)
+):
+    return await service.get_links(skip=skip, limit=limit)
+
+@router.get("/links/{link_id}", response_model=LinkResponse, summary="دریافت اطلاعات یک لینک")
+async def get_link(
+    link_id: int,
+    service: DeviceService = Depends(get_device_service),
+    current_user = Depends(get_current_user)
+):
+    return await service.get_link(link_id)
+
+@router.put("/links/{link_id}", response_model=LinkResponse, summary="ویرایش مشخصات لینک (ادمین/اپراتور)")
+async def update_link(
+    link_id: int,
+    data: LinkUpdate,
+    service: DeviceService = Depends(get_device_service),
+    current_user = Depends(get_tech_or_admin_user)
+):
+    return await service.update_link(link_id, data)
+
+@router.delete("/links/{link_id}", summary="حذف لینک (ادمین/اپراتور)")
+async def delete_link(
+    link_id: int,
+    service: DeviceService = Depends(get_device_service),
+    current_user = Depends(get_tech_or_admin_user)
+):
+    return await service.delete_link(link_id)

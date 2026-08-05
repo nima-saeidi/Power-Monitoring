@@ -1,8 +1,6 @@
-from sqlalchemy import Column, Integer, String, Boolean, DateTime
-from sqlalchemy.sql import func
-from core.database import Base
 import enum
-from sqlalchemy import Column, Integer, String, Enum as SQLEnum
+from sqlalchemy import Column, Integer, String, Boolean, DateTime, Enum as SQLEnum
+from sqlalchemy.sql import func
 from core.database import Base
 
 class RoleEnum(str, enum.Enum):
@@ -17,7 +15,6 @@ class User(Base):
     name = Column(String(100), nullable=False)
     email = Column(String(150), unique=True, index=True, nullable=False)
     hashed_password = Column(String(255), nullable=False)
-    role = Column(String(50), default="admin", nullable=False)  # admin, operator, viewer
+    role = Column(SQLEnum(RoleEnum), default=RoleEnum.USER, nullable=False) # فقط یک بار تعریف شود
     is_active = Column(Boolean, default=True)
-    role = Column(SQLEnum(RoleEnum), default=RoleEnum.USER, nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())

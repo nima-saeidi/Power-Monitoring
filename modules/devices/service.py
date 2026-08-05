@@ -1,7 +1,11 @@
 from fastapi import HTTPException, status
 from typing import List, Optional
 from modules.devices.repository import DeviceRepository
-from modules.devices.schemas import PostCreate, PostUpdate, PostResponse, FeederCreate, FeederUpdate, FeederResponse
+from modules.devices.schemas import (
+    PostCreate, PostUpdate, PostResponse, 
+    FeederCreate, FeederUpdate, FeederResponse,
+    LinkCreate, LinkUpdate, LinkResponse # اضافه شدن اسکیماهای لینک
+)
 
 class DeviceService:
     def __init__(self, repo: DeviceRepository):
@@ -61,3 +65,37 @@ class DeviceService:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="فیدر مورد نظر یافت نشد.")
         await self.repo.delete_feeder(feeder)
         return {"message": "فیدر با موفقیت حذف شد."}
+
+    # ----- Link Service Methods -----
+    async def create_link(self, data: LinkCreate) -> LinkResponse:
+        from_post = await self.repo.get_post_by_id(data.from_post_id)
+        if not from_post:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="پست مبدأ یافت نشد.")
+        
+        to_post = await self.repo.get_post_by_id(data.to_post_id)
+        if not to_post:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="پست مقصد یافت نشد.")
+            
+        return await self.repo.create_link(data)
+
+    async def get_links(self, skip: int = 0, limit: int = 100) -> List[LinkResponse]:
+        return await self.repo.get_all_links(skip=skip, limit=limit)
+
+    async def get_link(self, link_id: int) -> LinkResponse:
+        link = await self.repo.get_link_by_id(link_id)
+        if not link:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="لینک مورد نظر یافت نشد.")
+        return link
+
+    async def update_link(self, link_id: int, data: LinkUpdate) -> LinkResponse:
+        link = await self.repo.get_link_by_id(link_id)
+        if not link:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="لینک مورد نظر یافت نشد.")
+        return await self.repo.update_link(link, data)
+
+    async def delete_link(self, link_id: int) -> dict:
+        link = await self.repo.get_link_by_id(link_id)
+        if not link:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="لینک مورد نظر یافت نشد.")
+        await self.repo.delete_link(link)
+        return {"message": "لینک با موفقیت حذف شد."}

@@ -3,13 +3,22 @@ from fastapi import FastAPI
 from core.database import engine, Base
 from modules.auth.router import router as auth_router
 from modules.devices.router import router as devices_router
+from contextlib import asynccontextmanager
+from scheduler import TelemetryScheduler
+import asyncio
+
+scheduler = TelemetryScheduler()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # ساخت جداول دیتابیس در هنگام استارت
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+    # هنگام بالا آمدن سرور: اجرای تسک‌های پس‌زمینه خواندن Modbus
+    print("Starting Modbus Telemetry Tasks...")
+    asyncio.create_task(scheduler.start())
     yield
+    # هنگام خاموش شدن سرور: متوقف کردن تسک‌ها
+    print("Stopping Telemetry Tasks...")
+    await scheduler.stop()
+    await conn.run_sync(Base.metadata.create_all)
 
 app = FastAPI(
     title="سامانه مدیریت و مانیتورینگ شبکه توزیع برق دانشگاه",
