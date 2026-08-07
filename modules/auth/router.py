@@ -20,9 +20,11 @@ async def register_admin(data: AdminRegisterRequest, service: AuthService = Depe
     return await service.register_admin(data)
 
 # 2. مسیر ورود (نیاز به دسترسی خاصی ندارد)
-@router.post("/login", response_model=TokenResponse, summary="ورود به سامانه و دریافت توکن")
-async def login(data: LoginRequest, service: AuthService = Depends(get_auth_service)):
-    return await service.login(data)
+@router.post("/login", response_model=TokenResponse)
+async def login(data: LoginRequest, db: AsyncSession = Depends(get_db)):
+    auth_service = AuthService(UserRepository(db))
+    return await auth_service.login(data, db=db) # ارسال db
+
 
 @router.post("/users", response_model=UserResponse, status_code=status.HTTP_201_CREATED, summary="ایجاد کاربر جدید (فقط ادمین)")
 async def create_user(

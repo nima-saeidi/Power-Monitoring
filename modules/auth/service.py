@@ -1,8 +1,11 @@
+from datetime import timedelta
 from fastapi import HTTPException, status
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from modules.auth.repository import UserRepository
 from modules.auth.schemas import AdminRegisterRequest, LoginRequest, TokenResponse, UserResponse, UserCreate, UserUpdate
 from core.security import hash_password, verify_password, create_access_token
-
+from modules.settings.service import SettingService
 
 
 class AuthService:
@@ -17,7 +20,7 @@ class AuthService:
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="این ایمیل قبلاً در سامانه ثبت شده است."
             )
-        
+
         # ۲. هش کردن رمز عبور و ثبت
         hashed_pwd = hash_password(data.password)
         new_user = await self.repo.create_user(
@@ -28,22 +31,30 @@ class AuthService:
         )
         return UserResponse.model_validate(new_user)
 
-    async def login(self, data: LoginRequest) -> TokenResponse:
+    async def login(self, data: LoginRequest, db: AsyncSession) -> TokenResponse:
         user = await self.repo.get_by_email(data.email)
         if not user or not verify_password(data.password, user.hashed_password):
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="ایمیل یا رمز عبور اشتباه است."
             )
-        
+
         if not user.is_active:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="حساب کاربری غیرفعال است."
             )
 
-        # تولید توکن JWT
-        token = create_access_token(data={"sub": str(user.id), "email": user.email, "role": user.role})
+        # خواندن تنظیمات داینامیک سیستم از دیتابیس
+        settings = await SettingService.get_or_create_settings(db)
+        expires_delta = timedelta(minutes=settings.access_token_expire_minutes)
+
+        # تولید توکن JWT با اعمال زمان انقضای دریافتی از دیتابیس
+        token = create_access_token(
+            data={"sub": str(user.id), "email": user.email, "role": user.role},
+            expires_delta=expires_delta
+        )
+
         return TokenResponse(
             access_token=token,
             user=UserResponse.model_validate(user)
@@ -53,13 +64,13 @@ class AuthService:
         existing = await self.repo.get_by_email(data.email)
         if existing:
             raise HTTPException(status_code=400, detail="این ایمیل قبلاً ثبت شده است.")
-        
+
         hashed_pwd = hash_password(data.password)
         new_user = await self.repo.create_user(
             name=data.name,
             email=data.email,
             hashed_password=hashed_pwd,
-            role=data.role, 
+            role=data.role,
             is_active=data.is_active
         )
         return UserResponse.model_validate(new_user)
@@ -85,7 +96,7 @@ class AuthService:
             if existing:
                 raise HTTPException(status_code=400, detail="این ایمیل توسط شخص دیگری ثبت شده است.")
             user.email = data.email
-        
+
         if data.name: user.name = data.name
         if data.role: user.role = data.role
         if data.is_active is not None: user.is_active = data.is_active
@@ -98,6 +109,6 @@ class AuthService:
         user = await self.repo.get_by_id(user_id)
         if not user:
             raise HTTPException(status_code=404, detail="کاربر یافت نشد.")
-        
+
         await self.repo.delete_user(user)
         return {"message": "کاربر با موفقیت حذف شد."}

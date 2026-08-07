@@ -7,15 +7,67 @@ from modules.devices.service import DeviceService
 from modules.devices.schemas import (
     PostCreate, PostUpdate, PostResponse,
     FeederCreate, FeederUpdate, FeederResponse,
-    LinkCreate, LinkUpdate, LinkResponse # اضافه شدن اسکیماهای لینک
+    LinkCreate, LinkUpdate, LinkResponse,
+    LocationCreate, LocationUpdate, LocationResponse # اسکیماهای لوکیشن اضافه شد
 )
 from modules.auth.dependencies import get_current_user, get_tech_or_admin_user
 
-router = APIRouter(prefix="/devices", tags=["مدیریت تجهیزات (پست، فیدر، لینک)"])
+router = APIRouter(prefix="/devices", tags=["مدیریت تجهیزات (لوکیشن، پست، فیدر، لینک)"])
 
 def get_device_service(db: AsyncSession = Depends(get_db)) -> DeviceService:
     repo = DeviceRepository(db)
     return DeviceService(repo)
+
+# ================= Endpoints: Locations =================
+
+@router.post("/locations", response_model=LocationResponse, status_code=status.HTTP_201_CREATED, summary="ایجاد مکان/لوکیشن جدید (ادمین/اپراتور)")
+async def create_location(
+    data: LocationCreate,
+    service: DeviceService = Depends(get_device_service),
+    current_user = Depends(get_tech_or_admin_user)
+):
+    return await service.create_location(data)
+
+@router.get("/locations/roots", response_model=List[LocationResponse], summary="دریافت مکان‌های ریشه (مناسب برای ساخت درخت UI)")
+async def get_root_locations(
+    service: DeviceService = Depends(get_device_service),
+    current_user = Depends(get_current_user)
+):
+    return await service.get_root_locations()
+
+@router.get("/locations", response_model=List[LocationResponse], summary="دریافت لیست تمامی مکان‌ها")
+async def get_locations(
+    skip: int = Query(0, ge=0),
+    limit: int = Query(100, ge=1),
+    service: DeviceService = Depends(get_device_service),
+    current_user = Depends(get_current_user)
+):
+    return await service.get_locations(skip=skip, limit=limit)
+
+@router.get("/locations/{location_id}", response_model=LocationResponse, summary="دریافت اطلاعات یک مکان خاص")
+async def get_location(
+    location_id: int,
+    service: DeviceService = Depends(get_device_service),
+    current_user = Depends(get_current_user)
+):
+    return await service.get_location(location_id)
+
+@router.put("/locations/{location_id}", response_model=LocationResponse, summary="ویرایش مشخصات مکان (ادمین/اپراتور)")
+async def update_location(
+    location_id: int,
+    data: LocationUpdate,
+    service: DeviceService = Depends(get_device_service),
+    current_user = Depends(get_tech_or_admin_user)
+):
+    return await service.update_location(location_id, data)
+
+@router.delete("/locations/{location_id}", summary="حذف مکان (ادمین/اپراتور)")
+async def delete_location(
+    location_id: int,
+    service: DeviceService = Depends(get_device_service),
+    current_user = Depends(get_tech_or_admin_user)
+):
+    return await service.delete_location(location_id)
 
 # ================= Endpoints: Posts =================
 
