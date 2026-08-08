@@ -3,73 +3,136 @@ from sqlalchemy.orm import relationship
 from core.database import Base
 
 
-# ۱. تعریف مدل مکان برای ساختار درختی و سلسله‌مراتبی (پردیس‌ها، ساختمان‌ها و ...)
+# =========================================
+# مدل مکان برای ساختار درختی
+# =========================================
+
 class Location(Base):
     __tablename__ = "locations"
 
     id = Column(Integer, primary_key=True, index=True)
-    name = Column(String, index=True, nullable=False)
-    location_type = Column(String, nullable=True)  # مثلاً 'University', 'Campus', 'Zone'
-
-    # کلید خارجی به خود جدول برای ایجاد ساختار درختی (والد و فرزند)
+    name = Column(String(100), index=True, nullable=False)
+    location_type = Column(String(50), nullable=True)  # 'University', 'Campus', 'Building', 'Zone'
+    description = Column(Text, nullable=True)
+    
+    # ساختار درختی
     parent_id = Column(Integer, ForeignKey("locations.id", ondelete="CASCADE"), nullable=True)
+    
+    # Timestamps
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
     # روابط
     children = relationship("Location", backref="parent", remote_side=[id])
     posts = relationship("Post", back_populates="location")
 
 
-# ۲. به‌روزرسانی مدل پست
+# =========================================
+# مدل پست
+# =========================================
+
 class Post(Base):
     __tablename__ = "posts"
 
     id = Column(Integer, primary_key=True, index=True)
-    name = Column(String, index=True, nullable=False)
-
-    # ارتباط پست با جدول مکان‌ها (جایگزین فیلد متنی قبلی شد)
+    name = Column(String(100), index=True, nullable=False)
+    
+    # ارتباط با مکان
     location_id = Column(Integer, ForeignKey("locations.id", ondelete="SET NULL"), nullable=True)
-
-    transformer_specs = Column(String, nullable=True)
-    ip_address = Column(String, nullable=True)
+    
+    # مشخصات فنی
+    transformer_specs = Column(String(200), nullable=True)
+    ip_address = Column(String(45), nullable=True, unique=True)
+    port = Column(Integer, default=502)  # Modbus TCP default port
+    
+    # داده‌های اضافی به صورت JSONB
+    metadata = Column(JSONB, nullable=True)  # برای داده‌های دلخواه
+    
+    # وضعیت
     is_active = Column(Boolean, default=True)
+    last_seen = Column(DateTime, nullable=True)  # آخرین ارتباط موفق
+    
+    # Timestamps
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
     # روابط
     location = relationship("Location", back_populates="posts")
     feeders = relationship("Feeder", back_populates="post", cascade="all, delete-orphan")
+    timeseries_data = relationship("TimeseriesData", back_populates="post", cascade="all, delete-orphan")
+    command_logs = relationship("CommandLog", back_populates="post")
+    device_tests = relationship("DeviceTestLog", back_populates="post")
+    
+    # لینک‌ها
+    outgoing_links = relationship("Link", foreign_keys="Link.from_post_id", back_populates="from_post")
+    incoming_links = relationship("Link", foreign_keys="Link.to_post_id", back_populates="to_post")
 
 
-# ۳. مدل فیدر (بدون تغییر، شامل مدیریت خطای تله‌متری)
+# =========================================
+# مدل فیدر
+# =========================================
+
 class Feeder(Base):
     __tablename__ = "feeders"
 
     id = Column(Integer, primary_key=True, index=True)
-    post_id = Column(Integer, ForeignKey("posts.id"), nullable=False)
-    name = Column(String, nullable=False)
+    post_id = Column(Integer, ForeignKey("posts.id", ondelete="CASCADE"), nullable=False)
+    name = Column(String(100), nullable=False)
+    
+    # مشخصات فنی
     max_current = Column(Float, nullable=True)
-    cable_type = Column(String, nullable=True)
+    cable_type = Column(String(50), nullable=True)
+    modbus_address = Column(Integer, nullable=True)  # آدرس Modbus دستگاه
+    
+    # داده‌های اضافی
+    metadata = Column(JSONB, nullable=True)
+    
+    # وضعیت و مانیتورینگ
     is_active = Column(Boolean, default=True)
     consecutive_failures = Column(Integer, default=0)  # شمارنده خطای تله‌متری
+    last_success = Column(DateTime, nullable=True)
+    
+    # Timestamps
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
     # روابط
     post = relationship("Post", back_populates="feeders")
+    timeseries_data = relationship("TimeseriesData", back_populates="feeder", cascade="all, delete-orphan")
+    device_tests = relationship("DeviceTestLog", back_populates="feeder")
+
+    __table_args__ = (
+        Index('idx_feeder_post', 'post_id'),
+    )
 
 
-# ۴. مدل لینک (بدون تغییر)
+# =========================================
+# مدل لینک
+# =========================================
+
 class Link(Base):
     __tablename__ = "links"
 
     id = Column(Integer, primary_key=True, index=True)
-    name = Column(String, index=True)
-
-    # ارتباط با گره مبدأ و مقصد
-    from_post_id = Column(Integer, ForeignKey("posts.id"))
-    to_post_id = Column(Integer, ForeignKey("posts.id"))
-
+    name = Column(String(100), index=True, nullable=True)
+    
+    # ارتباط مبدأ و مقصد
+    from_post_id = Column(Integer, ForeignKey("posts.id", ondelete="CASCADE"), nullable=False)
+    to_post_id = Column(Integer, ForeignKey("posts.id", ondelete="CASCADE"), nullable=False)
+    
     # داده‌های استاتیک
-    cable_type = Column(String)  # نوع کابل
-    cross_section = Column(Float)  # سطح مقطع
-    allowed_current = Column(Float)  # جریان مجاز
+    cable_type = Column(String(50), nullable=True)
+    cross_section = Column(Float, nullable=True)  # mm²
+    length = Column(Float, nullable=True)  # متر
+    allowed_current = Column(Float, nullable=True)  # آمپر
+    
+    # وضعیت
+    is_active = Column(Boolean, default=True)
+    
+    # Timestamps
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
-    # روابط (در صورت نیاز به دسترسی به آبجکت پست از طریق لینک)
-    from_post = relationship("Post", foreign_keys=[from_post_id])
-    to_post = relationship("Post", foreign_keys=[to_post_id])
+    # روابط
+    from_post = relationship("Post", foreign_keys=[from_post_id], back_populates="outgoing_links")
+    to_post = relationship("Post", foreign_keys=[to_post_id], back_populates="incoming_links")
