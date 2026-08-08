@@ -1,18 +1,20 @@
-# modules/telemetry/schemas.py
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
+from typing import Optional
 from datetime import datetime
 
-class TelemetryCreate(BaseModel):
-    active_power: float
-    reactive_power: float
-    voltage: float
-    current: float
-    power_factor: float
+class TelemetryBase(BaseModel):
+    post_id: int
+    parameter_name: str  # مثلاً 'voltage_phase_a'
+    value_int: Optional[int] = None
+    value_float: Optional[float] = None
+    value_str: Optional[str] = None
+    value_bool: Optional[bool] = None
 
-class TelemetryResponse(TelemetryCreate):
+class TelemetryCreate(TelemetryBase):
+    pass
+
+class TelemetryResponse(TelemetryBase):
     id: int
-    feeder_id: int
     timestamp: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)

@@ -5,9 +5,8 @@ from modules.devices.schemas import (
     PostCreate, PostUpdate, PostResponse,
     FeederCreate, FeederUpdate, FeederResponse,
     LinkCreate, LinkUpdate, LinkResponse,
-    LocationCreate, LocationUpdate, LocationResponse  # اسکیماهای مکان اضافه شدند
+    LocationCreate, LocationUpdate, LocationResponse
 )
-
 
 class DeviceService:
     def __init__(self, repo: DeviceRepository):
@@ -15,7 +14,6 @@ class DeviceService:
 
     # ----- Location Service Methods -----
     async def create_location(self, data: LocationCreate) -> LocationResponse:
-        # در صورت ارسال parent_id بررسی می‌کنیم که مکان والد وجود داشته باشد
         if data.parent_id:
             parent = await self.repo.get_location_by_id(data.parent_id)
             if not parent:
@@ -39,12 +37,10 @@ class DeviceService:
         if not location:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="مکان مورد نظر یافت نشد.")
 
-        # بررسی وجود مکان والد جدید (اگر در آپدیت ارسال شده باشد)
         if data.parent_id:
             parent = await self.repo.get_location_by_id(data.parent_id)
             if not parent:
                 raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="مکان والد یافت نشد.")
-            # جلوگیری از انتخاب خود مکان به عنوان والد خودش (حلقه بینهایت)
             if data.parent_id == location_id:
                 raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="یک مکان نمی‌تواند والد خودش باشد.")
 

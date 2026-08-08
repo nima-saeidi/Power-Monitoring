@@ -19,7 +19,7 @@ from core.database import Base
 from modules.auth.models import User
 from modules.devices.models import Post, Feeder, Link
 from modules.settings.models import SystemSetting
-
+from modules.notifications.models import NotificationPreference , NotificationType , NotificationPriority , Notification ,NotificationTemplate
 config = context.config
 
 if config.config_file_name is not None:

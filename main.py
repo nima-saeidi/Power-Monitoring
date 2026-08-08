@@ -8,6 +8,7 @@ from modules.auth.router import router as auth_router
 from modules.devices.router import router as devices_router
 from modules.settings.router import router as settings_router  # اضافه شدن روتر تنظیمات
 from scheduler import TelemetryScheduler
+from modules.notifications.router import router as notifications_router
 
 scheduler = TelemetryScheduler()
 
@@ -39,6 +40,7 @@ app = FastAPI(
 # رجیستر کردن روترها
 app.include_router(auth_router)
 app.include_router(devices_router)
+app.include_router(notifications_router)
 app.include_router(settings_router)  # رجیستر کردن روتر تنظیمات داینامیک
 
 if __name__ == "__main__":

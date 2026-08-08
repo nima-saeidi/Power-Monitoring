@@ -2,6 +2,7 @@ import enum
 from sqlalchemy import Column, Integer, String, Boolean, DateTime, Enum as SQLEnum
 from sqlalchemy.sql import func
 from core.database import Base
+from sqlalchemy.orm import relationship
 
 class RoleEnum(str, enum.Enum):
     ADMIN = "admin"
@@ -18,3 +19,5 @@ class User(Base):
     role = Column(SQLEnum(RoleEnum), default=RoleEnum.USER, nullable=False) # فقط یک بار تعریف شود
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+    notifications = relationship("Notification", back_populates="user", cascade="all, delete-orphan")
+    notification_preferences = relationship("NotificationPreference", back_populates="user", uselist=False, cascade="all, delete-orphan")

@@ -5,8 +5,12 @@ from sqlalchemy.future import select
 
 # ایمپورت‌های پروژه شما
 from core.config import settings
-from modules.devices.models import Post    # مطمئن شوید که فیلدهای consecutive_failures و is_active به این مدل اضافه شده‌اند
+from modules.devices.models import Post
 from modbus_client import ModbusReader
+
+# ایمپورت‌های مربوط به سرویس تله‌متری (اضافه شده)
+from modules.telemetry.schemas import TelemetryCreate
+from modules.telemetry.service import TelemetryService
 
 # تنظیمات لاگر
 logging.basicConfig(level=logging.INFO)
@@ -16,12 +20,13 @@ logger = logging.getLogger(__name__)
 engine = create_async_engine(settings.DATABASE_URL, echo=False)
 AsyncSessionLocal = async_sessionmaker(engine, expire_on_commit=False)
 
+
 class TelemetryScheduler:
     def __init__(self):
         self.is_running = False
         self._tasks = []
 
-    async def handle_success(self, device_id: int, data):
+    async def handle_success(self, device_id: int, data: list):
         """عملیات پس از خواندن موفقیت‌آمیز داده‌ها"""
         async with AsyncSessionLocal() as session:
             device = await session.get(Post, device_id)
@@ -29,9 +34,28 @@ class TelemetryScheduler:
                 # اگر قبلا خطایی داشته صفر می‌شود
                 if getattr(device, 'consecutive_failures', 0) > 0:
                     device.consecutive_failures = 0
-                
-                # TODO: ذخیره مقادیر data در دیتابیس (مثلاً در جدول TelemetryData)
-                
+
+                # استخراج دیتا (بر اساس پیکربندی آدرس رجیسترهای Modbus شما)
+                voltage_val = data[0] if len(data) > 0 else 0.0
+                current_val = data[1] if len(data) > 1 else 0.0
+
+                # ساخت نمونه از سرویس تله‌متری برای ثبت در دیتابیس و برادکست وب‌سوکت
+                telemetry_service = TelemetryService(session)
+
+                # ثبت ولتاژ
+                await telemetry_service.add_telemetry_data(TelemetryCreate(
+                    post_id=device_id,
+                    parameter_name="voltage",
+                    value_float=float(voltage_val)
+                ))
+
+                # ثبت جریان
+                await telemetry_service.add_telemetry_data(TelemetryCreate(
+                    post_id=device_id,
+                    parameter_name="current",
+                    value_float=float(current_val)
+                ))
+
                 session.add(device)
                 await session.commit()
 
@@ -43,17 +67,19 @@ class TelemetryScheduler:
                 # افزایش شمارنده خطا
                 current_failures = getattr(device, 'consecutive_failures', 0) + 1
                 device.consecutive_failures = current_failures
-                
-                logger.warning(f"Device ID {device_id} failed to respond. Failures: {current_failures} | Error: {error_msg}")
+
+                logger.warning(
+                    f"Device ID {device_id} failed to respond. Failures: {current_failures} | Error: {error_msg}")
 
                 # غیرفعال کردن تجهیز اگر خطاها از حد مجاز گذشت
                 max_failures = getattr(settings, 'MAX_TELEMETRY_FAILURES', 3)
                 if current_failures >= max_failures:
                     if getattr(device, 'is_active', True):
                         device.is_active = False
-                        logger.error(f"⚠️ Device ID {device_id} DEACTIVATED due to {current_failures} consecutive failures.")
+                        logger.error(
+                            f"⚠️ Device ID {device_id} DEACTIVATED due to {current_failures} consecutive failures.")
                         # (اختیاری) فراخوانی سرویس ارسال نوتیفیکیشن / پیامک به ادمین در اینجا
-                
+
                 session.add(device)
                 await session.commit()
 
@@ -62,17 +88,17 @@ class TelemetryScheduler:
         reader = ModbusReader(host=device_ip)
         while self.is_running:
             try:
-                # خواندن رجیسترها از تجهیز
+                # خواندن رجیسترها از تجهیز (به عنوان مثال ۱۰ رجیستر از آدرس ۰)
                 data = await reader.read_data(address=0, count=10)
                 if data:
                     logger.info(f"Data from {device_ip} (ID: {device_id}): {data}")
                     await self.handle_success(device_id, data)
                 else:
                     await self.handle_failure(device_id, "No data returned (Offline).")
-            
+
             except Exception as e:
                 await self.handle_failure(device_id, str(e))
-            
+
             # زمان خواب بین هر بار خواندن بر اساس تنظیمات
             await asyncio.sleep(polling_interval)
 
@@ -80,7 +106,7 @@ class TelemetryScheduler:
         """شروع مانیتورینگ تمامی تجهیزات فعال"""
         self.is_running = True
         logger.info("Starting Telemetry Scheduler...")
-        
+
         # باز کردن یک سشن فقط برای خواندن اولیه لیست تجهیزات فعال
         async with AsyncSessionLocal() as session:
             # واکشی تمام پست‌ها/تجهیزاتی که IP دارند و از نظر سیستمی فعال (is_active) هستند
@@ -88,8 +114,8 @@ class TelemetryScheduler:
             result = await session.execute(stmt)
             active_devices = result.scalars().all()
 
-        interval = settings.POLLING_INTERVAL
-        
+        interval = getattr(settings, 'POLLING_INTERVAL', 5)  # پیش‌فرض ۵ ثانیه در صورت عدم تنظیم
+
         for dev in active_devices:
             # پاس دادن شناسه و IP به تسک مجزا
             task = asyncio.create_task(self.poll_device(dev.id, dev.ip_address, interval))
@@ -102,7 +128,7 @@ class TelemetryScheduler:
         self.is_running = False
         for task in self._tasks:
             task.cancel()
-        
+
         # منتظر ماندن برای لغو کامل تسک‌ها
         await asyncio.gather(*self._tasks, return_exceptions=True)
         logger.info("All telemetry tasks stopped.")

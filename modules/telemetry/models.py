@@ -1,22 +1,26 @@
-# modules/telemetry/models.py
-from sqlalchemy import Column, Integer, ForeignKey, Float, DateTime
-from sqlalchemy.orm import relationship
+import uuid
 from datetime import datetime
-from core.database import Base
+from sqlalchemy import Column, String, Float, Integer, Boolean, DateTime, ForeignKey
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.dialects.postgresql import UUID
 
-class Telemetry(Base):
-    __tablename__ = "telemetry_data"
+from core.database import Base  # مسیر Base خود را در صورت نیاز اصلاح کنید
 
-    id = Column(Integer, primary_key=True, index=True)
-    feeder_id = Column(Integer, ForeignKey("feeders.id"), index=True)
-    
-    # ویژگی‌های داینامیک (مقادیر دریافتی از دستگاه)
-    active_power = Column(Float, nullable=False)   # توان Active
-    reactive_power = Column(Float, nullable=False) # توان Reactive
-    voltage = Column(Float, nullable=False)        # ولتاژ
-    current = Column(Float, nullable=False)        # جریان
-    power_factor = Column(Float, nullable=True)    # ضریب توان
-    
-    timestamp = Column(DateTime, default=datetime.utcnow) # زمان ثبت داده
 
-    feeder = relationship("Feeder", back_populates="telemetries")
+class TimeseriesData(Base):
+    __tablename__ = "timeseries_data"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, index=True)
+    post_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("posts.id", ondelete="CASCADE"),
+                                               index=True)
+
+    timestamp: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow, index=True)
+    key: Mapped[str] = mapped_column(String, index=True)
+
+    value_int: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    value_float: Mapped[float | None] = mapped_column(Float, nullable=True)
+    value_str: Mapped[str | None] = mapped_column(String, nullable=True)
+    value_bool: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+
+    # Relationship to Post (در صورتی که در مدل Post هم relationship را تعریف کرده‌اید)
+    post = relationship("Post", back_populates="timeseries_data")

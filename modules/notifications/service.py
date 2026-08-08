@@ -4,12 +4,20 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from modules.notifications.models import NotificationType, NotificationPriority
 from modules.notifications.repository import NotificationRepository
+from modules.notifications.models import (
+    NotificationType,
+    NotificationPriority,
+
+    NotificationPreference  # این مورد اضافه شد
+)
+
+from core.logging import api_logger
 from modules.notifications.schemas import (
     NotificationCreateRequest,
-    NotificationBulkCreateRequest
-)
-from core.logging import api_logger
+    NotificationBulkCreateRequest,
+    NotificationResponse,
 
+)
 
 class NotificationService:
     """سرویس مدیریت نوتیفیکیشن‌ها"""
