@@ -21,15 +21,15 @@ async def get_current_user(token: str = Depends(oauth2_scheme), db: AsyncSession
     )
     
     try:
-        # 👈 دیکد کردن توکن با استفاده از تنظیمات env.
         payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
-        username: str = payload.get("sub")
         
-        if username is None:
+        # 💡 اصلاح مهم: گرفتن فیلد email به جای sub
+        email: str = payload.get("email")
+        
+        if email is None:
             raise credentials_exception
             
     except ExpiredSignatureError:
-        # 👈 مدیریت دقیق‌تر خطای انقضای توکن
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="توکن شما منقضی شده است. لطفاً مجدداً وارد شوید.",
@@ -38,9 +38,9 @@ async def get_current_user(token: str = Depends(oauth2_scheme), db: AsyncSession
     except PyJWTError: 
         raise credentials_exception
 
-    # پیدا کردن کاربر از دیتابیس
+    # پیدا کردن کاربر از دیتابیس بر اساس ایمیل
     repo = UserRepository(db)
-    user = await repo.get_user_by_username(username) 
+    user = await repo.get_by_email(email) 
     
     if user is None:
         raise credentials_exception
@@ -48,9 +48,10 @@ async def get_current_user(token: str = Depends(oauth2_scheme), db: AsyncSession
     return user
 
 
+
 # 2. وابستگی (Dependency) مخصوص ادمین
 async def get_admin_user(current_user = Depends(get_current_user)):
-    if current_user.role != RoleEnum.admin:
+    if current_user.role != RoleEnum.ADMIN:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN, 
             detail="دسترسی غیرمجاز. این عملیات فقط برای ادمین مجاز است."

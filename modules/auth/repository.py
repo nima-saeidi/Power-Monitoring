@@ -6,6 +6,11 @@ class UserRepository:
     def __init__(self, db: AsyncSession):
         self.db = db
 
+    # این متد برای رفع خطای get_user_by_username اضافه شد
+    async def get_user_by_username(self, username: str):
+        result = await self.db.execute(select(User).where(User.email == username))
+        return result.scalar_one_or_none()
+
     async def get_by_email(self, email: str):
         result = await self.db.execute(select(User).where(User.email == email))
         return result.scalar_one_or_none()
