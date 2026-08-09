@@ -29,7 +29,7 @@ class AuditLog(Base):
     # جزئیات
     description = Column(Text, nullable=True)
     changes = Column(JSONB, nullable=True)  # تغییرات قبل/بعد
-    metadata = Column(JSONB, nullable=True)  # داده‌های اضافی
+    meta_data = Column(JSONB, nullable=True)  # تغییر نام از metadata به meta_data
     
     # نتیجه
     success = Column(Boolean, nullable=False, default=True)
@@ -79,7 +79,7 @@ class CommandLog(Base):
     error_message = Column(Text, nullable=True)
     error_code = Column(String(50), nullable=True)
 
-    # روابط
+    # روابط (نکته: در کلاس‌های User, Post و Feeder نیز باید command_logs تعریف شده باشد)
     user = relationship("User", back_populates="command_logs")
     post = relationship("Post", back_populates="command_logs")
     feeder = relationship("Feeder", back_populates="command_logs")
@@ -109,4 +109,15 @@ class DeviceTestLog(Base):
     # کاربر تست‌کننده
     tested_by_user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     
-    # نوع 
+    # نوع تست
+    test_type = Column(String(50), nullable=False)  # 'ping', 'modbus', 'connection'
+    
+    # نتیجه تست
+    success = Column(Boolean, nullable=False, default=False)
+    response_time_ms = Column(Integer, nullable=True)
+    error_message = Column(Text, nullable=True)
+    
+    # روابط
+    tested_by_user = relationship("User", foreign_keys=[tested_by_user_id])
+    post = relationship("Post", foreign_keys=[post_id])
+    feeder = relationship("Feeder", foreign_keys=[feeder_id])

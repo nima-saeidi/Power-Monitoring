@@ -2,7 +2,7 @@ from sqlalchemy import Column, Integer, String, Boolean, ForeignKey, Float, Text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import relationship
 from datetime import datetime
-
+from modules.audit_logs.models import CommandLog
 # فرض بر این است که Base در مسیر زیر تعریف شده است
 from core.database import Base
 
@@ -26,8 +26,10 @@ class Location(Base):
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
-    # روابط
-    children = relationship("Location", backref="parent", remote_side=[id])
+    # روابط (استفاده از back_populates به جای backref برای استانداردهای جدید SQLAlchemy)
+    parent = relationship("Location", remote_side=[id], back_populates="children")
+    children = relationship("Location", back_populates="parent")
+    
     posts = relationship("Post", back_populates="location")
 
 
@@ -50,7 +52,7 @@ class Post(Base):
     port = Column(Integer, default=502)  # Modbus TCP default port
 
     # داده‌های اضافی به صورت JSONB
-    metadata_info = Column("metadata", JSONB, nullable=True)  # برای جلوگیری از تداخل نام با ویژگی‌های داخلی SQLAlchemy
+    metadata_info = Column("metadata", JSONB, nullable=True) 
 
     # وضعیت
     is_active = Column(Boolean, default=True)
@@ -64,7 +66,7 @@ class Post(Base):
     location = relationship("Location", back_populates="posts")
     feeders = relationship("Feeder", back_populates="post", cascade="all, delete-orphan")
 
-    # روابطی که در آینده مدل‌هایشان را می‌سازیم (به صورت String تعریف می‌شوند تا از circular import جلوگیری شود)
+    # روابط با سایر ماژول‌ها (باید در main.py ایمپورت شوند تا شناخته شوند)
     timeseries_data = relationship("TimeseriesData", back_populates="post", cascade="all, delete-orphan")
     command_logs = relationship("CommandLog", back_populates="post")
     device_tests = relationship("DeviceTestLog", back_populates="post")
@@ -104,7 +106,10 @@ class Feeder(Base):
 
     # روابط
     post = relationship("Post", back_populates="feeders")
+    
+    # اضافه شدن روابط برای تکمیل Bidirectional (همانند Post)
     timeseries_data = relationship("TimeseriesData", back_populates="feeder", cascade="all, delete-orphan")
+    command_logs = relationship("CommandLog", back_populates="feeder")
     device_tests = relationship("DeviceTestLog", back_populates="feeder")
 
     __table_args__ = (
