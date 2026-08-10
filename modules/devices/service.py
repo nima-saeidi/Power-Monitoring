@@ -7,6 +7,9 @@ from modules.devices.schemas import (
     LinkCreate, LinkUpdate, LinkResponse,
     LocationCreate, LocationUpdate, LocationResponse
 )
+import pandas as pd
+
+
 
 class DeviceService:
     def __init__(self, repo: DeviceRepository):
@@ -153,3 +156,48 @@ class DeviceService:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="لینک مورد نظر یافت نشد.")
         await self.repo.delete_link(link)
         return {"message": "لینک با موفقیت حذف شد."}
+
+
+    async def import_feeders_from_excel(self, df: pd.DataFrame) -> dict:
+        success_count = 0
+        failed_count = 0
+        errors = []
+        
+        # جایگزینی مقادیر خالی (NaN) با None برای جلوگیری از خطای Pydantic
+        df = df.where(pd.notnull(df), None)
+
+        for index, row in df.iterrows():
+            row_number = index + 2  # ردیف در فایل اکسل (ردیف 1 هدر است)
+            try:
+                # مپ کردن داده‌های ردیف اکسل به اسکیمای FeederCreate
+                # نکته: اگر نام فیلدهای شما در FeederCreate متفاوت است، این بخش را مطابق آن تغییر دهید
+                feeder_data = FeederCreate(
+                    post_id=int(row.get('post_id')) if row.get('post_id') else None,
+                    name=str(row.get('name')),
+                    ip_address=str(row.get('ip_address')) if row.get('ip_address') else None,
+                    port=int(row.get('port')) if row.get('port') else 502,
+                    unit_id=int(row.get('unit_id')) if row.get('unit_id') else 1,
+                    capacity_kva=float(row.get('capacity_kva')) if row.get('capacity_kva') else None,
+                    description=str(row.get('description')) if row.get('description') else None
+                )
+                
+                # بررسی وجود پست
+                post = await self.repo.get_post_by_id(feeder_data.post_id)
+                if not post:
+                    raise ValueError(f"پست با شناسه {feeder_data.post_id} یافت نشد.")
+
+                # ثبت فیدر در دیتابیس
+                await self.repo.create_feeder(feeder_data)
+                success_count += 1
+                
+            except Exception as e:
+                failed_count += 1
+                errors.append({"row": row_number, "error": str(e)})
+
+        return {
+            "success": True,
+            "total_processed": success_count + failed_count,
+            "imported_count": success_count,
+            "failed_count": failed_count,
+            "errors": errors
+        }

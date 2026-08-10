@@ -34,7 +34,7 @@ async def lifespan(app: FastAPI):
     # هنگام خاموش شدن سرور: متوقف کردن تسک‌ها
     print("Stopping Telemetry Tasks...")
     await scheduler.stop()
-    task.cancel()  # پایان دادن تمیز به تسک
+    task.cancel() 
 
 
 app = FastAPI(
@@ -43,12 +43,11 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-# رجیستر کردن روترها
 app.include_router(auth_router)
 app.include_router(devices_router)
 app.include_router(notifications_router)
 app.include_router(notifications_router)
-app.include_router(settings_router)  # رجیستر کردن روتر تنظیمات داینامیک
+app.include_router(settings_router)  
 
 if __name__ == "__main__":
-    uvicorn.run("main:app", host="127.0.0.1", port=8000, reload=True)
+    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)

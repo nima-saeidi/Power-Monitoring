@@ -15,14 +15,13 @@ class User(Base):
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String(100), nullable=False)
     email = Column(String(150), unique=True, index=True, nullable=False)
+    national_id = Column(String(10), unique=True, index=True, nullable=True) # فیلد جدید کد ملی
     hashed_password = Column(String(255), nullable=False)
     role = Column(SQLEnum(RoleEnum), default=RoleEnum.USER, nullable=False)
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     
-    # روابط قبلی
+    # روابط
     notifications = relationship("Notification", back_populates="user", cascade="all, delete-orphan")
     notification_preferences = relationship("NotificationPreference", back_populates="user", uselist=False, cascade="all, delete-orphan")
-    
-    # رابطه جدید اضافه‌شده برای CommandLog
     command_logs = relationship("CommandLog", back_populates="user")

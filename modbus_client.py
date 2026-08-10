@@ -2,9 +2,6 @@ import asyncio
 import logging
 from pymodbus.client import AsyncModbusTcpClient
 from pymodbus.exceptions import ModbusException
-import asyncio
-from typing import List
-
 
 logger = logging.getLogger(__name__)
 
@@ -29,8 +26,8 @@ class ModbusReader:
                     logger.error(f"Failed to connect to {self.host}")
                     continue
 
-                # خواندن رجیسترهای نگه‌دارنده (مثلا برای ولتاژ، جریان و توان)
-                result = await self.client.read_holding_registers(address=address, count=count, slave=slave_id)
+                # خواندن رجیسترهای نگه‌دارنده (آرگومان slave حذف شد تا خطای unexpected keyword argument رخ ندهد)
+                result = await self.client.read_holding_registers(address=address, count=count)
                 
                 if result.isError():
                     logger.warning(f"Modbus error on {self.host}: {result}")

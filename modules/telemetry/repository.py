@@ -10,7 +10,7 @@ class TelemetryRepository:
     async def create_record(self, data: TelemetryCreate) -> TimeseriesData:
         new_record = TimeseriesData(
             post_id=data.post_id,
-            parameter_name=data.parameter_name,
+            key=data.key,
             value_int=data.value_int,
             value_float=data.value_float,
             value_str=data.value_str,

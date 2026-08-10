@@ -3,11 +3,12 @@ from typing import Optional
 from datetime import datetime
 
 class TelemetryBase(BaseModel):
-    post_id: int
-    parameter_name: str  # مثلاً 'voltage_phase_a'
+    post_id: Optional[int] = None     # 👈 تغییر به Optional
+    feeder_id: Optional[int] = None   # 👈 اضافه شدن فیدر برای پشتیبانی از دیتای فیدرها
+    key: str  
     value_int: Optional[int] = None
     value_float: Optional[float] = None
-    value_str: Optional[str] = None
+    value_str: Optional[str] = None   # (اگر در دیتابیس value_string است، این را تغییر دهید)
     value_bool: Optional[bool] = None
 
 class TelemetryCreate(TelemetryBase):

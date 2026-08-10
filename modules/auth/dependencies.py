@@ -5,14 +5,14 @@ import jwt
 from jwt.exceptions import PyJWTError, ExpiredSignatureError
 
 from core.database import get_db
-from core.config import settings  # 👈 اضافه شدن تنظیمات سراسری
+from core.config import settings
 from modules.auth.repository import UserRepository
 from modules.auth.models import RoleEnum
 
 # مسیری که Swagger برای گرفتن توکن به آن ریکوئست می‌زند
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
 
-# 1. گرفتن کاربر فعلی از روی توکن
+# 1. گرفتن کاربر فعلی از روی توکن (چک کردن صحت توکن)
 async def get_current_user(token: str = Depends(oauth2_scheme), db: AsyncSession = Depends(get_db)):
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
@@ -22,13 +22,10 @@ async def get_current_user(token: str = Depends(oauth2_scheme), db: AsyncSession
     
     try:
         payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
-        
-        # 💡 اصلاح مهم: گرفتن فیلد email به جای sub
+        # دقت کنید که ما ایمیل را در توکن ذخیره کرده بودیم
         email: str = payload.get("email")
-        
         if email is None:
             raise credentials_exception
-            
     except ExpiredSignatureError:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -38,7 +35,6 @@ async def get_current_user(token: str = Depends(oauth2_scheme), db: AsyncSession
     except PyJWTError: 
         raise credentials_exception
 
-    # پیدا کردن کاربر از دیتابیس بر اساس ایمیل
     repo = UserRepository(db)
     user = await repo.get_by_email(email) 
     
@@ -48,32 +44,12 @@ async def get_current_user(token: str = Depends(oauth2_scheme), db: AsyncSession
     return user
 
 
-
-# 2. وابستگی (Dependency) مخصوص ادمین
-async def get_admin_user(current_user = Depends(get_current_user)):
-    if current_user.role != RoleEnum.ADMIN:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, 
-            detail="دسترسی غیرمجاز. این عملیات فقط برای ادمین مجاز است."
-        )
-    return current_user
-
-
-# 3. وابستگی (Dependency) مخصوص ادمین و اپراتور فنی
-async def get_tech_or_admin_user(current_user = Depends(get_current_user)):
-    if current_user.role not in [RoleEnum.admin, RoleEnum.technical_operator]:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, 
-            detail="دسترسی غیرمجاز. فقط ادمین یا اپراتور فنی."
-        )
-    return current_user
-
-
-# 4. کلاس بررسی نقش‌ها (بهترین روش برای مدیریت داینامیک دسترسی‌ها)
+# 2. کلاس بررسی نقش‌ها (داینامیک)
 class RoleChecker:
     def __init__(self, allowed_roles: list[RoleEnum]):
         self.allowed_roles = allowed_roles
 
+    # وقتی این کلاس به عنوان Depends صدا زده می‌شود، اول get_current_user (و توکن) چک می‌شود
     def __call__(self, current_user = Depends(get_current_user)):
         if current_user.role not in self.allowed_roles:
             raise HTTPException(
@@ -82,6 +58,16 @@ class RoleChecker:
             )
         return current_user
 
-# 💡 نمونه‌های نحوه استفاده در روت‌ها (Router):
-# require_admin = RoleChecker([RoleEnum.admin])
-# require_operator_or_tech = RoleChecker([RoleEnum.admin, RoleEnum.technical_operator])
+
+# ==========================================
+# 3. ساختن متغیرهای آماده برای استفاده در router.py
+# ==========================================
+
+# چک کردن فقط ادمین
+require_admin = RoleChecker([RoleEnum.ADMIN])
+
+# چک کردن فقط اپراتور فنی
+require_operator = RoleChecker([RoleEnum.TECHNICAL_OPERATOR])
+
+# چک کردن ادمین یا اپراتور فنی
+require_tech_or_admin = RoleChecker([RoleEnum.ADMIN, RoleEnum.TECHNICAL_OPERATOR])

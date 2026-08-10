@@ -45,14 +45,14 @@ class TelemetryScheduler:
                 # ثبت ولتاژ
                 await telemetry_service.add_telemetry_data(TelemetryCreate(
                     post_id=device_id,
-                    parameter_name="voltage",
+                    key="voltage",
                     value_float=float(voltage_val)
                 ))
 
                 # ثبت جریان
                 await telemetry_service.add_telemetry_data(TelemetryCreate(
                     post_id=device_id,
-                    parameter_name="current",
+                    key="current",
                     value_float=float(current_val)
                 ))
 
@@ -84,23 +84,23 @@ class TelemetryScheduler:
                 await session.commit()
 
     async def poll_device(self, device_id: int, device_ip: str, polling_interval: int):
-        """حلقه مداوم برای خواندن اطلاعات از یک تجهیز خاص"""
         reader = ModbusReader(host=device_ip)
-        while self.is_running:
-            try:
-                # خواندن رجیسترها از تجهیز (به عنوان مثال ۱۰ رجیستر از آدرس ۰)
-                data = await reader.read_data(address=0, count=10)
-                if data:
-                    logger.info(f"Data from {device_ip} (ID: {device_id}): {data}")
-                    await self.handle_success(device_id, data)
-                else:
-                    await self.handle_failure(device_id, "No data returned (Offline).")
+        try:
+            while self.is_running:
+                try:
+                    data = await reader.read_data(address=0, count=10)
+                    if data:
+                        await self.handle_success(device_id, data)
+                    else:
+                        await self.handle_failure(device_id, "No data returned (Offline).")
+                except Exception as e:
+                    await self.handle_failure(device_id, str(e))
+                
+                await asyncio.sleep(polling_interval)
+        finally:
+            # این بخش تضمین می‌کند که وقتی تسک متوقف می‌شود، کانکشن باز نماند
+            await reader.close()
 
-            except Exception as e:
-                await self.handle_failure(device_id, str(e))
-
-            # زمان خواب بین هر بار خواندن بر اساس تنظیمات
-            await asyncio.sleep(polling_interval)
 
     async def start(self):
         """شروع مانیتورینگ تمامی تجهیزات فعال"""

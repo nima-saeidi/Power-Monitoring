@@ -12,12 +12,16 @@ class SettingRepository:
 
     @staticmethod
     async def create_default_settings(db: AsyncSession) -> SystemSetting:
+        # مقادیر پیش‌فرض جدید به همراه فیلدهای قبلی اضافه شدند
         settings = SystemSetting(
             alfa=0.7,
             beta=0.4,
             access_token_expire_minutes=1440,
+            session_timeout_minutes=30,      # پیش‌فرض: 30 دقیقه
             polling_interval=5,
-            max_telemetry_failures=3
+            max_telemetry_failures=3,
+            max_login_attempts=5,            # پیش‌فرض: 5 تلاش ناموفق
+            data_retention_days=90           # پیش‌فرض: 90 روز نگهداری لاگ‌ها و داده‌ها
         )
         db.add(settings)
         await db.commit()
