@@ -30,4 +30,17 @@ async def create_telemetry_record(
     service = TelemetryService(db)
     record = await service.add_telemetry_data(data)
     await db.commit()
+    
+    # +++ این قسمت باید اضافه شود +++
+    # دیتایی که می‌خواهید فرانت‌اند ببیند را می‌فرستیم
+    broadcast_data = {
+        "feeder_id": data.feeder_id,
+        "post_id": data.post_id,
+        "key": data.key,
+        "value": data.value_float or data.value_int, # مقداری که پر شده
+        # اگر در دیتابیس زمان ثبت هم دارید می‌توانید اینجا اضافه کنید
+    }
+    await telemetry_ws_manager.broadcast_telemetry(broadcast_data)
+    # +++++++++++++++++++++++++++++++++
+    
     return {"message": "Data recorded and broadcasted successfully", "id": record.id}

@@ -5,7 +5,7 @@ from pymodbus.exceptions import ModbusException
 
 logger = logging.getLogger(__name__)
 
-class ModbusReader:
+class ModbusReader: # پیشنهاد می‌شود در آینده به ModbusClient یا ModbusHandler تغییر نام دهید
     def __init__(self, host: str, port: int = 502, timeout: int = 3, retries: int = 3):
         self.host = host
         self.port = port
@@ -26,7 +26,7 @@ class ModbusReader:
                     logger.error(f"Failed to connect to {self.host}")
                     continue
 
-                # خواندن رجیسترهای نگه‌دارنده (آرگومان slave حذف شد تا خطای unexpected keyword argument رخ ندهد)
+                # خواندن رجیسترهای نگه‌دارنده
                 result = await self.client.read_holding_registers(address=address, count=count)
                 
                 if result.isError():
@@ -44,6 +44,36 @@ class ModbusReader:
         # ثبت رویداد قطعی در صورت شکست تمام تلاش‌ها (طبق سند معماری)
         logger.error(f"All {self.retries} attempts failed for {self.host}")
         return None
+
+    async def write_coil(self, address: int, value: bool) -> bool:
+        """
+        ارسال فرمان قطع/وصل (True/False) به یک کویل در تجهیز
+        """
+        for attempt in range(self.retries):
+            try:
+                is_connected = await self.connect()
+                if not is_connected:
+                    logger.error(f"Failed to connect to {self.host} for writing")
+                    continue
+
+                # ارسال فرمان نوشتن
+                result = await self.client.write_coil(address=address, value=value)
+                
+                if result.isError():
+                    logger.warning(f"Modbus write error on {self.host}, address {address}: {result}")
+                else:
+                    logger.info(f"Successfully wrote {value} to coil {address} on {self.host}")
+                    return True
+
+            except asyncio.TimeoutError:
+                logger.warning(f"Timeout writing to {self.host} (Attempt {attempt + 1}/{self.retries})")
+            except ModbusException as e:
+                logger.error(f"Modbus exception writing to {self.host}: {e}")
+            
+            await asyncio.sleep(1) # تاخیر قبل از تلاش مجدد
+            
+        logger.error(f"All {self.retries} attempts failed for writing to {self.host}, address {address}")
+        return False
 
     async def close(self):
         if self.client.connected:

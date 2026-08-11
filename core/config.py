@@ -10,7 +10,7 @@ class Settings(BaseSettings):
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24  # اعتبار توکن: ۱ روز
 
-    POLLING_INTERVAL: int = 5  # زمان نمونه‌برداری به ثانیه
+    POLLING_INTERVAL: int = 5000  # زمان نمونه‌برداری به ثانیه
     MAX_TELEMETRY_FAILURES: int = 3
 
     # متغیرهای جدید

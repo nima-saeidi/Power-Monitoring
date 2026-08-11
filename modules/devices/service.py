@@ -5,10 +5,10 @@ from modules.devices.schemas import (
     PostCreate, PostUpdate, PostResponse,
     FeederCreate, FeederUpdate, FeederResponse,
     LinkCreate, LinkUpdate, LinkResponse,
-    LocationCreate, LocationUpdate, LocationResponse
+    LocationCreate, LocationUpdate, LocationResponse,CommandRequest
 )
 import pandas as pd
-
+from modbus_client import ModbusReader
 
 
 class DeviceService:
@@ -200,4 +200,55 @@ class DeviceService:
             "imported_count": success_count,
             "failed_count": failed_count,
             "errors": errors
+        }
+
+
+
+    # ----- Command & Control Service Methods -----
+    async def execute_device_command(self, feeder_id: int, request: CommandRequest) -> dict:
+        """
+        ارسال فرمان قطع و وصل به یک فیدر از طریق پروتکل مدباس
+        """
+        # ۱. بررسی وجود فیدر به همراه اطلاعات پست در دیتابیس
+        feeder = await self.repo.get_feeder_by_id(feeder_id)
+        if not feeder:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, 
+                detail="فیدر مورد نظر یافت نشد."
+            )
+        
+        # ۲. بررسی اینکه آیا پستِ مربوط به این فیدر IP برای ارتباط دارد یا خیر
+        # (با فرض اینکه relation در مدل شما substation نام دارد)
+        if not feeder.substation or not feeder.substation.ip_address:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST, 
+                detail="پست مربوط به این فیدر فاقد آدرس IP است و قابلیت کنترل از راه دور ندارد."
+            )
+
+        port = feeder.substation.port if feeder.substation.port else 502
+        modbus_client = ModbusReader(host=feeder.substation.ip_address, port=port)
+        
+        try:
+            # ۴. ارسال فرمان ناهمگام (async)
+            success = await modbus_client.write_coil(
+                address=request.register_address, 
+                value=request.command
+            )
+        finally:
+            # ۵. اطمینان از بسته شدن کانکشن در هر شرایطی
+            await modbus_client.close()
+
+        # ۶. بررسی نتیجه
+        if not success:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE, 
+                detail="ارتباط با سخت‌افزار قطع است یا فرمان توسط تجهیز رد شد."
+            )
+        
+        # در صورت تمایل می‌توانید در اینجا لاگ/رویداد موفقیت‌آمیز بودن فرمان را نیز در دیتابیس ثبت کنید
+        
+        action_text = "وصل" if request.command else "قطع"
+        return {
+            "success": True,
+            "message": f"فرمان {action_text} با موفقیت به فیدر '{feeder.name}' ارسال شد."
         }

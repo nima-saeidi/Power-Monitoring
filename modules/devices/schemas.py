@@ -1,6 +1,7 @@
 from pydantic import BaseModel, ConfigDict
 from typing import Optional, List, Dict, Any
-
+from pydantic import BaseModel
+from pydantic.types import UUID4
 # ----------------- Location Schemas -----------------
 class LocationBase(BaseModel):
     name: str
@@ -98,3 +99,11 @@ class LinkUpdate(BaseModel):
 class LinkResponse(LinkBase):
     id: int
     model_config = ConfigDict(from_attributes=True)
+
+
+#----------------modbus device --------------------
+
+class CommandRequest(BaseModel):
+    device_id: UUID4       
+    register_address: int   
+    command: bool          

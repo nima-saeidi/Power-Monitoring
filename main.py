@@ -6,7 +6,8 @@ from fastapi import FastAPI
 from core.database import engine, Base
 from modules.auth.router import router as auth_router
 from modules.devices.router import router as devices_router
-from modules.settings.router import router as settings_router  # اضافه شدن روتر تنظیمات
+from modules.settings.router import router as settings_router
+from modules.telemetry.router import router as telemetry_router
 from scheduler import TelemetryScheduler
 from modules.notifications.router import router as notifications_router
 from modules.auth.models import User
@@ -47,7 +48,8 @@ app.include_router(auth_router)
 app.include_router(devices_router)
 app.include_router(notifications_router)
 app.include_router(notifications_router)
-app.include_router(settings_router)  
+app.include_router(settings_router) 
+app.include_router(telemetry_router) 
 
 if __name__ == "__main__":
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
