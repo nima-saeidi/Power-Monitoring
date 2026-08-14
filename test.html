@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
+</head>
+<body>
+    <script>
+        // اتصال به وب‌سوکت بک‌اند
+const ws = new WebSocket("ws://localhost:8000/telemetry/ws");
+
+// وقتی اتصال برقرار شد
+ws.onopen = function(event) {
+    console.log("Connected to Telemetry WebSocket!");
+};
+
+// هر بار که سرور (متد broadcast) دیتای جدیدی بفرستد، این تابع اجرا می‌شود
+ws.onmessage = function(event) {
+    const newData = JSON.parse(event.data);
+    
+    console.log("دیتای جدید دریافت شد:", newData);
+    
+    // حالا اینجا می‌توانید بررسی کنید دیتا برای کدام فیدر است و گراف/جدول را آپدیت کنید
+    if (newData.feeder_id === 1 && newData.key === "voltage") {
+        document.getElementById("feeder1-voltage").innerText = newData.value;
+    }
+};
+
+// در صورت قطع شدن
+ws.onclose = function(event) {
+    console.log("Disconnected. Reconnecting...");
+    // معمولاً اینجا منطق اتصال مجدد (Reconnect) می‌نویسند
+};
+
+    </script>
+</body>
+</html>

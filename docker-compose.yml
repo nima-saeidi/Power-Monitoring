@@ -1,0 +1,39 @@
+version: '3.8'
+
+services:
+  # سرویس دیتابیس (با توجه به پروفایل شما از TimescaleDB استفاده کردم که برای دیتای برق عالی است)
+  db:
+    image: timescale/timescaledb:latest-pg15
+    container_name: power_monitoring_db
+    restart: always
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: admin
+      POSTGRES_DB: power_monitoring
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  # سرویس بک‌اند (FastAPI)
+  api:
+    build: main_api/migrations
+    container_name: power_monitoring_api
+    restart: always
+    ports:
+      - "8000:8000"
+    environment:
+      # تنظیم آدرس دیتابیس برای SQLAlchemy متناسب با نام سرویس db
+      # فرمت: postgresql+asyncpg://user:password@host:port/db_name
+      DATABASE_URL: postgresql+asyncpg://postgres:admin@db:5432/power_monitoring
+
+      # اگر متغیرهای محیطی دیگری (مثل کلیدهای JWT) دارید اینجا اضافه کنید
+      SECRET_KEY: your_super_secret_key
+    depends_on:
+      - db
+    # در محیط توسعه می‌توانید والیوم زیر را فعال کنید تا با تغییر کد، نیازی به ریبیلد نباشد
+    # volumes:
+    #   - .:/app
+
+volumes:
+  postgres_data:
