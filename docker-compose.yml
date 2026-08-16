@@ -1,7 +1,7 @@
 version: '3.8'
 
 services:
-  # سرویس دیتابیس (با توجه به پروفایل شما از TimescaleDB استفاده کردم که برای دیتای برق عالی است)
+  # 1. سرویس دیتابیس (TimescaleDB)
   db:
     image: timescale/timescaledb:latest-pg15
     container_name: power_monitoring_db
@@ -15,25 +15,49 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
 
-  # سرویس بک‌اند (FastAPI)
+  # 2. سرویس پیام‌رسان (Redis Broker برای Pub/Sub)
+  redis:
+    image: redis:alpine
+    container_name: redis_broker
+    restart: always
+    ports:
+      - "6379:6379"
+
+  # 3. سرویس بک‌اند اصلی (Core - Subscriber & WebSocket Manager)
   api:
-    build: main_api/migrations
+    build: ./main_api
     container_name: power_monitoring_api
     restart: always
     ports:
       - "8000:8000"
     environment:
-      # تنظیم آدرس دیتابیس برای SQLAlchemy متناسب با نام سرویس db
-      # فرمت: postgresql+asyncpg://user:password@host:port/db_name
       DATABASE_URL: postgresql+asyncpg://postgres:admin@db:5432/power_monitoring
-
-      # اگر متغیرهای محیطی دیگری (مثل کلیدهای JWT) دارید اینجا اضافه کنید
+      REDIS_URL: redis://redis:6379/0
       SECRET_KEY: your_super_secret_key
     depends_on:
       - db
-    # در محیط توسعه می‌توانید والیوم زیر را فعال کنید تا با تغییر کد، نیازی به ریبیلد نباشد
+      - redis
     # volumes:
-    #   - .:/app
+    #   - ./main_api:/app
+
+  # 4. سرویس تله‌متری (Modbus Reader & Publisher)
+  telemetry:
+    build: ./telemetry_service
+    container_name: power_monitoring_telemetry
+    restart: always
+    # در صورت نیاز به بررسی وضعیت این سرویس، می‌توانید پورت زیر را باز کنید
+    # ports:
+    #   - "8001:8001"
+    environment:
+      DATABASE_URL: postgresql+asyncpg://postgres:admin@db:5432/power_monitoring
+      REDIS_URL: redis://redis:6379/0
+      POLLING_INTERVAL: 5
+      MAX_TELEMETRY_FAILURES: 3
+    depends_on:
+      - db
+      - redis
+    # volumes:
+    #   - ./telemetry_service:/app
 
 volumes:
   postgres_data:

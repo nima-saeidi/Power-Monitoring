@@ -6,6 +6,16 @@ from main_api.modules.audit_logs.models import CommandLog
 from main_api.core.database import Base
 
 
+
+class TimeseriesData(Base):
+    __tablename__ = "timeseries_data"
+
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    feeder_id = Column(Integer, index=True, nullable=False)
+    key = Column(String, index=True, nullable=False)
+    value = Column(Float, nullable=False)
+    timestamp = Column(DateTime(timezone=True), default=func.now(), index=True, nullable=False)
+
 # =========================================
 # مدل مکان برای ساختار درختی
 # =========================================
