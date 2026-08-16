@@ -6,12 +6,10 @@ from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 from sqlalchemy.future import select
 from datetime import datetime, timezone
 
-# ایمپورت‌های پروژه شما
+# ایمپورت‌های پروژه
 from core.config import settings
-from modules.devices.models import Post
+from telemetry_service.modules.telemetry.local_models import LocalPost  # استفاده از مدل سبک و محلی به جای مدل Post سرویس اصلی
 from telemetry_service.modbus_client import ModbusReader
-from modules.telemetry.schemas import TelemetryCreate
-from modules.telemetry.service import TelemetryService
 
 # تنظیمات لاگر
 logging.basicConfig(level=logging.INFO)
@@ -34,19 +32,20 @@ class TelemetryScheduler:
     async def handle_success(self, device_id: int, data: list):
         """عملیات پس از خواندن موفقیت‌آمیز داده‌ها"""
         async with AsyncSessionLocal() as session:
-            device = await session.get(Post, device_id)
+            device = await session.get(LocalPost, device_id)
             if device:
                 # ریست کردن شمارنده خطا در صورت موفقیت
                 if getattr(device, 'consecutive_failures', 0) > 0:
                     device.consecutive_failures = 0
                     session.add(device)
+                    await session.commit()
 
                 # استخراج دیتا (بر اساس پیکربندی آدرس رجیسترهای Modbus شما)
                 voltage_val = data[0] if len(data) > 0 else 0.0
                 current_val = data[1] if len(data) > 1 else 0.0
 
                 # ---------------------------------------------------------
-                # ۱. انتشار آنی داده‌ها در Redis (برای ارسال به فرانت‌اند از طریق Core)
+                # انتشار آنی داده‌ها در Redis (برای ارسال به فرانت‌اند و ذخیره توسط سرویس اصلی)
                 # ---------------------------------------------------------
                 try:
                     live_payload = {
@@ -60,35 +59,10 @@ class TelemetryScheduler:
                 except Exception as e:
                     logger.error(f"Redis publish error for device {device_id}: {e}")
 
-                # ---------------------------------------------------------
-                # ۲. ذخیره داده‌ها در دیتابیس تله‌متری (Timeseries)
-                # ---------------------------------------------------------
-                telemetry_service = TelemetryService(session)
-
-                try:
-                    # ثبت ولتاژ
-                    await telemetry_service.add_telemetry_data(TelemetryCreate(
-                        post_id=device_id,
-                        key="voltage",
-                        value_float=float(voltage_val)
-                    ))
-
-                    # ثبت جریان
-                    await telemetry_service.add_telemetry_data(TelemetryCreate(
-                        post_id=device_id,
-                        key="current",
-                        value_float=float(current_val)
-                    ))
-
-                    await session.commit()
-                except Exception as e:
-                    await session.rollback()
-                    logger.error(f"Error saving telemetry data for device {device_id}: {e}")
-
     async def handle_failure(self, device_id: int, error_msg: str):
         """عملیات در صورت عدم پاسخگویی تجهیز"""
         async with AsyncSessionLocal() as session:
-            device = await session.get(Post, device_id)
+            device = await session.get(LocalPost, device_id)
             if device:
                 # افزایش شمارنده خطا
                 current_failures = getattr(device, 'consecutive_failures', 0) + 1
@@ -97,7 +71,7 @@ class TelemetryScheduler:
                 logger.warning(
                     f"Device ID {device_id} failed to respond. Failures: {current_failures} | Error: {error_msg}")
 
-                # انتشار هشدار قطعی تجهیز به داشبورد
+                # انتشار هشدار قطعی تجهیز
                 try:
                     alert_payload = {
                         "post_id": device_id,
@@ -127,8 +101,6 @@ class TelemetryScheduler:
                             }))
                         except Exception:
                             pass
-
-                        # TODO: در صورت نیاز سرویس ارسال پیامک/نوتیفیکیشن قطعی به ادمین در اینجا فراخوانی شود
 
                 session.add(device)
                 await session.commit()
@@ -160,7 +132,7 @@ class TelemetryScheduler:
 
         # باز کردن یک سشن برای خواندن اولیه لیست تجهیزات فعال
         async with AsyncSessionLocal() as session:
-            stmt = select(Post).where(Post.ip_address.isnot(None), Post.is_active == True)
+            stmt = select(LocalPost).where(LocalPost.ip_address.isnot(None), LocalPost.is_active == True)
             result = await session.execute(stmt)
             active_devices = result.scalars().all()
 
