@@ -4,7 +4,7 @@ from sqlalchemy.dialects.postgresql import JSONB
 from datetime import datetime
 import enum
 
-from core.database import Base
+from main_api.core.database import Base
 
 
 class NotificationType(str, enum.Enum):

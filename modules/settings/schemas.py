@@ -2,8 +2,8 @@ from pydantic import BaseModel, Field
 from typing import Optional
 
 class SettingUpdate(BaseModel):
-    alfa: Optional[float] = Field(None, ge=0.0, description="ضریب آلفا")
-    beta: Optional[float] = Field(None, ge=0.0, description="ضریب بتا")
+    critical_threshold: Optional[float] = Field(None, ge=0.0, description="ضریب آلفا")
+    warning_threshold: Optional[float] = Field(None, ge=0.0, description="ضریب بتا")
     access_token_expire_minutes: Optional[int] = Field(None, gt=0, description="مدت اعتبار توکن دسترسی به دقیقه")
     session_timeout_minutes: Optional[int] = Field(None, gt=0, description="مدت زمان تایم‌اوت شدن نشست (Session) به دقیقه")
     polling_interval: Optional[int] = Field(None, gt=0, description="بازه زمانی نمونه‌برداری (Polling) از دستگاه‌ها به ثانیه")
@@ -13,8 +13,8 @@ class SettingUpdate(BaseModel):
 
 class SettingResponse(BaseModel):
     id: int
-    alfa: float
-    beta: float
+    critical_threshold: float
+    warning_threshold: float
     access_token_expire_minutes: int
     session_timeout_minutes: int
     polling_interval: int

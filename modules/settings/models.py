@@ -1,6 +1,6 @@
 from sqlalchemy import Column, Integer, Float, String, Boolean, DateTime
 from sqlalchemy.sql import func
-from core.database import Base
+from main_api.core.database import Base
 
 
 class SystemSetting(Base):
@@ -8,12 +8,13 @@ class SystemSetting(Base):
 
     id = Column(Integer, primary_key=True, index=True)
 
-    # ضرایب محاسباتی
-    alfa = Column(Float, default=0.7, nullable=False, comment="ضریب محاسباتی آلفا")
-    beta = Column(Float, default=0.4, nullable=False, comment="ضریب محاسباتی بتا")
+    # مقادیر آستانه (جایگزین آلفا و بتا)
+    critical_threshold = Column(Float, default=90.0, nullable=False, comment="آستانه بحرانی (Critical Threshold)")
+    warning_threshold = Column(Float, default=75.0, nullable=False, comment="آستانه هشدار (Warning Threshold)")
 
-    # تنظیمات امنیتی و احراز هویت
-    access_token_expire_minutes = Column(Integer, default=1440, nullable=False, comment="مدت اعتبار Access Token (دقیقه)")
+    # تنظیمات احراز هویت
+    access_token_expire_minutes = Column(Integer, default=1440, nullable=False,
+                                         comment="مدت اعتبار Access Token (دقیقه)")
     refresh_token_expire_days = Column(Integer, default=7, nullable=False, comment="مدت اعتبار Refresh Token (روز)")
     max_login_attempts = Column(Integer, default=5, nullable=False, comment="حداکثر تلاش ناموفق ورود")
     lockout_duration_minutes = Column(Integer, default=30, nullable=False, comment="مدت قفل شدن حساب (دقیقه)")
@@ -34,7 +35,8 @@ class SystemSetting(Base):
     # تنظیمات نوتیفیکیشن
     notification_batch_size = Column(Integer, default=100, nullable=False, comment="تعداد نوتیفیکیشن در هر Batch")
     notification_retry_attempts = Column(Integer, default=3, nullable=False, comment="تعداد تلاش مجدد نوتیفیکیشن")
-    notification_cooldown_seconds = Column(Integer, default=300, nullable=False, comment="فاصله زمانی ارسال مجدد نوتیفیکیشن مشابه (ثانیه)")
+    notification_cooldown_seconds = Column(Integer, default=300, nullable=False,
+                                           comment="فاصله زمانی ارسال مجدد نوتیفیکیشن مشابه (ثانیه)")
 
     # تنظیمات گزارش‌گیری
     report_generation_timeout = Column(Integer, default=300, nullable=False, comment="Timeout تولید گزارش (ثانیه)")
@@ -44,7 +46,7 @@ class SystemSetting(Base):
     system_name = Column(String(100), default="Power Monitoring System", nullable=False, comment="نام سیستم")
     system_timezone = Column(String(50), default="Asia/Tehran", nullable=False, comment="منطقه زمانی")
     maintenance_mode = Column(Boolean, default=False, nullable=False, comment="وضعیت تعمیر و نگهداری")
-    
+
     # متادیتا
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
