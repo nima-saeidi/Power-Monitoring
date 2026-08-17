@@ -5,6 +5,7 @@ from datetime import datetime
 from modules.audit_logs.models import CommandLog
 # فرض بر این است که Base در مسیر زیر تعریف شده است
 from core.database import Base
+from sqlalchemy.sql import func
 
 
 # =========================================

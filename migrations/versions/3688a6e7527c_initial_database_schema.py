@@ -1,8 +1,8 @@
-"""init_database
+"""initial database schema
 
-Revision ID: 96228eb6683f
+Revision ID: 3688a6e7527c
 Revises: 
-Create Date: 2026-08-10 11:26:32.094360
+Create Date: 2026-08-17 10:39:59.037548
 
 """
 from typing import Sequence, Union
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
-revision: str = '96228eb6683f'
+revision: str = '3688a6e7527c'
 down_revision: Union[str, Sequence[str], None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
@@ -52,11 +52,31 @@ def upgrade() -> None:
     op.create_index(op.f('ix_notification_templates_name'), 'notification_templates', ['name'], unique=True)
     op.create_table('system_settings',
     sa.Column('id', sa.Integer(), nullable=False),
-    sa.Column('alfa', sa.Float(), nullable=False),
-    sa.Column('beta', sa.Float(), nullable=False),
-    sa.Column('access_token_expire_minutes', sa.Integer(), nullable=False),
-    sa.Column('polling_interval', sa.Integer(), nullable=False),
-    sa.Column('max_telemetry_failures', sa.Integer(), nullable=False),
+    sa.Column('alfa', sa.Float(), nullable=False, comment='ضریب محاسباتی آلفا'),
+    sa.Column('beta', sa.Float(), nullable=False, comment='ضریب محاسباتی بتا'),
+    sa.Column('access_token_expire_minutes', sa.Integer(), nullable=False, comment='مدت اعتبار Access Token (دقیقه)'),
+    sa.Column('refresh_token_expire_days', sa.Integer(), nullable=False, comment='مدت اعتبار Refresh Token (روز)'),
+    sa.Column('max_login_attempts', sa.Integer(), nullable=False, comment='حداکثر تلاش ناموفق ورود'),
+    sa.Column('lockout_duration_minutes', sa.Integer(), nullable=False, comment='مدت قفل شدن حساب (دقیقه)'),
+    sa.Column('session_timeout_minutes', sa.Integer(), nullable=False, comment='Timeout نشست (دقیقه)'),
+    sa.Column('polling_interval', sa.Integer(), nullable=False, comment='فاصله Polling (ثانیه)'),
+    sa.Column('max_telemetry_failures', sa.Integer(), nullable=False, comment='حداکثر خطای مجاز تله\u200cمتری'),
+    sa.Column('modbus_timeout', sa.Integer(), nullable=False, comment='Timeout Modbus (ثانیه)'),
+    sa.Column('modbus_retry_count', sa.Integer(), nullable=False, comment='تعداد تلاش مجدد Modbus'),
+    sa.Column('connection_pool_size', sa.Integer(), nullable=False, comment='اندازه Pool اتصالات'),
+    sa.Column('data_retention_days', sa.Integer(), nullable=False, comment='مدت نگهداری داده\u200cهای تله\u200cمتری (روز)'),
+    sa.Column('log_retention_days', sa.Integer(), nullable=False, comment='مدت نگهداری لاگ\u200cها (روز)'),
+    sa.Column('audit_log_retention_days', sa.Integer(), nullable=False, comment='مدت نگهداری لاگ\u200cهای Audit (روز)'),
+    sa.Column('notification_batch_size', sa.Integer(), nullable=False, comment='تعداد نوتیفیکیشن در هر Batch'),
+    sa.Column('notification_retry_attempts', sa.Integer(), nullable=False, comment='تعداد تلاش مجدد نوتیفیکیشن'),
+    sa.Column('notification_cooldown_seconds', sa.Integer(), nullable=False, comment='فاصله زمانی ارسال مجدد نوتیفیکیشن مشابه (ثانیه)'),
+    sa.Column('report_generation_timeout', sa.Integer(), nullable=False, comment='Timeout تولید گزارش (ثانیه)'),
+    sa.Column('max_export_records', sa.Integer(), nullable=False, comment='حداکثر رکورد در Export'),
+    sa.Column('system_name', sa.String(length=100), nullable=False, comment='نام سیستم'),
+    sa.Column('system_timezone', sa.String(length=50), nullable=False, comment='منطقه زمانی'),
+    sa.Column('maintenance_mode', sa.Boolean(), nullable=False, comment='وضعیت تعمیر و نگهداری'),
+    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
+    sa.Column('updated_at', sa.DateTime(timezone=True), nullable=True),
     sa.PrimaryKeyConstraint('id')
     )
     op.create_index(op.f('ix_system_settings_id'), 'system_settings', ['id'], unique=False)

@@ -1,14 +1,14 @@
-from sqlalchemy import Integer, String, Boolean
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy import Integer, String, Boolean, ForeignKey
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 # ایمپورت Base از تنظیمات دیتابیس تله‌متری
 from telemetry_service.core.database import Base
 
+
 class LocalPost(Base):
     """
     مدل سبک برای اتصال به جدول posts.
-    مدیریت اصلی این جدول (ساخت، ویرایش اطلاعات پایه) بر عهده سرویس اصلی است.
-    سرویس تله‌متری فقط از این مدل برای خواندن IP و وضعیت تجهیزات استفاده می‌کند.
+    فقط برای خواندن IP پست‌ها جهت برقراری ارتباط با فیدرهای زیرمجموعه آن استفاده می‌شود.
     """
     __tablename__ = "posts"
 
@@ -18,5 +18,25 @@ class LocalPost(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     consecutive_failures: Mapped[int] = mapped_column(Integer, default=0)
 
-    # نکته: نیازی به تعریف relationship برگشتی (back_populates) به TimeseriesData
-    # در اینجا نیست تا از پیچیدگی و وابستگی حلقوی (Circular Import) جلوگیری شود.
+    # ارتباط با فیدرها (برای Join کردن و واکشی همزمان)
+    feeders: Mapped[list["LocalFeeder"]] = relationship("LocalFeeder", back_populates="post")
+
+
+class LocalFeeder(Base):
+    """
+    مدل سبک برای اتصال به جدول feeders.
+    تله‌متری روی این مدل پیمایش (Iterate) می‌کند و دیتا را بر اساس modbus_address از IP پستِ والد می‌خواند.
+    """
+    __tablename__ = "feeders"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    post_id: Mapped[int] = mapped_column(Integer, ForeignKey("posts.id", ondelete="CASCADE"))
+
+    # آدرس مودباس (Slave ID / Unit ID) که برای خواندن دیتای اختصاصی این فیدر ضروری است
+    modbus_address: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    consecutive_failures: Mapped[int] = mapped_column(Integer, default=0)
+
+    # ارتباط با پست والد برای دسترسی به ip_address
+    post: Mapped["LocalPost"] = relationship("LocalPost", back_populates="feeders")

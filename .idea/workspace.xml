@@ -5,22 +5,15 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="b2213220-f23e-4183-a2a2-038d011ffbe6" name="Changes" comment="">
-      <change afterPath="$PROJECT_DIR$/telemetry_service/core/config.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/telemetry_service/core/database.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/telemetry_service/modules/telemetry/local_models.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.env" beforeDir="false" afterPath="$PROJECT_DIR$/.env" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/.gitignore" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/Power-Monitoring.iml" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/inspectionProfiles/Project_Default.xml" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/inspectionProfiles/profiles_settings.xml" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/misc.xml" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/modules.xml" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/vcs.xml" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/alembic.ini" beforeDir="false" afterPath="$PROJECT_DIR$/alembic.ini" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/main_api/migrations/versions/a4474c1335e9_change_national_id_to_phone_number2.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/main_api/migrations/versions/a74a98f0744b_change_national_id_to_phone_number.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/req.txt" beforeDir="false" afterPath="$PROJECT_DIR$/req.txt" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/telemetry_service/main.py" beforeDir="false" afterPath="$PROJECT_DIR$/telemetry_service/main.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/main_api/modules/devices/models.py" beforeDir="false" afterPath="$PROJECT_DIR$/main_api/modules/devices/models.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/main_api/modules/reports/repository.py" beforeDir="false" afterPath="$PROJECT_DIR$/main_api/modules/reports/repository.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/migrations/versions/96228eb6683f_init_database.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/migrations/versions/b1b2083a6ef4_add_phone_number_to_users.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/migrations/versions/febec5eac43c_make_post_id_and_feeder_id_nullable.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/modules/devices/models.py" beforeDir="false" afterPath="$PROJECT_DIR$/modules/devices/models.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/telemetry_service/modules/telemetry/local_models.py" beforeDir="false" afterPath="$PROJECT_DIR$/telemetry_service/modules/telemetry/local_models.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/telemetry_service/modules/telemetry/repository.py" beforeDir="false" afterPath="$PROJECT_DIR$/telemetry_service/modules/telemetry/repository.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/telemetry_service/scheduler.py" beforeDir="false" afterPath="$PROJECT_DIR$/telemetry_service/scheduler.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />

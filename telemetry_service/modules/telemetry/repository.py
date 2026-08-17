@@ -10,6 +10,7 @@ class TelemetryRepository:
     async def create_record(self, data: TelemetryCreate) -> TimeseriesData:
         new_record = TimeseriesData(
             post_id=data.post_id,
+            feeder_id=data.feeder_id,  # 👈 این خط فراموش شده بود! باید اضافه شود
             key=data.key,
             value_int=data.value_int,
             value_float=data.value_float,

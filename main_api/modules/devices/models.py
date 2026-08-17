@@ -4,6 +4,7 @@ from sqlalchemy.orm import relationship
 from datetime import datetime
 from main_api.modules.audit_logs.models import CommandLog
 from main_api.core.database import Base
+from sqlalchemy.sql import func
 
 
 
@@ -65,6 +66,7 @@ class Post(Base):
 
     metadata_info = Column("metadata", JSONB, nullable=True)  # برای فیلدهای سفارشی ۱ و ۲
     is_active = Column(Boolean, default=True)
+    consecutive_failures = Column(Integer, default=0, nullable=False)
     last_seen = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)

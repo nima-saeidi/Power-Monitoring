@@ -3,8 +3,9 @@ from sqlalchemy.orm import Session
 from datetime import datetime
 from typing import List
 
-# TODO: ایمپورت مدل دیتابیس سری زمانی خود را اینجا قرار دهید
-# فرض می‌کنیم مدل شما TimeseriesData نام دارد و در app.devices.models یا app.models است
+from sqlalchemy import func
+# فرض می‌کنیم مدل آلارم و پست را ایمپورت کرده‌اید:
+
 from main_api.modules.devices.models import TimeseriesData
 
 class ReportRepository:
@@ -17,23 +18,6 @@ class ReportRepository:
             TimeseriesData.timestamp >= start_date,
             TimeseriesData.timestamp <= end_date
         ).order_by(TimeseriesData.timestamp.asc()).all()
-
-
-from sqlalchemy import func
-# فرض می‌کنیم مدل آلارم و پست را ایمپورت کرده‌اید:
-# from app.models import DeviceAlert, Post
-
-    # ... (کدهای قبلی) ...
-
-    # ۱. متد دریافت تاریخچه هشدارها
-    def get_alerts_history(self, start_date: datetime, end_date: datetime, post_id: int = None):
-        query = self.db.query(DeviceAlert).filter(
-            DeviceAlert.created_at >= start_date,
-            DeviceAlert.created_at <= end_date
-        )
-        if post_id:
-            query = query.filter(DeviceAlert.post_id == post_id)
-        return query.order_by(DeviceAlert.created_at.desc()).all()
 
     # ۲. متد دریافت گزارش آماری (میانگین، حداکثر و حداقل) برای نمودارها
     def get_aggregated_stats(self, feeder_id: int, parameter_key: str, start_date: datetime, end_date: datetime):

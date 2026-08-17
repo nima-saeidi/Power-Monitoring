@@ -15,7 +15,7 @@ class User(Base):
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String(100), nullable=False)
     email = Column(String(150), unique=True, index=True, nullable=False)
-    national_id = Column(String(10), unique=True, index=True, nullable=True) # فیلد جدید کد ملی
+    phone_number = Column(String(10), unique=True, index=True, nullable=True) # فیلد جدید کد ملی
     hashed_password = Column(String(255), nullable=False)
     role = Column(SQLEnum(RoleEnum), default=RoleEnum.USER, nullable=False)
     is_active = Column(Boolean, default=True)
