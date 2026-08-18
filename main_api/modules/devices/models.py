@@ -21,23 +21,92 @@ class TimeseriesData(Base):
 # مدل مکان برای ساختار درختی
 # =========================================
 class Location(Base):
+
     __tablename__ = "locations"
-    id = Column(Integer, primary_key=True, index=True)
-    name = Column(String(100), index=True, nullable=False)
-    location_type = Column(String(50), nullable=True)  # مثلاً: campus, unit, building
-    description = Column(Text, nullable=True)
-    parent_id = Column(Integer, ForeignKey("locations.id", ondelete="CASCADE"), nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
-    parent = relationship("Location", remote_side=[id], back_populates="children")
-    children = relationship("Location", back_populates="parent")
+    id = Column(
+        Integer,
+        primary_key=True,
+        index=True
+    )
 
-    # روابط به پست‌ها (اصلاح شده)
-    posts = relationship("Post", foreign_keys="[Post.location_id]", back_populates="location")
-    campus_posts = relationship("Post", foreign_keys="[Post.campus_id]", back_populates="campus")
-    unit_posts = relationship("Post", foreign_keys="[Post.unit_id]", back_populates="unit")
+    name = Column(
+        String(100),
+        index=True,
+        nullable=False
+    )
 
+    location_type = Column(
+        String(50),
+        nullable=True
+    )
+
+    description = Column(
+        Text,
+        nullable=True
+    )
+
+    parent_id = Column(
+        Integer,
+        ForeignKey(
+            "locations.id",
+            ondelete="CASCADE"
+        ),
+        nullable=True
+    )
+
+    created_at = Column(
+        DateTime,
+        default=datetime.utcnow,
+        nullable=False
+    )
+
+    updated_at = Column(
+        DateTime,
+        default=datetime.utcnow,
+        onupdate=datetime.utcnow,
+        nullable=False
+    )
+
+    # ========================================================
+    # SELF RELATIONSHIP
+    # ========================================================
+
+    children = relationship(
+        "Location",
+        back_populates="parent",
+        lazy="selectin",  # <--- این بخش اضافه شود
+        cascade="all, delete-orphan"
+    )
+
+    parent = relationship(
+        "Location",
+        back_populates="children",
+        remote_side="[Location.id]",
+        lazy="selectin"  # <--- این بخش اضافه شود
+    )
+
+    # ========================================================
+    # POSTS
+    # ========================================================
+
+    posts = relationship(
+        "Post",
+        foreign_keys="[Post.location_id]",
+        back_populates="location"
+    )
+
+    campus_posts = relationship(
+        "Post",
+        foreign_keys="[Post.campus_id]",
+        back_populates="campus"
+    )
+
+    unit_posts = relationship(
+        "Post",
+        foreign_keys="[Post.unit_id]",
+        back_populates="unit"
+    )
 
 
 # =========================================
@@ -66,7 +135,6 @@ class Post(Base):
 
     metadata_info = Column("metadata", JSONB, nullable=True)  # برای فیلدهای سفارشی ۱ و ۲
     is_active = Column(Boolean, default=True)
-    consecutive_failures = Column(Integer, default=0, nullable=False)
     last_seen = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)

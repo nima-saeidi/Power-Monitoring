@@ -4,7 +4,7 @@ __pycache__/
 .venv/
 venv/
 env/
-.env
+main_api/.env
 .git/
 .gitignore
 *.sqlite3

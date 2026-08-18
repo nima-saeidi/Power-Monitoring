@@ -5,89 +5,198 @@ from main_api.modules.devices.schemas import (
     PostCreate, PostUpdate, PostResponse,
     FeederCreate, FeederUpdate, FeederResponse,
     LinkCreate, LinkUpdate, LinkResponse,
-    LocationCreate, LocationUpdate, LocationResponse,
-    CommandRequest, CampusWithSubsectionsCreate
+    LocationCreate, LocationUpdate, LocationResponse, CommandRequest
 )
 import pandas as pd
-from telemetry_service.modbus_client import ModbusReader
+from typing import List
+
+from fastapi import HTTPException, status
+
+from typing import List
+
+from fastapi import HTTPException, status
 
 
 class DeviceService:
-    def __init__(self, repo: DeviceRepository):
+
+    def __init__(
+            self,
+            repo: DeviceRepository
+    ):
         self.repo = repo
 
-    # ----- Location Service Methods -----
-
-    async def create_campus_with_subsections(self, data: CampusWithSubsectionsCreate) -> LocationResponse:
-        # ۱. بررسی وجود ریشه (دانشگاه تبریز)
-        root_name = "دانشگاه تبریز"
-        root = await self.repo.get_location_by_name(name=root_name, parent_id=None)
-
-        # اگر نبود، می‌سازیم
-        if not root:
-            root_data = LocationCreate(name=root_name, location_type="Root", parent_id=None)
-            root = await self.repo.create_location(root_data)
-
-        # ۲. ایجاد پردیس و وصل کردن آن به ریشه (دانشگاه تبریز)
-        campus_data = LocationCreate(
+    async def create_campus_with_subsections(self, data):
+        # ۱. ایجاد مکان اصلی (Campus) با استفاده از اسکیما
+        campus_create_data = LocationCreate(
             name=data.campus_name,
-            location_type="Campus",
-            parent_id=root.id,
-            description=data.description
+            description=data.description,
+            location_type="Campus"
         )
-        campus = await self.repo.create_location(campus_data)
+        campus = await self.repo.create_location(campus_create_data)
 
-        # ۳. حلقه روی زیربخش‌ها و ثبت آن‌ها زیرمجموعه‌ی پردیس جدید
-        for sub_name in data.sub_sections:
-            sub_data = LocationCreate(
-                name=sub_name,
-                location_type="SubSection",
-                parent_id=campus.id
+        # ۲. ایجاد زیرمجموعه‌ها در صورت وجود
+        created_children = []
+        if data.sub_sections:
+            for sub_name in data.sub_sections:
+                sub_data = LocationCreate(
+                    name=sub_name,
+                    parent_id=campus.id,
+                    location_type="Sub-section"
+                )
+                sub_location = await self.repo.create_location(sub_data)
+                created_children.append(sub_location)
+
+        # ۳. انتساب فرزندان به والد برای نمایش درست در خروجی
+        campus.children = created_children
+        return campus
+
+    async def create_location(
+            self,
+            data: "LocationCreate"
+    ):
+
+        # -----------------------------------------------------
+        # بررسی Parent
+        # -----------------------------------------------------
+        if data.parent_id is not None:
+            parent = await self.repo.get_location_by_id(
+                data.parent_id
             )
-            await self.repo.create_location(sub_data)
-
-        # ۴. فراخوانی مجدد پردیس از دیتابیس تا زیرمجموعه‌ها (sub_locations) را برای فرانت‌‌اند لود کند
-        return await self.repo.get_location_by_id(campus.id)
-
-    async def create_location(self, data: LocationCreate) -> LocationResponse:
-        if data.parent_id:
-            parent = await self.repo.get_location_by_id(data.parent_id)
             if not parent:
-                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="مکان والد یافت نشد.")
-        return await self.repo.create_location(data)
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="مکان والد یافت نشد."
+                )
 
-    async def get_locations(self, skip: int = 0, limit: int = 100) -> List[LocationResponse]:
-        return await self.repo.get_all_locations(skip=skip, limit=limit)
+        # -----------------------------------------------------
+        # ایجاد Location
+        # -----------------------------------------------------
+        new_location = await self.repo.create_location(data)
 
-    async def get_root_locations(self) -> List[LocationResponse]:
+        # -----------------------------------------------------
+        # ایجاد Sub Sections
+        # -----------------------------------------------------
+        if data.sub_sections:
+            for sub_name in data.sub_sections:
+                child_data = LocationCreate(
+                    name=sub_name,
+                    description=f"زیربخش {sub_name}",
+                    location_type="Department",
+                    parent_id=new_location.id
+                )
+                await self.repo.create_location(child_data)
+
+        # -----------------------------------------------------
+        # دریافت مجدد
+        # -----------------------------------------------------
+        return await self.repo.get_location_by_id(new_location.id)
+
+    # =========================================================
+    # GET LOCATIONS
+    # =========================================================
+
+    async def get_locations(
+            self,
+            skip: int = 0,
+            limit: int = 100
+    ):
+        return await self.repo.get_all_locations(
+            skip=skip,
+            limit=limit
+        )
+
+    async def get_root_locations(self):
         return await self.repo.get_root_locations()
 
-    async def get_location(self, location_id: int) -> LocationResponse:
-        location = await self.repo.get_location_by_id(location_id)
+    async def get_location(
+            self,
+            location_id: int
+    ):
+        location = await self.repo.get_location_by_id(
+            location_id
+        )
+
         if not location:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="مکان مورد نظر یافت نشد.")
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="مکان مورد نظر یافت نشد."
+            )
+
         return location
 
-    async def update_location(self, location_id: int, data: LocationUpdate) -> LocationResponse:
-        location = await self.repo.get_location_by_id(location_id)
-        if not location:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="مکان مورد نظر یافت نشد.")
+    # =========================================================
+    # UPDATE
+    # =========================================================
 
-        if data.parent_id:
-            parent = await self.repo.get_location_by_id(data.parent_id)
-            if not parent:
-                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="مکان والد یافت نشد.")
+    async def update_location(
+            self,
+            location_id: int,
+            data: LocationUpdate
+    ):
+
+        location = await self.repo.get_location_by_id(
+            location_id
+        )
+
+        if not location:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="مکان مورد نظر یافت نشد."
+            )
+
+        # -----------------------------------------------------
+        # Parent
+        # -----------------------------------------------------
+
+        if data.parent_id is not None:
+
             if data.parent_id == location_id:
-                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="یک مکان نمی‌تواند والد خودش باشد.")
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="یک مکان نمی‌تواند والد خودش باشد."
+                )
 
-        return await self.repo.update_location(location, data)
+            parent = await self.repo.get_location_by_id(
+                data.parent_id
+            )
 
-    async def delete_location(self, location_id: int) -> dict:
-        location = await self.repo.get_location_by_id(location_id)
+            if not parent:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="مکان والد یافت نشد."
+                )
+
+        return await self.repo.update_location(
+            location,
+            data
+        )
+
+    # =========================================================
+    # DELETE
+    # =========================================================
+
+    async def delete_location(
+            self,
+            location_id: int
+    ):
+
+        location = await self.repo.get_location_by_id(
+            location_id
+        )
+
         if not location:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="مکان مورد نظر یافت نشد.")
-        await self.repo.delete_location(location)
-        return {"message": "مکان با موفقیت حذف شد."}
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="مکان مورد نظر یافت نشد."
+            )
+
+        await self.repo.delete_location(
+            location
+        )
+
+        return {
+            "message": "مکان با موفقیت حذف شد."
+        }
 
     # ----- Post Service Methods -----
     async def create_post(self, data: PostCreate) -> PostResponse:
@@ -195,73 +304,31 @@ class DeviceService:
         failed_count = 0
         errors = []
 
-        # جایگزینی مقادیر خالی (NaN) با None
+        # جایگزینی مقادیر خالی (NaN) با None برای جلوگیری از خطای Pydantic
         df = df.where(pd.notnull(df), None)
 
-        # بررسی یا ایجاد ریشه اصلی
-        root_name = "دانشگاه تبریز"
-        root = await self.repo.get_location_by_name(name=root_name, parent_id=None)
-        if not root:
-            root = await self.repo.create_location(LocationCreate(name=root_name, location_type="Root", parent_id=None))
-
         for index, row in df.iterrows():
-            row_number = index + 2  # ردیف در فایل اکسل
+            row_number = index + 2  # ردیف در فایل اکسل (ردیف 1 هدر است)
             try:
-                # ۱. پردازش پردیس (Campus)
-                campus_name = str(row.get('campus_name', '')).strip() or "پردیس نامشخص"
-                campus = await self.repo.get_location_by_name(name=campus_name, parent_id=root.id)
-                if not campus:
-                    campus = await self.repo.create_location(
-                        LocationCreate(name=campus_name, location_type="Campus", parent_id=root.id))
-
-                # ۲. پردازش واحد (Unit)
-                unit_name = str(row.get('unit_name', '')).strip()
-                unit_id = None
-                if unit_name and unit_name.lower() != "none":
-                    unit = await self.repo.get_location_by_name(name=unit_name, parent_id=campus.id)
-                    if not unit:
-                        unit = await self.repo.create_location(
-                            LocationCreate(name=unit_name, location_type="SubSection", parent_id=campus.id))
-                    unit_id = unit.id
-
-                # ۳. پردازش پست (Post)
-                post_name = str(row.get('post_name', '')).strip()
-                if not post_name or post_name.lower() == "none":
-                    raise ValueError("نام پست (post_name) الزامی است.")
-
-                post_data = PostCreate(
-                    name=post_name,
-                    campus_id=campus.id,
-                    unit_id=unit_id,
-                    location_id=unit_id if unit_id else campus.id,
-                    supply_source=row.get('supply_source'),
-                    transformer_specs=row.get('transformer_specs'),
-                    ip_address=row.get('ip_address'),
+                # مپ کردن داده‌های ردیف اکسل به اسکیمای FeederCreate
+                # نکته: اگر نام فیلدهای شما در FeederCreate متفاوت است، این بخش را مطابق آن تغییر دهید
+                feeder_data = FeederCreate(
+                    post_id=int(row.get('post_id')) if row.get('post_id') else None,
+                    name=str(row.get('name')),
+                    ip_address=str(row.get('ip_address')) if row.get('ip_address') else None,
                     port=int(row.get('port')) if row.get('port') else 502,
-                    latitude=float(row.get('latitude')) if row.get('latitude') else None,
-                    longitude=float(row.get('longitude')) if row.get('longitude') else None
+                    unit_id=int(row.get('unit_id')) if row.get('unit_id') else 1,
+                    capacity_kva=float(row.get('capacity_kva')) if row.get('capacity_kva') else None,
+                    description=str(row.get('description')) if row.get('description') else None
                 )
-                # در سناریوی واقعی بهتر است در اینجا پست جستجو شود، فرض ما ایجاد است
-                post = await self.repo.create_post(post_data)
 
-                # ۴. پردازش فیدر (Feeder)
-                metadata = {}
-                if row.get('description'):
-                    metadata['description'] = str(row.get('description'))
+                # بررسی وجود پست
+                post = await self.repo.get_post_by_id(feeder_data.post_id)
+                if not post:
+                    raise ValueError(f"پست با شناسه {feeder_data.post_id} یافت نشد.")
 
-                feeder_name = str(row.get('feeder_name', '')).strip()
-                if feeder_name and feeder_name.lower() != "none":
-                    feeder_data = FeederCreate(
-                        post_id=post.id,
-                        name=feeder_name,
-                        feeder_type=str(row.get('feeder_type')) if row.get('feeder_type') else None,
-                        max_current=float(row.get('max_current')) if row.get('max_current') else None,
-                        cable_type=str(row.get('cable_type')) if row.get('cable_type') else None,
-                        modbus_address=int(row.get('modbus_address')) if row.get('modbus_address') else None,
-                        metadata_info=metadata if metadata else None
-                    )
-                    await self.repo.create_feeder(feeder_data)
-
+                # ثبت فیدر در دیتابیس
+                await self.repo.create_feeder(feeder_data)
                 success_count += 1
 
             except Exception as e:
@@ -289,15 +356,16 @@ class DeviceService:
                 detail="فیدر مورد نظر یافت نشد."
             )
 
-        # ۲. بررسی اینکه آیا پستِ مربوط به این فیدر IP برای ارتباط دارد یا خیر (جایگزینی substation با post)
-        if not feeder.post or not feeder.post.ip_address:
+        # ۲. بررسی اینکه آیا پستِ مربوط به این فیدر IP برای ارتباط دارد یا خیر
+        # (با فرض اینکه relation در مدل شما substation نام دارد)
+        if not feeder.substation or not feeder.substation.ip_address:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="پست مربوط به این فیدر فاقد آدرس IP است و قابلیت کنترل از راه دور ندارد."
             )
 
-        port = feeder.post.port if feeder.post.port else 502
-        modbus_client = ModbusReader(host=feeder.post.ip_address, port=port)
+        port = feeder.substation.port if feeder.substation.port else 502
+        modbus_client = ModbusReader(host=feeder.substation.ip_address, port=port)
 
         try:
             # ۴. ارسال فرمان ناهمگام (async)
@@ -315,6 +383,8 @@ class DeviceService:
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                 detail="ارتباط با سخت‌افزار قطع است یا فرمان توسط تجهیز رد شد."
             )
+
+        # در صورت تمایل می‌توانید در اینجا لاگ/رویداد موفقیت‌آمیز بودن فرمان را نیز در دیتابیس ثبت کنید
 
         action_text = "وصل" if request.command else "قطع"
         return {

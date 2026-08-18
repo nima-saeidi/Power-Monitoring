@@ -3,6 +3,7 @@ from sqlalchemy.future import select
 from sqlalchemy.orm import selectinload
 from typing import List, Optional
 
+# مدل‌ها و اسکیماها شامل Link اضافه شدند
 from main_api.modules.devices.models import Post, Feeder, Location, Link
 from main_api.modules.devices.schemas import (
     PostCreate, PostUpdate,
@@ -11,64 +12,197 @@ from main_api.modules.devices.schemas import (
     LinkCreate, LinkUpdate
 )
 
+
+from typing import List, Optional
+
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+
 class DeviceRepository:
+
     def __init__(self, db: AsyncSession):
         self.db = db
 
-    # ================= Location CRUD =================
-    async def create_location(self, data: LocationCreate) -> Location:
-        location = Location(**data.model_dump())
+    # =========================================================
+    # CREATE LOCATION
+    # =========================================================
+
+    async def create_location(
+        self,
+        data: "LocationCreate"
+    ) -> "Location":
+
+        location_data = data.model_dump(
+            exclude={"sub_sections"},
+            exclude_unset=True
+        )
+
+        location = Location(**location_data)
         self.db.add(location)
         await self.db.commit()
         await self.db.refresh(location)
-        return await self.get_location_by_id(location.id)
 
-    async def get_all_locations(self, skip: int = 0, limit: int = 100) -> List[Location]:
-        query = select(Location).options(
-            selectinload(Location.children),
-            selectinload(Location.posts)
-        ).offset(skip).limit(limit)
-        result = await self.db.execute(query)
-        return list(result.scalars().all())
+        return location
 
-    async def get_root_locations(self) -> List[Location]:
-        query = select(Location).options(
-            selectinload(Location.children)
-        ).where(Location.parent_id.is_(None))
-        result = await self.db.execute(query)
-        return list(result.scalars().all())
+    # =========================================================
+    # GET ALL LOCATIONS AS TREE
+    # =========================================================
 
-    async def get_location_by_id(self, location_id: int) -> Optional[Location]:
-        query = select(Location).options(
-            selectinload(Location.children),
-            selectinload(Location.posts)
-        ).where(Location.id == location_id)
-        result = await self.db.execute(query)
-        return result.scalar_one_or_none()
+    async def get_all_locations(
+            self,
+            skip: int = 0,
+            limit: int = 100
+    ):
+        stmt = (
+            select(Location)
+            .order_by(Location.id)
+        )
+        result = await self.db.execute(stmt)
+        locations = result.scalars().all()
 
-    async def get_location_by_name(self, name: str, parent_id: Optional[int] = None) -> Optional[Location]:
-        query = select(Location).options(
-            selectinload(Location.children)
-        ).where(Location.name == name)
+        nodes = {}
+        for location in locations:
+            nodes[location.id] = {
+                "id": location.id,
+                "campus_name": location.name,  # اصلاح شد: به campus_name تغییر یافت
+                "location_type": location.location_type,
+                "parent_id": location.parent_id,
+                "description": location.description,
+                "sub_locations": []
+            }
 
-        if parent_id is not None:
-            query = query.where(Location.parent_id == parent_id)
-        else:
-            query = query.where(Location.parent_id.is_(None))
+        roots = []
+        for location in locations:
+            node = nodes[location.id]
+            if location.parent_id is None:
+                roots.append(node)
+            else:
+                parent_node = nodes.get(location.parent_id)
+                if parent_node:
+                    parent_node["sub_locations"].append(node)
 
-        result = await self.db.execute(query)
-        return result.scalars().first()
+        roots = roots[skip: skip + limit]
+        return roots
 
-    async def update_location(self, location: Location, data: LocationUpdate) -> Location:
-        update_data = data.model_dump(exclude_unset=True)
+    # =========================================================
+    # GET ROOT LOCATIONS
+    # =========================================================
+
+    async def get_root_locations(self):
+        stmt = (
+            select(Location)
+            .order_by(Location.id)
+        )
+        result = await self.db.execute(stmt)
+        locations = result.scalars().all()
+
+        nodes = {}
+        for location in locations:
+            nodes[location.id] = {
+                "id": location.id,
+                "campus_name": location.name,  # اصلاح شد: به campus_name تغییر یافت
+                "location_type": location.location_type,
+                "parent_id": location.parent_id,
+                "description": location.description,
+                "sub_locations": []
+            }
+
+        roots = []
+        for location in locations:
+            node = nodes[location.id]
+            if location.parent_id is None:
+                roots.append(node)
+            else:
+                parent_node = nodes.get(location.parent_id)
+                if parent_node:
+                    parent_node["sub_locations"].append(node)
+
+        return roots
+
+    # =========================================================
+    # GET LOCATION BY ID
+    # =========================================================
+
+    async def get_location_by_id(
+            self,
+            location_id: int
+    ) -> Optional[dict]:
+
+        # زنجیره selectinload برای واکشی تا ۴ سطح تو در تو
+        # (مثال: پردیس -> ساختمان -> طبقه -> اتاق)
+        stmt = (
+            select(Location)
+            .options(
+                selectinload(Location.children)
+                .selectinload(Location.children)
+                .selectinload(Location.children)
+            )
+            .where(Location.id == location_id)
+        )
+        result = await self.db.execute(stmt)
+        location = result.scalars().first()
+
+        if not location:
+            return None
+
+        # تابع بازگشتی برای فرمت کردن خروجی
+        def format_location(loc):
+            # بررسی ایمن: اگر فرزندان بارگذاری نشده باشند، برنامه کرش نمی‌کند (جلوگیری از MissingGreenlet)
+            sub_locations = []
+            if 'children' in loc.__dict__:
+                sub_locations = [format_location(child) for child in loc.children]
+
+            return {
+                "id": loc.id,
+                "campus_name": loc.name,
+                "location_type": loc.location_type,
+                "parent_id": loc.parent_id,
+                "description": loc.description,
+                "sub_locations": sub_locations
+            }
+
+        return format_location(location)
+
+    # =========================================================
+    # UPDATE LOCATION
+    # =========================================================
+
+    async def update_location(
+        self,
+        location: Location,
+        data: LocationUpdate
+    ) -> Location:
+
+        update_data = data.model_dump(
+            exclude_unset=True
+        )
+
         for key, value in update_data.items():
-            setattr(location, key, value)
-        await self.db.commit()
-        await self.db.refresh(location)
-        return await self.get_location_by_id(location.id)
 
-    async def delete_location(self, location: Location) -> None:
+            setattr(
+                location,
+                key,
+                value
+            )
+
+        await self.db.commit()
+
+        await self.db.refresh(location)
+
+        return location
+
+    # =========================================================
+    # DELETE LOCATION
+    # =========================================================
+
+    async def delete_location(
+        self,
+        location: Location
+    ) -> None:
+
         await self.db.delete(location)
+
         await self.db.commit()
 
     # ================= Post CRUD =================
