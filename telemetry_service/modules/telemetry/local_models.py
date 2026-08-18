@@ -2,7 +2,7 @@ from sqlalchemy import Integer, String, Boolean, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 # ایمپورت Base از تنظیمات دیتابیس تله‌متری
-from telemetry_service.core.database import Base
+from core.database import Base
 
 
 class LocalPost(Base):

@@ -1,11 +1,14 @@
 from fastapi import FastAPI
 import asyncio
 
-# ایمپورت کلاس جدید زمان‌بند
-from telemetry_service.scheduler import TelemetryScheduler
+# --- ۱. ایمپورت‌های مربوط به دیتابیس (مسیر را در صورت نیاز اصلاح کنید) ---
+from core.database import engine, Base
+# -----------------------------------------------------------------------
 
-# اگر در فایل router.py روت‌هایی تعریف کرده‌اید (مانند تصویر پوشه‌هایتان)
-# می‌توانید آن را در اینجا ایمپورت کنید:
+# ایمپورت کلاس جدید زمان‌بند
+from scheduler import TelemetryScheduler
+
+# ایمپورت روتر
 from modules.telemetry.router import router as telemetry_router
 
 app = FastAPI(title="Telemetry Service", description="Modbus Reading and Redis Publishing")
@@ -13,11 +16,26 @@ app = FastAPI(title="Telemetry Service", description="Modbus Reading and Redis P
 # ساخت یک نمونه از کلاس زمان‌بند
 scheduler = TelemetryScheduler()
 
+
+# --- ۲. تابع ساخت جداول به صورت Async برای جلوگیری از خطای MissingGreenlet ---
+async def init_models():
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+
+
+# ---------------------------------------------------------------------------
+
 @app.on_event("startup")
 async def startup_event():
     print("Starting Telemetry Service...")
-    # اجرای زمان‌بند به صورت غیرهمگام (خود این متد تسک‌ها را در بک‌گراند می‌سازد)
+
+    # --- ۳. فراخوانی ساخت جداول قبل از اجرای زمان‌بند ---
+    await init_models()
+    # --------------------------------------------------
+
+    # اجرای زمان‌بند به صورت غیرهمگام
     await scheduler.start()
+
 
 @app.on_event("shutdown")
 async def shutdown_event():
@@ -25,5 +43,6 @@ async def shutdown_event():
     # توقف ایمن تمامی تسک‌های متصل به Modbus و Redis
     await scheduler.stop()
 
-# اگر روتر دارید، آن را اضافه کنید (اختیاری)
+
+# اضافه کردن روتر
 app.include_router(telemetry_router, prefix="/api/telemetry", tags=["Telemetry"])

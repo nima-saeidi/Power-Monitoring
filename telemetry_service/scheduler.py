@@ -9,8 +9,8 @@ from datetime import datetime, timezone
 
 # ایمپورت‌های پروژه
 from core.config import settings
-from telemetry_service.modules.telemetry.local_models import LocalFeeder, LocalPost
-from telemetry_service.modbus_client import ModbusReader
+from modules.telemetry.local_models import LocalFeeder, LocalPost
+from modbus_client import ModbusReader
 
 # تنظیمات لاگر
 logging.basicConfig(level=logging.INFO)

@@ -1,6 +1,6 @@
-import asyncio
-import os
 import sys
+import os
+import asyncio
 from logging.config import fileConfig
 
 from sqlalchemy import pool
@@ -9,43 +9,22 @@ from sqlalchemy.ext.asyncio import async_engine_from_config
 
 from alembic import context
 
-# اضافه کردن مسیر روت پروژه برای شناسایی ماژول‌ها
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# اضافه کردن مسیر فعلی به sys.path تا پایتون ماژول‌ها را پیدا کند
+sys.path.append(os.path.dirname(os.path.dirname(__file__)))
+# یا اگر env.py داخل پوشه alembic است، از این استفاده کنید:
+sys.path.insert(0, os.path.realpath(os.path.join(os.path.dirname(__file__), '..')))
 
-# ایمپورت Base
+# حذف پیشوند telemetry_service و ایمپورت مستقیم از core
 from core.database import Base
+target_metadata = Base.metadata
 
-# ایمپورت دقیق تمام مدل‌ها بر اساس ساختار پوشه‌های شما
-from modules.auth.models import User
-from modules.devices.models import Post, Feeder, Link
-from modules.settings.models import SystemSetting
-from modules.notifications.models import NotificationPreference , NotificationType , NotificationPriority , Notification ,NotificationTemplate
+# این تنظیمات فایل alembic.ini است
 config = context.config
 
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-# تنظیم تارگت برای اتوجنریت
-target_metadata = Base.metadata
-
-# other values from the config, defined by the needs of env.py,
-# can be acquired:
-# my_important_option = config.get_main_option("my_important_option")
-# ... etc.
-
-
 def run_migrations_offline() -> None:
-    """Run migrations in 'offline' mode.
-
-    This configures the context with just a URL
-    and not an Engine, though an Engine is acceptable
-    here as well.  By skipping the Engine creation
-    we don't even need a DBAPI to be available.
-
-    Calls to context.execute() here emit the given string to the
-    script output.
-
-    """
     url = config.get_main_option("sqlalchemy.url")
     context.configure(
         url=url,
@@ -57,20 +36,16 @@ def run_migrations_offline() -> None:
     with context.begin_transaction():
         context.run_migrations()
 
-
+# 2. تابع اجرای مایگریشن که توسط run_sync صدا زده می‌شود
 def do_run_migrations(connection: Connection) -> None:
     context.configure(connection=connection, target_metadata=target_metadata)
 
     with context.begin_transaction():
         context.run_migrations()
 
-
+# 3. تابع Async برای اتصال به دیتابیس
 async def run_async_migrations() -> None:
-    """In this scenario we need to create an Engine
-    and associate a connection with the context.
-
-    """
-
+    # ساخت کانکشن ناهمگام
     connectable = async_engine_from_config(
         config.get_section(config.config_ini_section, {}),
         prefix="sqlalchemy.",
@@ -78,16 +53,15 @@ async def run_async_migrations() -> None:
     )
 
     async with connectable.connect() as connection:
+        # اجرای تابع do_run_migrations به صورت همگام درون بستر ناهمگام
         await connection.run_sync(do_run_migrations)
 
     await connectable.dispose()
 
-
 def run_migrations_online() -> None:
     """Run migrations in 'online' mode."""
-
+    # 4. اجرای تابع ناهمگام با asyncio
     asyncio.run(run_async_migrations())
-
 
 if context.is_offline_mode():
     run_migrations_offline()

@@ -2,7 +2,7 @@ from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, Asyn
 from sqlalchemy.orm import declarative_base
 
 # ایمپورت تنظیمات از خود سرویس تله‌متری
-from telemetry_service.core.config import settings
+from core.config import settings
 
 # ساخت موتور دیتابیس غیرهمگام
 engine = create_async_engine(

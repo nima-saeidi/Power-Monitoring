@@ -2,7 +2,8 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    DATABASE_URL: str
+    # اصلاح: افزودن نوع str و استفاده از علامت = برای مقدار پیش‌فرض
+    DATABASE_URL: str = "postgresql+asyncpg://postgres:admin@localhost:5432/telemetry_service"
 
     # تغییر نام به CACHE_URL برای فرار از تداخل redis_url
     CACHE_URL: str = "redis://127.0.0.1:6379/0"

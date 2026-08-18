@@ -7,7 +7,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.dialects.postgresql import UUID
 
 # نکته مهم: این Base ترجیحاً باید مربوط به خود سرویس تله‌متری باشد
-from telemetry_service.core.database import Base
+from core.database import Base
 
 
 class TimeseriesData(Base):

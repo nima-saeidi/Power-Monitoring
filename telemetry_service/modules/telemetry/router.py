@@ -1,9 +1,9 @@
 from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
 from sqlalchemy.ext.asyncio import AsyncSession
-from main_api.core.database import get_db
-from telemetry_service.modules.telemetry.ws_manager import telemetry_ws_manager
-from telemetry_service.modules.telemetry.schemas import TelemetryCreate
-from telemetry_service.modules.telemetry.service import TelemetryService
+from core.database import get_db
+from modules.telemetry.ws_manager import telemetry_ws_manager
+from modules.telemetry.schemas import TelemetryCreate
+from modules.telemetry.service import TelemetryService
 
 router = APIRouter(prefix="/telemetry", tags=["Telemetry"])
 
