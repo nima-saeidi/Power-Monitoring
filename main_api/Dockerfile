@@ -1,29 +1,17 @@
-# استفاده از نسخه سبک پایتون ۳.۱۱ (یا نسخه مدنظر شما)
-FROM python:3.11-slim
+FROM python:3.12-slim
 
-# جلوگیری از نوشتن فایل‌های .pyc و بافرینگ لاگ‌ها
-ENV PYTHONDONTWRITEBYTECODE=1
-ENV PYTHONUNBUFFERED=1
-
-# تنظیم پوشه کاری داخل کانتینر
 WORKDIR /app
 
-# نصب پیش‌نیازهای سیستمی برای پکیج‌هایی مثل asyncpg یا psycopg2
 RUN apt-get update \
     && apt-get install -y gcc libpq-dev \
-    && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
-# کپی کردن فایل نیازمندی‌ها و نصب آن‌ها
-COPY requirements.txt .
-RUN pip install --upgrade pip
-RUN pip install --no-cache-dir -r requirements.txt
+COPY main_api/req.txt ./req.txt
 
-# کپی کردن کل کدهای پروژه به داخل کانتینر
-COPY migrations .
+RUN pip install --no-cache-dir -r req.txt
 
-# باز کردن پورت ۸۰۰۰
-EXPOSE 8000
+COPY main_api ./main_api
 
-# دستور اجرای برنامه (تضمین پشتیبانی از وب‌سوکت با پکیج websockets)
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--ws", "websockets"]
+ENV PYTHONPATH=/app
+
+CMD ["uvicorn", "main_api.main:app", "--host", "0.0.0.0", "--port", "8000"]

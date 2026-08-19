@@ -1,5 +1,9 @@
 version: '3.8'
 
+networks:
+  power_net:
+    driver: bridge
+
 services:
   # 1. Database Service (TimescaleDB)
   db:
@@ -15,12 +19,14 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-    # اضافه شدن بررسی سلامت (Healthcheck) دیتابیس
+      - /etc/localtime:/etc/localtime:ro # همگام‌سازی دقیق ساعت با سرور میزبان
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres -d power_monitoring"]
       interval: 5s
       timeout: 5s
       retries: 5
+    networks:
+      - power_net
 
   # 2. Redis Broker Service
   redis:
@@ -36,10 +42,13 @@ services:
       interval: 5s
       timeout: 3s
       retries: 5
+    networks:
+      - power_net
 
-  # 3. Main Backend Service (API & WebSockets)
   api:
-    build: ./main_api
+    build:
+      context: .
+      dockerfile: ./main_api/Dockerfile
     container_name: power_monitoring_api
     restart: unless-stopped
     ports:
@@ -51,13 +60,15 @@ services:
       TZ: Asia/Tehran
     depends_on:
       db:
-        condition: service_healthy # صبر می‌کند تا دیتابیس کاملاً بالا بیاید
+        condition: service_healthy
       redis:
-        condition: service_healthy # صبر می‌کند تا ردیس کاملاً بالا بیاید
-
+        condition: service_healthy
+    networks:
+      - power_net
   # 4. Telemetry Service (Modbus Reader)
   telemetry:
-    build: ./telemetry_service
+    build:
+      context: ./telemetry_service
     container_name: power_monitoring_telemetry
     restart: unless-stopped
     environment:
@@ -71,6 +82,23 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+    networks:
+      - power_net
+
+  # --- OPTIONAL: PgAdmin for Database Management ---
+  # pgadmin:
+  #   image: dpage/pgadmin4
+  #   container_name: power_monitoring_pgadmin
+  #   restart: unless-stopped
+  #   environment:
+  #     PGADMIN_DEFAULT_EMAIL: admin@admin.com
+  #     PGADMIN_DEFAULT_PASSWORD: admin
+  #   ports:
+  #     - "5050:80"
+  #   depends_on:
+  #     - db
+  #   networks:
+  #     - power_net
 
 volumes:
   postgres_data:
