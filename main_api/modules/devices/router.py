@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List, Optional
 import pandas as pd
 from io import BytesIO
-
+from typing import List
 from main_api.core.database import get_db
 from main_api.modules.devices.repository import DeviceRepository
 from main_api.modules.devices.service import DeviceService
@@ -152,12 +152,14 @@ async def import_feeders_from_excel(file: UploadFile = File(...), service: Devic
     return await service.import_feeders_from_excel(df)
 
 
-@feeders_router.post("", response_model=FeederResponse, status_code=status.HTTP_201_CREATED,
-                     summary="Create New Feeder")
-async def create_feeder(data: FeederCreate, service: DeviceService = Depends(get_device_service),
-                        current_user=Depends(require_tech_or_admin)):
-    return await service.create_feeder(data)
-
+@feeders_router.post("", response_model=List[FeederResponse], status_code=status.HTTP_201_CREATED,
+                     summary="Create Multiple Feeders")
+async def create_feeders(
+    data: List[FeederCreate],
+    service: DeviceService = Depends(get_device_service),
+    current_user = Depends(require_tech_or_admin)
+):
+    return await service.create_feeders(data)
 
 @feeders_router.get("", response_model=List[FeederResponse], summary="Get All Feeders")
 async def get_feeders(post_id: Optional[int] = Query(None), skip: int = Query(0, ge=0), limit: int = Query(100, ge=1),

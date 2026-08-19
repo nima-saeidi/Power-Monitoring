@@ -1,9 +1,9 @@
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.future import select
-from sqlalchemy.orm import selectinload
 from typing import List, Optional
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
-# مدل‌ها و اسکیماها شامل Link اضافه شدند
+# مدل‌ها و اسکیماها
 from main_api.modules.devices.models import Post, Feeder, Location, Link
 from main_api.modules.devices.schemas import (
     PostCreate, PostUpdate,
@@ -11,12 +11,6 @@ from main_api.modules.devices.schemas import (
     LocationCreate, LocationUpdate,
     LinkCreate, LinkUpdate
 )
-
-
-from typing import List, Optional
-
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 
 
 class DeviceRepository:
@@ -28,11 +22,7 @@ class DeviceRepository:
     # CREATE LOCATION
     # =========================================================
 
-    async def create_location(
-        self,
-        data: "LocationCreate"
-    ) -> "Location":
-
+    async def create_location(self, data: LocationCreate) -> Location:
         location_data = data.model_dump(
             exclude={"sub_sections"},
             exclude_unset=True
@@ -49,15 +39,8 @@ class DeviceRepository:
     # GET ALL LOCATIONS AS TREE
     # =========================================================
 
-    async def get_all_locations(
-            self,
-            skip: int = 0,
-            limit: int = 100
-    ):
-        stmt = (
-            select(Location)
-            .order_by(Location.id)
-        )
+    async def get_all_locations(self, skip: int = 0, limit: int = 100):
+        stmt = select(Location).order_by(Location.id)
         result = await self.db.execute(stmt)
         locations = result.scalars().all()
 
@@ -65,10 +48,13 @@ class DeviceRepository:
         for location in locations:
             nodes[location.id] = {
                 "id": location.id,
-                "campus_name": location.name,  # اصلاح شد: به campus_name تغییر یافت
+                "campus_name": location.name,
                 "location_type": location.location_type,
                 "parent_id": location.parent_id,
                 "description": location.description,
+                "latitude": location.latitude,  # فیلد جدید
+                "longitude": location.longitude,  # فیلد جدید
+                "address": location.address,  # فیلد جدید
                 "sub_locations": []
             }
 
@@ -90,10 +76,7 @@ class DeviceRepository:
     # =========================================================
 
     async def get_root_locations(self):
-        stmt = (
-            select(Location)
-            .order_by(Location.id)
-        )
+        stmt = select(Location).order_by(Location.id)
         result = await self.db.execute(stmt)
         locations = result.scalars().all()
 
@@ -101,10 +84,13 @@ class DeviceRepository:
         for location in locations:
             nodes[location.id] = {
                 "id": location.id,
-                "campus_name": location.name,  # اصلاح شد: به campus_name تغییر یافت
+                "campus_name": location.name,
                 "location_type": location.location_type,
                 "parent_id": location.parent_id,
                 "description": location.description,
+                "latitude": location.latitude,  # فیلد جدید
+                "longitude": location.longitude,  # فیلد جدید
+                "address": location.address,  # فیلد جدید
                 "sub_locations": []
             }
 
@@ -124,13 +110,8 @@ class DeviceRepository:
     # GET LOCATION BY ID
     # =========================================================
 
-    async def get_location_by_id(
-            self,
-            location_id: int
-    ) -> Optional[dict]:
-
+    async def get_location_by_id(self, location_id: int) -> Optional[dict]:
         # زنجیره selectinload برای واکشی تا ۴ سطح تو در تو
-        # (مثال: پردیس -> ساختمان -> طبقه -> اتاق)
         stmt = (
             select(Location)
             .options(
@@ -148,7 +129,6 @@ class DeviceRepository:
 
         # تابع بازگشتی برای فرمت کردن خروجی
         def format_location(loc):
-            # بررسی ایمن: اگر فرزندان بارگذاری نشده باشند، برنامه کرش نمی‌کند (جلوگیری از MissingGreenlet)
             sub_locations = []
             if 'children' in loc.__dict__:
                 sub_locations = [format_location(child) for child in loc.children]
@@ -159,6 +139,9 @@ class DeviceRepository:
                 "location_type": loc.location_type,
                 "parent_id": loc.parent_id,
                 "description": loc.description,
+                "latitude": loc.latitude,  # فیلد جدید
+                "longitude": loc.longitude,  # فیلد جدید
+                "address": loc.address,  # فیلد جدید
                 "sub_locations": sub_locations
             }
 
@@ -169,41 +152,43 @@ class DeviceRepository:
     # =========================================================
 
     async def update_location(
-        self,
-        location: Location,
-        data: LocationUpdate
-    ) -> Location:
+            self,
+            location_id: int,
+            data: LocationUpdate
+    ) -> Optional[Location]:
 
-        update_data = data.model_dump(
-            exclude_unset=True
-        )
+        stmt = select(Location).where(Location.id == location_id)
+        result = await self.db.execute(stmt)
+        location_obj = result.scalar_one_or_none()
+
+        if not location_obj:
+            return None
+
+        update_data = data.model_dump(exclude_unset=True)
 
         for key, value in update_data.items():
-
-            setattr(
-                location,
-                key,
-                value
-            )
+            setattr(location_obj, key, value)
 
         await self.db.commit()
+        await self.db.refresh(location_obj)
 
-        await self.db.refresh(location)
-
-        return location
+        return location_obj
 
     # =========================================================
     # DELETE LOCATION
     # =========================================================
 
-    async def delete_location(
-        self,
-        location: Location
-    ) -> None:
+    async def delete_location(self, location_id: int) -> bool:
+        query = select(Location).where(Location.id == location_id)
+        result = await self.db.execute(query)
+        location_obj = result.scalar_one_or_none()
 
-        await self.db.delete(location)
+        if location_obj:
+            await self.db.delete(location_obj)
+            await self.db.commit()
+            return True
 
-        await self.db.commit()
+        return False
 
     # ================= Post CRUD =================
     async def create_post(self, data: PostCreate) -> Post:
@@ -216,16 +201,22 @@ class DeviceRepository:
     async def get_all_posts(self, skip: int = 0, limit: int = 100) -> List[Post]:
         query = select(Post).options(
             selectinload(Post.feeders),
-            selectinload(Post.location)
+            selectinload(Post.location),
+            selectinload(Post.campus),  # بارگذاری پردیس
+            selectinload(Post.unit)  # بارگذاری واحد
         ).offset(skip).limit(limit)
+
         result = await self.db.execute(query)
         return list(result.scalars().all())
 
     async def get_post_by_id(self, post_id: int) -> Optional[Post]:
         query = select(Post).options(
             selectinload(Post.feeders),
-            selectinload(Post.location)
+            selectinload(Post.location),
+            selectinload(Post.campus),  # بارگذاری پردیس
+            selectinload(Post.unit)  # بارگذاری واحد
         ).where(Post.id == post_id)
+
         result = await self.db.execute(query)
         return result.scalar_one_or_none()
 

@@ -1,63 +1,76 @@
 version: '3.8'
 
 services:
-  # 1. سرویس دیتابیس (TimescaleDB)
+  # 1. Database Service (TimescaleDB)
   db:
     image: timescale/timescaledb:latest-pg15
     container_name: power_monitoring_db
-    restart: always
+    restart: unless-stopped
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: admin
       POSTGRES_DB: power_monitoring
+      TZ: Asia/Tehran
     ports:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    # اضافه شدن بررسی سلامت (Healthcheck) دیتابیس
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d power_monitoring"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
-  # 2. سرویس پیام‌رسان (Redis Broker برای Pub/Sub)
+  # 2. Redis Broker Service
   redis:
     image: redis:alpine
     container_name: redis_broker
-    restart: always
+    restart: unless-stopped
+    environment:
+      TZ: Asia/Tehran
     ports:
       - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
 
-  # 3. سرویس بک‌اند اصلی (Core - Subscriber & WebSocket Manager)
+  # 3. Main Backend Service (API & WebSockets)
   api:
     build: ./main_api
     container_name: power_monitoring_api
-    restart: always
+    restart: unless-stopped
     ports:
       - "8000:8000"
     environment:
       DATABASE_URL: postgresql+asyncpg://postgres:admin@db:5432/power_monitoring
       REDIS_URL: redis://redis:6379/0
       SECRET_KEY: your_super_secret_key
+      TZ: Asia/Tehran
     depends_on:
-      - db
-      - redis
-    # volumes:
-    #   - ./main_api:/app
+      db:
+        condition: service_healthy # صبر می‌کند تا دیتابیس کاملاً بالا بیاید
+      redis:
+        condition: service_healthy # صبر می‌کند تا ردیس کاملاً بالا بیاید
 
-  # 4. سرویس تله‌متری (Modbus Reader & Publisher)
+  # 4. Telemetry Service (Modbus Reader)
   telemetry:
     build: ./telemetry_service
     container_name: power_monitoring_telemetry
-    restart: always
-    # در صورت نیاز به بررسی وضعیت این سرویس، می‌توانید پورت زیر را باز کنید
-    # ports:
-    #   - "8001:8001"
+    restart: unless-stopped
     environment:
       DATABASE_URL: postgresql+asyncpg://postgres:admin@db:5432/power_monitoring
       REDIS_URL: redis://redis:6379/0
       POLLING_INTERVAL: 5
       MAX_TELEMETRY_FAILURES: 3
+      TZ: Asia/Tehran
     depends_on:
-      - db
-      - redis
-    # volumes:
-    #   - ./telemetry_service:/app
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
 
 volumes:
   postgres_data:

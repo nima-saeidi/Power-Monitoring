@@ -10,6 +10,9 @@ class LocationBase(BaseModel):
     location_type: Optional[str] = None
     parent_id: Optional[int] = None
     description: Optional[str] = None
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+    address: Optional[str] = None
 
     model_config = ConfigDict(populate_by_name=True)
 
@@ -18,11 +21,13 @@ class LocationCreate(LocationBase):
     sub_sections: List[str] = Field(default_factory=list)
 
 
-# این کلاس اضافه شد تا خطای ایمپورت در روتر برطرف شود و فرمت دقیق درخواستی را بگیرد
 class CampusWithSubsectionsCreate(BaseModel):
     campus_name: str
     sub_sections: List[str] = Field(default_factory=list)
     description: Optional[str] = None
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+    address: Optional[str] = None
 
 
 class LocationUpdate(BaseModel):
@@ -30,31 +35,37 @@ class LocationUpdate(BaseModel):
     location_type: Optional[str] = None
     parent_id: Optional[int] = None
     description: Optional[str] = None
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+    address: Optional[str] = None
 
     model_config = ConfigDict(populate_by_name=True)
 
 
 class LocationResponse(BaseModel):
     id: int
-    campus_name: str  # <--- این فیلد باید campus_name باشد نه name
+    campus_name: Optional[str] = Field(default=None, validation_alias="name")
     location_type: Optional[str] = None
     parent_id: Optional[int] = None
     description: Optional[str] = None
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+    address: Optional[str] = None
     sub_locations: List['LocationResponse'] = []
 
-    class Config:
-        from_attributes = True  # در Pydantic v2
-        # orm_mode = True       # در Pydantic v1
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
 
 
 # ----------------- Feeder Schemas -----------------
 class FeederBase(BaseModel):
     name: str
+    feeder_type: Optional[str] = None
     max_current: Optional[float] = None
-    cable_type: Optional[str] = None
+    ip_address: Optional[str] = None
     modbus_address: Optional[int] = None
     metadata_info: Optional[Dict[str, Any]] = None
     is_active: bool = True
+    consecutive_failures: int = 0
 
 
 class FeederCreate(FeederBase):
@@ -63,11 +74,13 @@ class FeederCreate(FeederBase):
 
 class FeederUpdate(BaseModel):
     name: Optional[str] = None
+    feeder_type: Optional[str] = None
     max_current: Optional[float] = None
-    cable_type: Optional[str] = None
+    ip_address: Optional[str] = None
     modbus_address: Optional[int] = None
     metadata_info: Optional[Dict[str, Any]] = None
     is_active: Optional[bool] = None
+    consecutive_failures: Optional[int] = None
 
 
 class FeederResponse(FeederBase):
@@ -79,12 +92,18 @@ class FeederResponse(FeederBase):
 # ----------------- Post Schemas -----------------
 class PostBase(BaseModel):
     name: str
+    supply_source: Optional[str] = None
+    campus_id: Optional[int] = None
+    unit_id: Optional[int] = None
     location_id: Optional[int] = None
     transformer_specs: Optional[str] = None
     ip_address: Optional[str] = None
     port: int = 502
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
     metadata_info: Optional[Dict[str, Any]] = None
     is_active: bool = True
+    consecutive_failures: int = 0
 
 
 class PostCreate(PostBase):
@@ -93,29 +112,39 @@ class PostCreate(PostBase):
 
 class PostUpdate(BaseModel):
     name: Optional[str] = None
+    supply_source: Optional[str] = None
+    campus_id: Optional[int] = None
+    unit_id: Optional[int] = None
     location_id: Optional[int] = None
     transformer_specs: Optional[str] = None
     ip_address: Optional[str] = None
     port: Optional[int] = None
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
     metadata_info: Optional[Dict[str, Any]] = None
     is_active: Optional[bool] = None
+    consecutive_failures: Optional[int] = None
 
 
 class PostResponse(PostBase):
     id: int
     feeders: List[FeederResponse] = []
     location: Optional[LocationResponse] = None
+    campus: Optional[LocationResponse] = None
+    unit: Optional[LocationResponse] = None
     model_config = ConfigDict(from_attributes=True)
 
 
 # ----------------- Link Schemas -----------------
 class LinkBase(BaseModel):
-    name: str
+    name: Optional[str] = None  # در مدل دیتابیس nullable=True است
     from_post_id: int
     to_post_id: int
     cable_type: Optional[str] = None
     cross_section: Optional[float] = None
     allowed_current: Optional[float] = None
+    length: Optional[float] = None
+    metadata_info: Optional[Dict[str, Any]] = None
 
 
 class LinkCreate(LinkBase):
@@ -127,6 +156,8 @@ class LinkUpdate(BaseModel):
     cable_type: Optional[str] = None
     cross_section: Optional[float] = None
     allowed_current: Optional[float] = None
+    length: Optional[float] = None
+    metadata_info: Optional[Dict[str, Any]] = None
 
 
 class LinkResponse(LinkBase):
@@ -141,5 +172,5 @@ class CommandRequest(BaseModel):
     command: bool
 
 
-# بازسازی مدل‌های بازگشتی (فقط یک بار در انتهای فایل اجرا می‌شود)
+# بازسازی مدل‌های بازگشتی
 LocationResponse.model_rebuild()

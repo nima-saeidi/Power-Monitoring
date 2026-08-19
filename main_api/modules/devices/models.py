@@ -17,11 +17,8 @@ class TimeseriesData(Base):
     value = Column(Float, nullable=False)
     timestamp = Column(DateTime(timezone=True), default=func.now(), index=True, nullable=False)
 
-# =========================================
-# مدل مکان برای ساختار درختی
-# =========================================
-class Location(Base):
 
+class Location(Base):
     __tablename__ = "locations"
 
     id = Column(
@@ -44,6 +41,28 @@ class Location(Base):
     description = Column(
         Text,
         nullable=True
+    )
+
+    # ========================================================
+    # GPS Location & Address (اضافه شده بر اساس UI)
+    # ========================================================
+
+    latitude = Column(
+        Float,
+        nullable=True,
+        doc="عرض جغرافیایی"
+    )
+
+    longitude = Column(
+        Float,
+        nullable=True,
+        doc="طول جغرافیایی"
+    )
+
+    address = Column(
+        String(255),
+        nullable=True,
+        doc="آدرس متنی موقعیت"
     )
 
     parent_id = Column(
@@ -75,7 +94,7 @@ class Location(Base):
     children = relationship(
         "Location",
         back_populates="parent",
-        lazy="selectin",  # <--- این بخش اضافه شود
+        lazy="selectin",
         cascade="all, delete-orphan"
     )
 
@@ -83,7 +102,7 @@ class Location(Base):
         "Location",
         back_populates="children",
         remote_side="[Location.id]",
-        lazy="selectin"  # <--- این بخش اضافه شود
+        lazy="selectin"
     )
 
     # ========================================================
@@ -107,7 +126,6 @@ class Location(Base):
         foreign_keys="[Post.unit_id]",
         back_populates="unit"
     )
-
 
 # =========================================
 # مدل پست
@@ -138,6 +156,7 @@ class Post(Base):
     last_seen = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+    consecutive_failures = Column(Integer, default=0)
 
     # روابط
     location = relationship("Location", foreign_keys=[location_id], back_populates="posts")
@@ -157,26 +176,31 @@ class Post(Base):
 # =========================================
 class Feeder(Base):
     __tablename__ = "feeders"
+
     id = Column(Integer, primary_key=True, index=True)
     post_id = Column(Integer, ForeignKey("posts.id", ondelete="CASCADE"), nullable=False)
     name = Column(String(100), nullable=False)
 
-    # --- فیلد اضافه شده بر اساس مرحله ۲ (تعریف فیدر) ---
+    # --- اطلاعات پایه فیدر ---
     feeder_type = Column(String(50), nullable=True)  # نوع فیدر: تولید کننده / مصرف کننده
-
     max_current = Column(Float, nullable=True)  # حداکثر جریان (A)
-    cable_type = Column(String(50), nullable=True)
-    modbus_address = Column(Integer, nullable=True)
 
-    # اطلاعات دینامیک (IP و رجیستر پارامترها مانند توان اکتیو، ولتاژ و...) در این فیلد JSON ذخیره می‌شوند
+    # --- تنظیمات ارتباطی مدباس ---
+    ip_address = Column(String(50), nullable=True)  # آدرس IP فیدر (در صورتی که یک IP ثابت برای کل فیدر وجود دارد)
+    modbus_address = Column(Integer, nullable=True)  # آدرس مدباس (Slave ID / Unit ID)
+
+    # --- اطلاعات دینامیک (IP و رجیستر پارامترها) ---
+    # طبق رابط کاربری، پارامترهایی مثل توان اکتیو، ولتاژ، جریان و... به همراه رجیستر و IP اختصاصی در این فیلد جیسون ذخیره می‌شوند.
     metadata_info = Column("metadata", JSONB, nullable=True)
 
+    # --- وضعیت و مانیتورینگ ---
     is_active = Column(Boolean, default=True)
-    consecutive_failures = Column(Integer, default=0)
+    consecutive_failures = Column(Integer, default=0)  # مقدار پیش‌فرض صحیح (صفر)
     last_success = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
+    # --- روابط (Relations) ---
     post = relationship("Post", back_populates="feeders")
     command_logs = relationship("CommandLog", back_populates="feeder")
     device_tests = relationship("DeviceTestLog", back_populates="feeder")
@@ -184,7 +208,6 @@ class Feeder(Base):
     __table_args__ = (
         Index('idx_feeder_post', 'post_id'),
     )
-
 
 # =========================================
 # مدل لینک ارتباطی
