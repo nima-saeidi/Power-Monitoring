@@ -11,6 +11,7 @@ from main_api.core.database import engine, Base
 from main_api.modules.auth.auth_router import auth_router
 from main_api.modules.auth.user_router import user_router
 from main_api.modules.telemetry.router import router as telemetry_router
+from main_api.modules.reports.router import router as report_router
 
 # ایمپورت روترهای تفکیک‌شده ماژول Devices
 from main_api.modules.devices.router import (
@@ -76,6 +77,7 @@ app.include_router(locations_router)
 app.include_router(posts_router)
 app.include_router(feeders_router)
 app.include_router(links_router)
+app.include_router(report_router)
 
 # ثبت روترهای سایر ماژول‌ها
 app.include_router(notifications_router)

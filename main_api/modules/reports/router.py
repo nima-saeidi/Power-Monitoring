@@ -1,21 +1,26 @@
 # app/reports/router.py
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
-from typing import List
+from typing import List, Optional
 from datetime import datetime
 
-from typing import Optional
-from app.reports.schemas import AggregatedReportResponse, AlertReportResponse, PostStatusResponse
-from app.database import get_db
-from app.auth.dependencies import get_current_user # همان متدی که در تصویر در پوشه auth دارید
+# ایمپورت‌های کلی پروژه
+from main_api.core.database import get_db
+from main_api.modules.auth.dependencies import get_current_user
 
-from app.reports.schemas import TelemetryReportResponse
-from app.reports.service import ReportService
+# ایمپورت از مدل‌های محلی این ماژول
+from .schemas import (
+    TelemetryReportResponse,
+    AggregatedReportResponse,
+    AlertReportResponse,
+    PostStatusResponse
+)
+from .service import ReportService
 
 router = APIRouter(
     prefix="/reports",
     tags=["Reports"],
-    dependencies=[Depends(get_current_user)] # تمام روت‌های این فایل نیاز به توکن دارند
+    dependencies=[Depends(get_current_user)]
 )
 
 @router.get("/feeder/{feeder_id}", response_model=List[TelemetryReportResponse])
@@ -34,7 +39,6 @@ def get_feeder_report(
     except Exception as e:
         raise HTTPException(status_code=500, detail="خطای سرور در پردازش گزارش")
 
-
 @router.get("/analytics/feeder/{feeder_id}", response_model=AggregatedReportResponse)
 def get_feeder_analytics(
         feeder_id: int,
@@ -49,8 +53,6 @@ def get_feeder_analytics(
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-
-# ۲. دریافت گزارش هشدارها (عملیاتی)
 @router.get("/alerts", response_model=List[AlertReportResponse])
 def get_alerts_report(
         start_date: datetime = Query(...),
@@ -64,21 +66,17 @@ def get_alerts_report(
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-
-# ۳. دریافت وضعیت کلی پست‌ها برای داشبورد
-@router.get("/dashboard/posts-status")
+@router.get("/dashboard/posts-status", response_model=List[PostStatusResponse])
 def get_dashboard_status(db: Session = Depends(get_db)):
-    # نکته: معمولاً برای داشبورد از مدل دقیق‌تری استفاده می‌شود. اینجا ساختار اولیه ارائه شده است.
     service = ReportService(db)
     posts = service.fetch_posts_dashboard_status()
 
-    # ساختن پاسخ موقت - بهتر است این بخش با وضعیت واقعی (خوانده شده از کش/ردیس) ترکیب شود
     results = []
     for p in posts:
         results.append({
             "post_id": p.id,
             "post_name": p.name,
-            "status": "normal",  # این بخش در آینده بر اساس آلارم‌های فعال تغییر می‌کند
+            "status": "normal",  # این وضعیت می‌تواند بر اساس Redis یا Alert ها داینامیک شود
             "last_update": datetime.now()
         })
     return results
