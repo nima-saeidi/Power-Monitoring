@@ -1,7 +1,7 @@
 from sqlalchemy.ext.asyncio import AsyncSession
-from modules.telemetry.repository import TelemetryRepository
+from main_api.modules.telemetry.repository import TelemetryRepository
 from modules.telemetry.schemas import TelemetryCreate, TelemetryResponse
-from modules.telemetry.ws_manager import telemetry_ws_manager
+from main_api.modules.telemetry.ws_manager import telemetry_ws_manager
 
 
 class TelemetryService:

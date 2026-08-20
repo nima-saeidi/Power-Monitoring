@@ -1,48 +1,33 @@
+from contextlib import asynccontextmanager
 from fastapi import FastAPI
-import asyncio
-
-# --- ۱. ایمپورت‌های مربوط به دیتابیس (مسیر را در صورت نیاز اصلاح کنید) ---
-from core.database import engine, Base
-# -----------------------------------------------------------------------
 
 # ایمپورت کلاس جدید زمان‌بند
-from scheduler import TelemetryScheduler
+from modules.telemetry.scheduler import TelemetryScheduler
 
 # ایمپورت روتر
-from modules.telemetry.router import router as telemetry_router
-
-app = FastAPI(title="Telemetry Service", description="Modbus Reading and Redis Publishing")
 
 # ساخت یک نمونه از کلاس زمان‌بند
 scheduler = TelemetryScheduler()
 
 
-# --- ۲. تابع ساخت جداول به صورت Async برای جلوگیری از خطای MissingGreenlet ---
-async def init_models():
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+# استفاده از lifespan به جای on_event (روش جدید و استاندارد FastAPI)
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    print("🚀 Starting Telemetry Service (Pure Worker Mode)...")
 
-
-# ---------------------------------------------------------------------------
-
-@app.on_event("startup")
-async def startup_event():
-    print("Starting Telemetry Service...")
-
-    # --- ۳. فراخوانی ساخت جداول قبل از اجرای زمان‌بند ---
-    await init_models()
-    # --------------------------------------------------
-
-    # اجرای زمان‌بند به صورت غیرهمگام
+    # اجرای زمان‌بند به صورت غیرهمگام (ایجاد تسک‌های خواندن از مودباس)
     await scheduler.start()
 
+    yield  # سرور روشن می‌ماند و درخواست‌ها را پاسخ می‌دهد
 
-@app.on_event("shutdown")
-async def shutdown_event():
-    print("Shutting down Telemetry Service...")
+    print("🛑 Shutting down Telemetry Service...")
     # توقف ایمن تمامی تسک‌های متصل به Modbus و Redis
     await scheduler.stop()
 
 
-# اضافه کردن روتر
-app.include_router(telemetry_router, prefix="/api/telemetry", tags=["Telemetry"])
+app = FastAPI(
+    title="Telemetry Worker Service",
+    description="Pure Modbus Worker & Redis Publisher (No Database Dependencies)",
+    lifespan=lifespan
+)
+

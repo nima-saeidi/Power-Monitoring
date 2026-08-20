@@ -1,7 +1,7 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-from modules.telemetry.models import TimeseriesData
-from modules.telemetry.schemas import TelemetryCreate
+from main_api.modules.telemetry.models import TimeseriesData
+from main_api.modules.telemetry.schemas import TelemetryCreate
 
 class TelemetryRepository:
     def __init__(self, session: AsyncSession):
@@ -10,12 +10,9 @@ class TelemetryRepository:
     async def create_record(self, data: TelemetryCreate) -> TimeseriesData:
         new_record = TimeseriesData(
             post_id=data.post_id,
-            feeder_id=data.feeder_id,  # 👈 این خط فراموش شده بود! باید اضافه شود
+            feeder_id=data.feeder_id,  # ✅ طبق نیازمندی اضافه شد
             key=data.key,
             value_int=data.value_int,
-            value_float=data.value_float,
-            value_str=data.value_str,
-            value_bool=data.value_bool
         )
         self.session.add(new_record)
         await self.session.flush()
@@ -23,6 +20,11 @@ class TelemetryRepository:
         return new_record
 
     async def get_history(self, post_id: int, limit: int = 100):
-        stmt = select(TimeseriesData).where(TimeseriesData.post_id == post_id).order_by(TimeseriesData.timestamp.desc()).limit(limit)
+        stmt = (
+            select(TimeseriesData)
+            .where(TimeseriesData.post_id == post_id)
+            .order_by(TimeseriesData.timestamp.desc())
+            .limit(limit)
+        )
         result = await self.session.execute(stmt)
         return result.scalars().all()

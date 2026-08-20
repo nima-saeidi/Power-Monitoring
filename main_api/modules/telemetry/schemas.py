@@ -18,7 +18,7 @@ class TelemetryCreate(TelemetryBase):
 
 # ۳. مدل Response: برای ارسال داده به کلاینت (id و timestamp اضافه می‌شوند)
 class TelemetryResponse(TelemetryBase):
-    id: UUID  # 👈 نوع id به UUID اصلاح شد
+    id: int    # 👈 نوع id به UUID اصلاح شد
     timestamp: datetime
 
     model_config = ConfigDict(from_attributes=True)

@@ -1,5 +1,5 @@
 # استفاده از تصویر پایه پایتون ۳.۱۱
-FROM python:3.11-slim
+FROM python:3.12-slim
 
 # جلوگیری از نوشتن فایل‌های .pyc و بافر شدن خروجی‌ها در لاگ داکر
 ENV PYTHONDONTWRITEBYTECODE=1
