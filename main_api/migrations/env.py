@@ -18,6 +18,7 @@ from main_api.core.database import Base
 # ایمپورت دقیق تمام مدل‌ها بر اساس ساختار پوشه‌های شما
 from main_api.modules.auth.models import User
 from main_api.modules.devices.models import Post,Feeder,Location,Link
+from  main_api.modules.settings.models import SystemSetting
 from  main_api.modules.telemetry.models import TimeseriesData
 config = context.config
 

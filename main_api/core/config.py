@@ -5,7 +5,7 @@ class Settings(BaseSettings):
     PROJECT_NAME: str = "Power Monitoring System"
 
     DATABASE_URL: str = (
-        "postgresql+asyncpg://postgres:admin@localhost:5432/power_monitoring"
+        "postgresql+asyncpg://postgres:n1m010@localhost:5432/power_monitoring"
     )
 
     SECRET_KEY: str = "dfpgoudrgjfdjgr9ugagkpsdlgkspt94"
