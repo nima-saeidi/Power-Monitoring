@@ -36,9 +36,9 @@ from main_api.modules.telemetry.redis_listener import listen_to_redis_and_save
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # هنگام بالا آمدن سرور: ساخت جداول در دیتابیس (در صورت عدم وجود)
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+    # # هنگام بالا آمدن سرور: ساخت جداول در دیتابیس (در صورت عدم وجود)
+    # async with engine.begin() as conn:
+    #     await conn.run_sync(Base.metadata.create_all)
 
     # ================= اضافه شده برای ردیس =================
     # ایجاد یک تسک پس‌زمینه برای گوش دادن دائمی به ردیس
