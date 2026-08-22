@@ -72,36 +72,36 @@ app.add_middleware(
 # =======================================================
 
 # ۱. مدیریت خطاهای اعتبارسنجی Pydantic (کد 422)
-# @app.exception_handler(RequestValidationError)
-# async def validation_exception_handler(request: Request, exc: RequestValidationError):
-#     persian_errors = []
-#
-#     for error in exc.errors():
-#         field = " -> ".join(str(loc) for loc in error["loc"] if loc != "body")
-#         msg = error["msg"]
-#
-#         # ترجمه خطاهای رایج Pydantic
-#         if "Field required" in msg:
-#             persian_msg = "ارسال این فیلد الزامی است."
-#         elif "value is not a valid integer" in msg:
-#             persian_msg = "مقدار باید عدد صحیح باشد."
-#         elif "value is not a valid float" in msg:
-#             persian_msg = "مقدار باید عدد اعشاری باشد."
-#         elif "String should have at least" in msg:
-#             persian_msg = "طول متن کمتر از حد مجاز است."
-#         else:
-#             persian_msg = msg
-#
-#         persian_errors.append({"field": field, "message": persian_msg})
-#
-#     return JSONResponse(
-#         status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-#         content={
-#             "success": False,
-#             "message": "اطلاعات ارسالی نامعتبر است.",
-#             "details": persian_errors
-#         },
-#     )
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    persian_errors = []
+
+    for error in exc.errors():
+        field = " -> ".join(str(loc) for loc in error["loc"] if loc != "body")
+        msg = error["msg"]
+
+        # ترجمه خطاهای رایج Pydantic
+        if "Field required" in msg:
+            persian_msg = "ارسال این فیلد الزامی است."
+        elif "value is not a valid integer" in msg:
+            persian_msg = "مقدار باید عدد صحیح باشد."
+        elif "value is not a valid float" in msg:
+            persian_msg = "مقدار باید عدد اعشاری باشد."
+        elif "String should have at least" in msg:
+            persian_msg = "طول متن کمتر از حد مجاز است."
+        else:
+            persian_msg = msg
+
+        persian_errors.append({"field": field, "message": persian_msg})
+
+    return JSONResponse(
+        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        content={
+            "success": False,
+            "message": "اطلاعات ارسالی نامعتبر است.",
+            "details": persian_errors
+        },
+    )
 
 
 # ۲. مدیریت خطاهای دستی HTTP (کد 400، 404 و ...)
@@ -116,16 +116,16 @@ async def http_exception_handler(request: Request, exc: StarletteHTTPException):
     )
 
 
-# # ۳. مدیریت خطاهای دیتابیس (تکراری بودن داده یا نبودن کلید خارجی)
-# @app.exception_handler(IntegrityError)
-# async def sqlalchemy_integrity_error_handler(request: Request, exc: IntegrityError):
-#     return JSONResponse(
-#         status_code=status.HTTP_400_BAD_REQUEST,
-#         content={
-#             "success": False,
-#             "message": "خطا در پایگاه داده: ممکن است داده ارسالی تکراری باشد یا اطلاعات وابسته (مانند شناسه) نامعتبر باشد."
-#         }
-#     )
+# ۳. مدیریت خطاهای دیتابیس (تکراری بودن داده یا نبودن کلید خارجی)
+@app.exception_handler(IntegrityError)
+async def sqlalchemy_integrity_error_handler(request: Request, exc: IntegrityError):
+    return JSONResponse(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        content={
+            "success": False,
+            "message": "خطا در پایگاه داده: ممکن است داده ارسالی تکراری باشد یا اطلاعات وابسته (مانند شناسه) نامعتبر باشد."
+        }
+    )
 
 
 # =======================================================
