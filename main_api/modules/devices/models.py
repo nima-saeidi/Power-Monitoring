@@ -7,7 +7,6 @@ from main_api.core.database import Base
 from sqlalchemy.sql import func
 
 
-
 class TimeseriesData(Base):
     __tablename__ = "timeseries_data"
 
@@ -21,76 +20,24 @@ class TimeseriesData(Base):
 class Location(Base):
     __tablename__ = "locations"
 
-    id = Column(
-        Integer,
-        primary_key=True,
-        index=True
-    )
-
-    name = Column(
-        String(100),
-        index=True,
-        nullable=False
-    )
-
-    location_type = Column(
-        String(50),
-        nullable=True
-    )
-
-    description = Column(
-        Text,
-        nullable=True
-    )
-
-    # ========================================================
-    # GPS Location & Address (اضافه شده بر اساس UI)
-    # ========================================================
-
-    latitude = Column(
-        Float,
-        nullable=True,
-        doc="عرض جغرافیایی"
-    )
-
-    longitude = Column(
-        Float,
-        nullable=True,
-        doc="طول جغرافیایی"
-    )
-
-    address = Column(
-        String(255),
-        nullable=True,
-        doc="آدرس متنی موقعیت"
-    )
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(100), index=True, nullable=False)
+    location_type = Column(String(50), nullable=True)
+    description = Column(Text, nullable=True)
+    address = Column(String(255), nullable=True, doc="آدرس متنی موقعیت")
 
     parent_id = Column(
         Integer,
-        ForeignKey(
-            "locations.id",
-            ondelete="CASCADE"
-        ),
+        ForeignKey("locations.id", ondelete="CASCADE"),
         nullable=True
     )
 
-    created_at = Column(
-        DateTime,
-        default=datetime.utcnow,
-        nullable=False
-    )
-
-    updated_at = Column(
-        DateTime,
-        default=datetime.utcnow,
-        onupdate=datetime.utcnow,
-        nullable=False
-    )
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
     # ========================================================
     # SELF RELATIONSHIP
     # ========================================================
-
     children = relationship(
         "Location",
         back_populates="parent",
@@ -108,50 +55,37 @@ class Location(Base):
     # ========================================================
     # POSTS
     # ========================================================
-
+    # روابط قبلی (campus_posts و unit_posts) که ارجاع به ستون‌های حذف شده داشتند پاک شدند
     posts = relationship(
         "Post",
-        foreign_keys="[Post.location_id]",
         back_populates="location"
     )
 
-    campus_posts = relationship(
-        "Post",
-        foreign_keys="[Post.campus_id]",
-        back_populates="campus"
-    )
-
-    unit_posts = relationship(
-        "Post",
-        foreign_keys="[Post.unit_id]",
-        back_populates="unit"
-    )
 
 # =========================================
 # مدل پست
 # =========================================
 class Post(Base):
     __tablename__ = "posts"
+
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String(100), index=True, nullable=False)
 
-    # --- فیلدهای اضافه شده بر اساس مرحله ۱ (اطلاعات پایه) ---
+    # --- اطلاعات پایه ---
     supply_source = Column(String(150), nullable=True)  # محل تغذیه
-    campus_id = Column(Integer, ForeignKey("locations.id", ondelete="SET NULL"), nullable=True)  # پردیس
-    unit_id = Column(Integer, ForeignKey("locations.id", ondelete="SET NULL"), nullable=True)  # واحد
 
-    # موقعیت کلی سلسله مراتبی (می‌تواند همان واحد یا سطح پایین‌تر باشد)
+    # موقعیت کلی (فقط location_id باقی مانده است)
     location_id = Column(Integer, ForeignKey("locations.id", ondelete="SET NULL"), nullable=True)
 
-    transformer_specs = Column(String(200), nullable=True)  # مشخصات جریان
-    ip_address = Column(String(45), nullable=True, unique=True)
+    transformer_specs = Column(String(200), nullable=True)  # مشخصات ترانس
+    ip_address = Column(String(45), nullable=True)
     port = Column(Integer, default=502)
 
-    # --- فیلدهای اضافه شده بر اساس مرحله ۳ (موقعیت مکانی روی نقشه) ---
+    # --- موقعیت مکانی ---
     latitude = Column(Float, nullable=True)  # عرض جغرافیایی
     longitude = Column(Float, nullable=True)  # طول جغرافیایی
 
-    metadata_info = Column("metadata", JSONB, nullable=True)  # برای فیلدهای سفارشی ۱ و ۲
+    metadata_info = Column("metadata", JSONB, nullable=True)
     is_active = Column(Boolean, default=True)
     last_seen = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
@@ -159,10 +93,7 @@ class Post(Base):
     consecutive_failures = Column(Integer, default=0)
 
     # روابط
-    location = relationship("Location", foreign_keys=[location_id], back_populates="posts")
-    campus = relationship("Location", foreign_keys=[campus_id], back_populates="campus_posts")
-    unit = relationship("Location", foreign_keys=[unit_id], back_populates="unit_posts")
-
+    location = relationship("Location", back_populates="posts")
     feeders = relationship("Feeder", back_populates="post", cascade="all, delete-orphan")
     command_logs = relationship("CommandLog", back_populates="post")
     device_tests = relationship("DeviceTestLog", back_populates="post")
@@ -185,22 +116,28 @@ class Feeder(Base):
     feeder_type = Column(String(50), nullable=True)  # نوع فیدر: تولید کننده / مصرف کننده
     max_current = Column(Float, nullable=True)  # حداکثر جریان (A)
 
-    # --- تنظیمات ارتباطی مدباس ---
-    ip_address = Column(String(50), nullable=True)  # آدرس IP فیدر (در صورتی که یک IP ثابت برای کل فیدر وجود دارد)
+    # --- تنظیمات ارتباطی شبکه و مدباس ---
+    ip_address = Column(String(50), nullable=True)  # آدرس IP فیدر
+    port = Column(Integer, nullable=True)  # پورت ارتباطی
     modbus_address = Column(Integer, nullable=True)  # آدرس مدباس (Slave ID / Unit ID)
 
-    # --- اطلاعات دینامیک (IP و رجیستر پارامترها) ---
-    # طبق رابط کاربری، پارامترهایی مثل توان اکتیو، ولتاژ، جریان و... به همراه رجیستر و IP اختصاصی در این فیلد جیسون ذخیره می‌شوند.
+    # --- رجیسترهای پارامترهای اصلی مدباس ---
+    active_power_register = Column(Integer, nullable=True)
+    reactive_power_register = Column(Integer, nullable=True)
+    voltage_register = Column(Integer, nullable=True)
+    current_register = Column(Integer, nullable=True)
+    power_factor_register = Column(Integer, nullable=True)
+
     metadata_info = Column("metadata", JSONB, nullable=True)
 
     # --- وضعیت و مانیتورینگ ---
     is_active = Column(Boolean, default=True)
-    consecutive_failures = Column(Integer, default=0)  # مقدار پیش‌فرض صحیح (صفر)
+    consecutive_failures = Column(Integer, default=0)
     last_success = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
-    # --- روابط (Relations) ---
+    # --- روابط ---
     post = relationship("Post", back_populates="feeders")
     command_logs = relationship("CommandLog", back_populates="feeder")
     device_tests = relationship("DeviceTestLog", back_populates="feeder")
@@ -209,26 +146,24 @@ class Feeder(Base):
         Index('idx_feeder_post', 'post_id'),
     )
 
+
 # =========================================
 # مدل لینک ارتباطی
 # =========================================
 class Link(Base):
     __tablename__ = "links"
+
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String(100), index=True, nullable=True)
 
-    # --- مرحله ۱: انتخاب پست‌ها ---
     from_post_id = Column(Integer, ForeignKey("posts.id", ondelete="CASCADE"), nullable=False)
     to_post_id = Column(Integer, ForeignKey("posts.id", ondelete="CASCADE"), nullable=False)
 
-    # --- مرحله ۲: اطلاعات ثابت لینک ---
     cable_type = Column(String(50), nullable=True)  # نوع سیم
     cross_section = Column(Float, nullable=True)  # سطح مقطع
     allowed_current = Column(Float, nullable=True)  # جریان مجاز (A)
-    length = Column(Float, nullable=True)  # طول لینک (اختیاری)
+    length = Column(Float, nullable=True)  # طول لینک
 
-    # --- مرحله ۳: اطلاعات دینامیک لینک ---
-    # برای ذخیره تنظیمات و رجیسترهای مربوط به جریان، توان اکتیو و توان راکتیو
     metadata_info = Column("metadata", JSONB, nullable=True)
 
     is_active = Column(Boolean, default=True)

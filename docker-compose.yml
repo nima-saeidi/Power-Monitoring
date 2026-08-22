@@ -45,6 +45,7 @@ services:
     networks:
       - power_net
 
+  # 3. API Service
   api:
     build:
       context: .
@@ -63,8 +64,11 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+    # 🌟 این خط برای اجرای خودکار مایگریشن اضافه شده است 🌟
+    command: sh -c "alembic upgrade head && uvicorn main:app --host 0.0.0.0 --port 8000"
     networks:
       - power_net
+
   # 4. Telemetry Service (Modbus Reader)
   telemetry:
     build:

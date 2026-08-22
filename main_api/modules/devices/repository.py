@@ -52,8 +52,6 @@ class DeviceRepository:
                 "location_type": location.location_type,
                 "parent_id": location.parent_id,
                 "description": location.description,
-                "latitude": location.latitude,  # فیلد جدید
-                "longitude": location.longitude,  # فیلد جدید
                 "address": location.address,  # فیلد جدید
                 "sub_locations": []
             }
@@ -88,8 +86,6 @@ class DeviceRepository:
                 "location_type": location.location_type,
                 "parent_id": location.parent_id,
                 "description": location.description,
-                "latitude": location.latitude,  # فیلد جدید
-                "longitude": location.longitude,  # فیلد جدید
                 "address": location.address,  # فیلد جدید
                 "sub_locations": []
             }
@@ -139,8 +135,6 @@ class DeviceRepository:
                 "location_type": loc.location_type,
                 "parent_id": loc.parent_id,
                 "description": loc.description,
-                "latitude": loc.latitude,  # فیلد جدید
-                "longitude": loc.longitude,  # فیلد جدید
                 "address": loc.address,  # فیلد جدید
                 "sub_locations": sub_locations
             }
@@ -201,10 +195,8 @@ class DeviceRepository:
     async def get_all_posts(self, skip: int = 0, limit: int = 100) -> List[Post]:
         query = select(Post).options(
             selectinload(Post.feeders),
-            selectinload(Post.location),
-            selectinload(Post.campus),  # بارگذاری پردیس
-            selectinload(Post.unit)  # بارگذاری واحد
-        ).offset(skip).limit(limit)
+            selectinload(Post.location)
+       ).offset(skip).limit(limit)
 
         result = await self.db.execute(query)
         return list(result.scalars().all())
@@ -212,9 +204,7 @@ class DeviceRepository:
     async def get_post_by_id(self, post_id: int) -> Optional[Post]:
         query = select(Post).options(
             selectinload(Post.feeders),
-            selectinload(Post.location),
-            selectinload(Post.campus),  # بارگذاری پردیس
-            selectinload(Post.unit)  # بارگذاری واحد
+            selectinload(Post.location)
         ).where(Post.id == post_id)
 
         result = await self.db.execute(query)
@@ -277,13 +267,12 @@ class DeviceRepository:
         await self.db.refresh(link)
         return link
 
-    async def get_all_links(self, skip: int = 0, limit: int = 100) -> List[Link]:
-        query = select(Link).options(
-            selectinload(Link.from_post),
-            selectinload(Link.to_post)
-        ).offset(skip).limit(limit)
+    async def get_all_links(self, skip: int = 0, limit: int = 100):
+        query = select(Link).offset(skip).limit(limit)
+        # در اینجا self.db_session اشتباه بود و به self.db تغییر یافت
         result = await self.db.execute(query)
-        return list(result.scalars().all())
+        return result.scalars().all()
+
 
     async def get_link_by_id(self, link_id: int) -> Optional[Link]:
         query = select(Link).options(

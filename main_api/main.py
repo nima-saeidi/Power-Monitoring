@@ -1,8 +1,12 @@
 import asyncio
 import uvicorn
 from contextlib import asynccontextmanager
-from fastapi import FastAPI
+from fastapi import FastAPI, Request, status
+from fastapi.responses import JSONResponse
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.exceptions import HTTPException as StarletteHTTPException
+from sqlalchemy.exc import IntegrityError
 
 # ایمپورت‌های مربوط به دیتابیس
 from main_api.core.database import engine, Base
@@ -26,8 +30,6 @@ from main_api.modules.settings.router import router as settings_router
 from main_api.modules.notifications.router import router as notifications_router
 
 # ================= اضافه شده برای ردیس =================
-# فرض بر این است که فایل redis_listener در مسیر زیر قرار دارد.
-# اگر مسیر متفاوتی دارید، این ایمپورت را اصلاح کنید.
 from main_api.modules.telemetry.redis_listener import listen_to_redis_and_save
 
 
@@ -36,10 +38,6 @@ from main_api.modules.telemetry.redis_listener import listen_to_redis_and_save
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # # هنگام بالا آمدن سرور: ساخت جداول در دیتابیس (در صورت عدم وجود)
-    # async with engine.begin() as conn:
-    #     await conn.run_sync(Base.metadata.create_all)
-
     # ================= اضافه شده برای ردیس =================
     # ایجاد یک تسک پس‌زمینه برای گوش دادن دائمی به ردیس
     redis_task = asyncio.create_task(listen_to_redis_and_save())
@@ -67,6 +65,71 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+# =======================================================
+# مدیریت سراسری خطاهای API (Exception Handlers)
+# =======================================================
+
+# ۱. مدیریت خطاهای اعتبارسنجی Pydantic (کد 422)
+# @app.exception_handler(RequestValidationError)
+# async def validation_exception_handler(request: Request, exc: RequestValidationError):
+#     persian_errors = []
+#
+#     for error in exc.errors():
+#         field = " -> ".join(str(loc) for loc in error["loc"] if loc != "body")
+#         msg = error["msg"]
+#
+#         # ترجمه خطاهای رایج Pydantic
+#         if "Field required" in msg:
+#             persian_msg = "ارسال این فیلد الزامی است."
+#         elif "value is not a valid integer" in msg:
+#             persian_msg = "مقدار باید عدد صحیح باشد."
+#         elif "value is not a valid float" in msg:
+#             persian_msg = "مقدار باید عدد اعشاری باشد."
+#         elif "String should have at least" in msg:
+#             persian_msg = "طول متن کمتر از حد مجاز است."
+#         else:
+#             persian_msg = msg
+#
+#         persian_errors.append({"field": field, "message": persian_msg})
+#
+#     return JSONResponse(
+#         status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+#         content={
+#             "success": False,
+#             "message": "اطلاعات ارسالی نامعتبر است.",
+#             "details": persian_errors
+#         },
+#     )
+
+
+# ۲. مدیریت خطاهای دستی HTTP (کد 400، 404 و ...)
+@app.exception_handler(StarletteHTTPException)
+async def http_exception_handler(request: Request, exc: StarletteHTTPException):
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={
+            "success": False,
+            "message": exc.detail
+        },
+    )
+
+
+# # ۳. مدیریت خطاهای دیتابیس (تکراری بودن داده یا نبودن کلید خارجی)
+# @app.exception_handler(IntegrityError)
+# async def sqlalchemy_integrity_error_handler(request: Request, exc: IntegrityError):
+#     return JSONResponse(
+#         status_code=status.HTTP_400_BAD_REQUEST,
+#         content={
+#             "success": False,
+#             "message": "خطا در پایگاه داده: ممکن است داده ارسالی تکراری باشد یا اطلاعات وابسته (مانند شناسه) نامعتبر باشد."
+#         }
+#     )
+
+
+# =======================================================
+
 
 # ثبت روترهای Auth
 app.include_router(auth_router)

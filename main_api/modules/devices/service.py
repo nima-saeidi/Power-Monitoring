@@ -13,7 +13,7 @@ from main_api.modules.devices.schemas import (
 )
 
 
-# Assuming ModbusReader is defined elsewhere
+# اگر قرار است از ModbusReader به صورت مستقیم در این لایه استفاده شود، از کامنت خارج کنید
 # from main_api.core.modbus_client import ModbusReader
 
 
@@ -126,7 +126,6 @@ class DeviceService:
     # =========================================================
 
     async def create_post(self, data: PostCreate) -> PostResponse:
-        # Validation for location_id, campus_id, unit_id can be added here
         return await self.repo.create_post(data)
 
     async def get_posts(self, skip: int = 0, limit: int = 100) -> List[PostResponse]:
@@ -229,7 +228,7 @@ class DeviceService:
 
     async def execute_device_command(self, feeder_id: int, request: CommandRequest) -> dict:
         """
-        Sends a connect/disconnect command to a feeder via Modbus.
+        Sends a connect/disconnect command to a feeder.
         """
         feeder = await self.repo.get_feeder_by_id(feeder_id)
         if not feeder:
@@ -238,21 +237,27 @@ class DeviceService:
                 detail="فیدر مورد نظر یافت نشد."
             )
 
-        # CORRECTED: Access feeder.post instead of feeder.substation
         if not feeder.post or not feeder.post.ip_address:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="پست مربوط به این فیدر فاقد آدرس IP است و قابلیت کنترل از راه دور ندارد."
             )
 
-        # CORRECTED: Use feeder.post.port
         port = feeder.post.port if feeder.post.port else 502
-        # modbus_client = ModbusReader(host=feeder.post.ip_address, port=port)
 
-        try:
-            success = True
-        finally:
-            await modbus_client.close()
+        # نکته: بخش ModbusReader کامنت شده تا از خطای متغیر تعریف نشده در finally جلوگیری شود.
+        # اگر فراخوانی مودباس از طریق httpx.AsyncClient به میکروسرویس Telemetry در Router انجام می‌شود،
+        # این متد فقط اعتبارسنجی را انجام داده و می‌توانید درخواست را در Router ارسال کنید
+        # و یا درخواست HTTP را در همین قسمت پیاده‌سازی کنید.
+
+        # modbus_client = ModbusReader(host=feeder.post.ip_address, port=port)
+        # try:
+        #     # انجام عملیات خواندن/نوشتن
+        #     success = True
+        # finally:
+        #     await modbus_client.close()
+
+        success = True  # فرض بر موفقیت ارتباط تا زمان پیاده‌سازی نهایی منطق
 
         if not success:
             raise HTTPException(
@@ -265,3 +270,41 @@ class DeviceService:
             "success": True,
             "message": f"فرمان {action_text} با موفقیت به فیدر '{feeder.name}' ارسال شد."
         }
+
+    # =========================================================
+    # LINK SERVICES
+    # =========================================================
+
+    async def create_link(self, data: LinkCreate) -> LinkResponse:
+        return await self.repo.create_link(data)
+
+    async def get_links(self, skip: int = 0, limit: int = 100) -> List[LinkResponse]:
+        return await self.repo.get_all_links(skip=skip, limit=limit)
+
+    async def get_link(self, link_id: int) -> LinkResponse:
+        link = await self.repo.get_link_by_id(link_id)
+        if not link:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="لینک مورد نظر یافت نشد."
+            )
+        return link
+
+    async def update_link(self, link_id: int, data: LinkUpdate) -> LinkResponse:
+        link = await self.repo.get_link_by_id(link_id)
+        if not link:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="لینک مورد نظر یافت نشد."
+            )
+        return await self.repo.update_link(link, data)
+
+    async def delete_link(self, link_id: int) -> dict:
+        link = await self.repo.get_link_by_id(link_id)
+        if not link:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="لینک مورد نظر یافت نشد."
+            )
+        await self.repo.delete_link(link)
+        return {"message": "لینک با موفقیت حذف شد."}

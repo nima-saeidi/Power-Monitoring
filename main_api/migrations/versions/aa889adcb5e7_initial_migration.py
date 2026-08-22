@@ -1,8 +1,8 @@
-"""change national_id to phone_number
+"""initial_migration
 
-Revision ID: 63d50450706e
+Revision ID: aa889adcb5e7
 Revises: 
-Create Date: 2026-08-20 23:49:07.039005
+Create Date: 2026-08-22 12:44:14.469653
 
 """
 from typing import Sequence, Union
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
-revision: str = '63d50450706e'
+revision: str = 'aa889adcb5e7'
 down_revision: Union[str, Sequence[str], None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
@@ -37,6 +37,36 @@ def upgrade() -> None:
     )
     op.create_index(op.f('ix_locations_id'), 'locations', ['id'], unique=False)
     op.create_index(op.f('ix_locations_name'), 'locations', ['name'], unique=False)
+    op.create_table('system_settings',
+    sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('critical_threshold', sa.Float(), nullable=False, comment='آستانه بحرانی (Critical Threshold)'),
+    sa.Column('warning_threshold', sa.Float(), nullable=False, comment='آستانه هشدار (Warning Threshold)'),
+    sa.Column('access_token_expire_minutes', sa.Integer(), nullable=False, comment='مدت اعتبار Access Token (دقیقه)'),
+    sa.Column('refresh_token_expire_days', sa.Integer(), nullable=False, comment='مدت اعتبار Refresh Token (روز)'),
+    sa.Column('max_login_attempts', sa.Integer(), nullable=False, comment='حداکثر تلاش ناموفق ورود'),
+    sa.Column('lockout_duration_minutes', sa.Integer(), nullable=False, comment='مدت قفل شدن حساب (دقیقه)'),
+    sa.Column('session_timeout_minutes', sa.Integer(), nullable=False, comment='Timeout نشست (دقیقه)'),
+    sa.Column('polling_interval', sa.Integer(), nullable=False, comment='فاصله Polling (ثانیه)'),
+    sa.Column('max_telemetry_failures', sa.Integer(), nullable=False, comment='حداکثر خطای مجاز تله\u200cمتری'),
+    sa.Column('modbus_timeout', sa.Integer(), nullable=False, comment='Timeout Modbus (ثانیه)'),
+    sa.Column('modbus_retry_count', sa.Integer(), nullable=False, comment='تعداد تلاش مجدد Modbus'),
+    sa.Column('connection_pool_size', sa.Integer(), nullable=False, comment='اندازه Pool اتصالات'),
+    sa.Column('data_retention_days', sa.Integer(), nullable=False, comment='مدت نگهداری داده\u200cهای تله\u200cمتری (روز)'),
+    sa.Column('log_retention_days', sa.Integer(), nullable=False, comment='مدت نگهداری لاگ\u200cها (روز)'),
+    sa.Column('audit_log_retention_days', sa.Integer(), nullable=False, comment='مدت نگهداری لاگ\u200cهای Audit (روز)'),
+    sa.Column('notification_batch_size', sa.Integer(), nullable=False, comment='تعداد نوتیفیکیشن در هر Batch'),
+    sa.Column('notification_retry_attempts', sa.Integer(), nullable=False, comment='تعداد تلاش مجدد نوتیفیکیشن'),
+    sa.Column('notification_cooldown_seconds', sa.Integer(), nullable=False, comment='فاصله زمانی ارسال مجدد نوتیفیکیشن مشابه (ثانیه)'),
+    sa.Column('report_generation_timeout', sa.Integer(), nullable=False, comment='Timeout تولید گزارش (ثانیه)'),
+    sa.Column('max_export_records', sa.Integer(), nullable=False, comment='حداکثر رکورد در Export'),
+    sa.Column('system_name', sa.String(length=100), nullable=False, comment='نام سیستم'),
+    sa.Column('system_timezone', sa.String(length=50), nullable=False, comment='منطقه زمانی'),
+    sa.Column('maintenance_mode', sa.Boolean(), nullable=False, comment='وضعیت تعمیر و نگهداری'),
+    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
+    sa.Column('updated_at', sa.DateTime(timezone=True), nullable=True),
+    sa.PrimaryKeyConstraint('id')
+    )
+    op.create_index(op.f('ix_system_settings_id'), 'system_settings', ['id'], unique=False)
     op.create_table('users',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('name', sa.String(length=100), nullable=False),
@@ -82,8 +112,6 @@ def upgrade() -> None:
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('name', sa.String(length=100), nullable=False),
     sa.Column('supply_source', sa.String(length=150), nullable=True),
-    sa.Column('campus_id', sa.Integer(), nullable=True),
-    sa.Column('unit_id', sa.Integer(), nullable=True),
     sa.Column('location_id', sa.Integer(), nullable=True),
     sa.Column('transformer_specs', sa.String(length=200), nullable=True),
     sa.Column('ip_address', sa.String(length=45), nullable=True),
@@ -96,9 +124,7 @@ def upgrade() -> None:
     sa.Column('created_at', sa.DateTime(), nullable=False),
     sa.Column('updated_at', sa.DateTime(), nullable=False),
     sa.Column('consecutive_failures', sa.Integer(), nullable=True),
-    sa.ForeignKeyConstraint(['campus_id'], ['locations.id'], ondelete='SET NULL'),
     sa.ForeignKeyConstraint(['location_id'], ['locations.id'], ondelete='SET NULL'),
-    sa.ForeignKeyConstraint(['unit_id'], ['locations.id'], ondelete='SET NULL'),
     sa.PrimaryKeyConstraint('id'),
     sa.UniqueConstraint('ip_address')
     )
@@ -248,6 +274,8 @@ def downgrade() -> None:
     op.drop_index(op.f('ix_users_id'), table_name='users')
     op.drop_index(op.f('ix_users_email'), table_name='users')
     op.drop_table('users')
+    op.drop_index(op.f('ix_system_settings_id'), table_name='system_settings')
+    op.drop_table('system_settings')
     op.drop_index(op.f('ix_locations_name'), table_name='locations')
     op.drop_index(op.f('ix_locations_id'), table_name='locations')
     op.drop_table('locations')
