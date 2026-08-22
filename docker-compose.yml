@@ -65,7 +65,7 @@ services:
       redis:
         condition: service_healthy
     # 🌟 این خط برای اجرای خودکار مایگریشن اضافه شده است 🌟
-    command: sh -c "alembic upgrade head && uvicorn main:app --host 0.0.0.0 --port 8000"
+    command: bash -c "alembic -c main_api/alembic.ini upgrade head && uvicorn main_api.main:app --host 0.0.0.0 --port 8000"
     networks:
       - power_net
 
