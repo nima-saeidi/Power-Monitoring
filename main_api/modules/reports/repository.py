@@ -1,30 +1,33 @@
 # app/reports/repository.py
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.future import select
 from sqlalchemy import func
 from datetime import datetime
-from typing import List, Optional
+from typing import List
 
-# مسیرها را در صورت نیاز با پروژه خود تطبیق دهید
+# مسیرها را با پروژه خود تطبیق دهید
 from main_api.modules.devices.models import TimeseriesData, Post
 
 
-# from main_api.modules.alerts.models import Alert # (فرض بر این است که مدلی برای آلارم دارید)
-
 class ReportRepository:
-    def __init__(self, db: Session):
+    def __init__(self, db: AsyncSession):
         self.db = db
 
-    def get_feeder_history(self, feeder_id: int, start_date: datetime, end_date: datetime) -> List[TimeseriesData]:
-        return self.db.query(TimeseriesData).filter(
+    # ۱. دریافت تاریخچه فیدر
+    async def get_feeder_history(self, feeder_id: int, start_date: datetime, end_date: datetime) -> List[
+        TimeseriesData]:
+        stmt = select(TimeseriesData).filter(
             TimeseriesData.feeder_id == feeder_id,
             TimeseriesData.timestamp >= start_date,
             TimeseriesData.timestamp <= end_date
-        ).order_by(TimeseriesData.timestamp.asc()).all()
+        ).order_by(TimeseriesData.timestamp.asc())
 
-    # ۲. متد دریافت گزارش آماری (میانگین، حداکثر و حداقل) برای نمودارها
-    def get_aggregated_stats(self, feeder_id: int, parameter_key: str, start_date: datetime, end_date: datetime):
-        # از value_int استفاده می‌کنیم چون داده‌های مدباس شما عدد صحیح/اعشاری هستند
-        result = self.db.query(
+        result = await self.db.execute(stmt)
+        return result.scalars().all()
+
+    # ۲. دریافت گزارش آماری (میانگین، حداکثر و حداقل) برای نمودارها
+    async def get_aggregated_stats(self, feeder_id: int, parameter_key: str, start_date: datetime, end_date: datetime):
+        stmt = select(
             func.avg(TimeseriesData.value_int).label('avg_value'),
             func.max(TimeseriesData.value_int).label('max_value'),
             func.min(TimeseriesData.value_int).label('min_value')
@@ -33,18 +36,13 @@ class ReportRepository:
             TimeseriesData.key == parameter_key,
             TimeseriesData.timestamp >= start_date,
             TimeseriesData.timestamp <= end_date
-        ).first()
-        return result
+        )
 
-    # ۳. متد دریافت وضعیت فعلی تمامی پست‌ها برای داشبورد
-    def get_all_posts_status(self):
-        return self.db.query(Post).all()
+        result = await self.db.execute(stmt)
+        return result.first()
 
-    # ۴. متدی که در سرویس فراخوانی شده بود اما وجود نداشت
-    def get_alerts_history(self, start_date: datetime, end_date: datetime, post_id: Optional[int] = None):
-        # منطق واقعی آلارم را اینجا پیاده کنید (زمانی که مدل Alert را ساختید)
-        # query = self.db.query(Alert).filter(Alert.created_at >= start_date, Alert.created_at <= end_date)
-        # if post_id:
-        #     query = query.filter(Alert.post_id == post_id)
-        # return query.all()
-        return []  # فعلاً لیست خالی برمی‌گرداند تا خطا ندهد
+    # ۳. دریافت وضعیت فعلی تمامی پست‌ها برای داشبورد
+    async def get_all_posts_status(self) -> List[Post]:
+        stmt = select(Post)
+        result = await self.db.execute(stmt)
+        return result.scalars().all()
