@@ -5,3 +5,10 @@ __pycache__/
 venv/
 .venv/
 .idea/
+
+# Ignore all .env files anywhere in the project
+.env
+.env.*
+
+# Ignore all alembic.ini files anywhere in the project
+alembic.ini
