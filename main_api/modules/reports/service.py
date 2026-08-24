@@ -1,6 +1,8 @@
 # app/reports/service.py
 from sqlalchemy.ext.asyncio import AsyncSession
 from .repository import ReportRepository
+from main_api.modules.devices.models import Post
+from main_api.modules.telemetry.models import TimeseriesData
 
 
 class ReportService:
@@ -26,3 +28,26 @@ class ReportService:
 
     async def fetch_posts_status(self):
         return await self.repo.get_all_posts_status()
+
+    async def fetch_feeder_report_for_charts(self, feeder_id: int, start_date, end_date):
+        # ۱. گرفتن تمام دیتای خام از ریپازیتوری
+        raw_data = await self.repo.get_feeder_history(feeder_id, start_date, end_date)
+
+        # ۲. ایجاد یک دیکشنری برای گروه‌بندی پارامترها
+        chart_data = {}
+
+        for row in raw_data:
+            key = row.key
+
+            # اگر این کلید (مثلا voltage) قبلا در دیکشنری نبود، یک لیست خالی برایش بساز
+            if key not in chart_data:
+                chart_data[key] = []
+
+            # با توجه به عکس دیتابیس شما، مقادیر در value_int ذخیره شده‌اند
+            # زمان و مقدار را به لیست مربوط به همان پارامتر اضافه می‌کنیم
+            chart_data[key].append({
+                "timestamp": row.timestamp,
+                "value": row.value_int
+            })
+
+        return chart_data

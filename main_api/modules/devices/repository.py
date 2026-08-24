@@ -260,25 +260,39 @@ class DeviceRepository:
         await self.db.commit()
 
     # ================= Link CRUD =================
+    # ================= Link CRUD =================
     async def create_link(self, data: LinkCreate) -> Link:
         link = Link(**data.model_dump())
         self.db.add(link)
         await self.db.commit()
         await self.db.refresh(link)
-        return link
+        # تغییر مهم: لینک را همراه با تمام جزئیات پست‌ها واکشی و برمی‌گردانیم
+        return await self.get_link_by_id(link.id)
 
     async def get_all_links(self, skip: int = 0, limit: int = 100):
-        query = select(Link).offset(skip).limit(limit)
-        # در اینجا self.db_session اشتباه بود و به self.db تغییر یافت
-        result = await self.db.execute(query)
-        return result.scalars().all()
+        query = select(Link).options(
+            # بارگذاری پست مبدأ به همراه فیدرها و مکان آن
+            selectinload(Link.from_post).selectinload(Post.feeders),
+            selectinload(Link.from_post).selectinload(Post.location),
 
+            # بارگذاری پست مقصد به همراه فیدرها و مکان آن
+            selectinload(Link.to_post).selectinload(Post.feeders),
+            selectinload(Link.to_post).selectinload(Post.location)
+        ).offset(skip).limit(limit)
+
+        result = await self.db.execute(query)
+        return list(result.scalars().all())
 
     async def get_link_by_id(self, link_id: int) -> Optional[Link]:
         query = select(Link).options(
-            selectinload(Link.from_post),
-            selectinload(Link.to_post)
+            # بارگذاری زنجیره‌ای فیلدهای تو در تو
+            selectinload(Link.from_post).selectinload(Post.feeders),
+            selectinload(Link.from_post).selectinload(Post.location),
+
+            selectinload(Link.to_post).selectinload(Post.feeders),
+            selectinload(Link.to_post).selectinload(Post.location)
         ).where(Link.id == link_id)
+
         result = await self.db.execute(query)
         return result.scalar_one_or_none()
 
@@ -288,8 +302,12 @@ class DeviceRepository:
             setattr(link, key, value)
         await self.db.commit()
         await self.db.refresh(link)
-        return link
+        # تغییر مهم: بعد از آپدیت، مجدداً با جزئیات کامل برمی‌گردانیم
+        return await self.get_link_by_id(link.id)
 
     async def delete_link(self, link: Link) -> None:
+        """
+        حذف یک لینک از دیتابیس
+        """
         await self.db.delete(link)
         await self.db.commit()

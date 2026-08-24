@@ -164,6 +164,9 @@ class LinkUpdate(BaseModel):
 
 class LinkResponse(LinkBase):
     id: int
+    # اضافه‌کردن روابط برای نمایش اطلاعات کامل پست مبدأ و مقصد
+    from_post: Optional[PostResponse] = None
+    to_post: Optional[PostResponse] = None
 
     model_config = ConfigDict(from_attributes=True)
 

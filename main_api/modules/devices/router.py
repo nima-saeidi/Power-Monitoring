@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List, Optional
 import pandas as pd
 from io import BytesIO
-from typing import List
+
 from main_api.core.database import get_db
 from main_api.modules.devices.repository import DeviceRepository
 from main_api.modules.devices.service import DeviceService
@@ -109,7 +109,6 @@ async def delete_post(post_id: int, service: DeviceService = Depends(get_device_
 # ================= Endpoints: Feeders =================
 @feeders_router.get("/download-template", summary="Download Excel Template for Hierarchy Import")
 async def download_feeder_excel_template(current_user=Depends(get_current_user)):
-    # آپدیت ستون‌ها برای دریافت سلسله مراتب کامل: مکان -> پست -> فیدر
     template_data = {
         'campus_name': ['پردیس اصلی', 'پردیس اصلی'],
         'unit_name': ['دانشکده برق', 'دانشکده مکانیک'],
@@ -136,7 +135,6 @@ async def download_feeder_excel_template(current_user=Depends(get_current_user))
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": "attachment; filename=hierarchy_template.xlsx"}
     )
-
 
 
 @feeders_router.post("/import-excel", summary="Bulk Import Feeders from Excel")
@@ -193,7 +191,6 @@ async def send_command_to_feeder(feeder_id: int, request: CommandRequest, db: As
     if not feeder:
         raise HTTPException(status_code=404, detail="Feeder not found")
 
-    # مقادیر ارتباطی اکنون از Post مربوطه استخراج می‌شود
     if not feeder.post or not feeder.post.ip_address:
         raise HTTPException(status_code=400, detail="پست مربوط به این فیدر فاقد آدرس IP است.")
 

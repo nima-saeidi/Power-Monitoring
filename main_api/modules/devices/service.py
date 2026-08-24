@@ -13,10 +13,6 @@ from main_api.modules.devices.schemas import (
 )
 
 
-# اگر قرار است از ModbusReader به صورت مستقیم در این لایه استفاده شود، از کامنت خارج کنید
-# from main_api.core.modbus_client import ModbusReader
-
-
 class DeviceService:
 
     def __init__(self, repo: DeviceRepository):
@@ -27,7 +23,6 @@ class DeviceService:
     # =========================================================
 
     async def create_campus_with_subsections(self, data: CampusWithSubsectionsCreate):
-        # 1. Create the main location (Campus)
         campus_create_data = LocationCreate(
             name=data.campus_name,
             description=data.description,
@@ -38,7 +33,6 @@ class DeviceService:
         )
         campus = await self.repo.create_location(campus_create_data)
 
-        # 2. Create subsections if they exist
         if data.sub_sections:
             for sub_name in data.sub_sections:
                 sub_data = LocationCreate(
@@ -48,7 +42,6 @@ class DeviceService:
                 )
                 await self.repo.create_location(sub_data)
 
-        # 3. Re-fetch the campus to ensure the response includes children correctly
         return await self.repo.get_location_by_id(campus.id)
 
     async def create_location(self, data: LocationCreate):
@@ -227,9 +220,6 @@ class DeviceService:
     # =========================================================
 
     async def execute_device_command(self, feeder_id: int, request: CommandRequest) -> dict:
-        """
-        Sends a connect/disconnect command to a feeder.
-        """
         feeder = await self.repo.get_feeder_by_id(feeder_id)
         if not feeder:
             raise HTTPException(
@@ -244,20 +234,7 @@ class DeviceService:
             )
 
         port = feeder.post.port if feeder.post.port else 502
-
-        # نکته: بخش ModbusReader کامنت شده تا از خطای متغیر تعریف نشده در finally جلوگیری شود.
-        # اگر فراخوانی مودباس از طریق httpx.AsyncClient به میکروسرویس Telemetry در Router انجام می‌شود،
-        # این متد فقط اعتبارسنجی را انجام داده و می‌توانید درخواست را در Router ارسال کنید
-        # و یا درخواست HTTP را در همین قسمت پیاده‌سازی کنید.
-
-        # modbus_client = ModbusReader(host=feeder.post.ip_address, port=port)
-        # try:
-        #     # انجام عملیات خواندن/نوشتن
-        #     success = True
-        # finally:
-        #     await modbus_client.close()
-
-        success = True  # فرض بر موفقیت ارتباط تا زمان پیاده‌سازی نهایی منطق
+        success = True
 
         if not success:
             raise HTTPException(

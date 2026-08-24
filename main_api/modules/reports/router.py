@@ -2,12 +2,13 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List
 from datetime import datetime
+from typing import Dict, List
 
 # ایمپورت‌های پروژه (مسیرها را مطابق پروژه خود چک کنید)
 from main_api.core.database import get_db
 from main_api.modules.auth.dependencies import get_current_user
 
-from .schemas import TelemetryReportResponse, AggregatedReportResponse
+from .schemas import TelemetryReportResponse, AggregatedReportResponse,ChartDataPoint
 from .service import ReportService
 
 router = APIRouter(
@@ -15,6 +16,18 @@ router = APIRouter(
     tags=["Reports"],
     dependencies=[Depends(get_current_user)]
 )
+
+
+@router.get("/reports/feeder/{feeder_id}/chart", response_model=Dict[str, List[ChartDataPoint]])
+async def get_feeder_chart_data(
+    feeder_id: int,
+    start_date: datetime,
+    end_date: datetime,
+    db: AsyncSession = Depends(get_db) # تابع دریافت دیتابیس خودتان را بگذارید
+):
+    service = ReportService(db)
+    result = await service.fetch_feeder_report_for_charts(feeder_id, start_date, end_date)
+    return result
 
 @router.get("/feeder/{feeder_id}", response_model=List[TelemetryReportResponse])
 async def get_feeder_report(

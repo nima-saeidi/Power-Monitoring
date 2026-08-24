@@ -5,8 +5,9 @@ from sqlalchemy import func
 from datetime import datetime
 from typing import List
 
-# مسیرها را با پروژه خود تطبیق دهید
-from main_api.modules.devices.models import TimeseriesData, Post
+# Post از devices و TimeseriesData از telemetry خوانده می‌شود
+from main_api.modules.devices.models import Post
+from main_api.modules.telemetry.models import TimeseriesData
 
 
 class ReportRepository:
