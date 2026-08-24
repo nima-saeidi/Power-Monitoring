@@ -118,6 +118,16 @@ class DeviceService:
     # POST SERVICES
     # =========================================================
 
+    async def get_posts_by_location(self, location_id: int):
+        # بررسی وجود لوکیشن (اختیاری اما پیشنهاد می‌شود)
+        location = await self.repo.get_location_by_id(location_id)
+        if not location:
+            from fastapi import HTTPException
+            raise HTTPException(status_code=404, detail="Location not found")
+
+        return await self.repo.get_posts_by_location(location_id)
+
+
     async def create_post(self, data: PostCreate) -> PostResponse:
         return await self.repo.create_post(data)
 

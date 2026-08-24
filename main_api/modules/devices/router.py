@@ -106,6 +106,17 @@ async def delete_post(post_id: int, service: DeviceService = Depends(get_device_
     return await service.delete_post(post_id)
 
 
+@locations_router.get("/{location_id}/posts", response_model=List[PostResponse], summary="Get all posts for a specific location")
+async def get_posts_by_location(
+    location_id: int,
+    service: DeviceService = Depends(get_device_service),
+    current_user=Depends(get_current_user)
+):
+    """
+    دریافت تمام پست‌های برق مربوط به یک لوکیشن خاص
+    """
+    return await service.get_posts_by_location(location_id)
+
 # ================= Endpoints: Feeders =================
 @feeders_router.get("/download-template", summary="Download Excel Template for Hierarchy Import")
 async def download_feeder_excel_template(current_user=Depends(get_current_user)):

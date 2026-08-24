@@ -236,6 +236,19 @@ class DeviceRepository:
         await self.db.delete(post)
         await self.db.commit()
 
+
+    async def get_posts_by_location(self, location_id: int):
+        stmt = (
+            select(Post)
+            .where(Post.location_id == location_id)
+            .options(
+                selectinload(Post.location),  # اضافه شدن لودِ لوکیشن برای رفع خطای MissingGreenlet
+                selectinload(Post.feeders)    # اگر فیدرها هم در PostResponse هستند، این هم لازم است
+            )
+        )
+        result = await self.db.execute(stmt)
+        return result.scalars().all()
+
     # ================= Feeder CRUD =================
     async def create_feeder(self, data: FeederCreate) -> Feeder:
         feeder = Feeder(**data.model_dump())
