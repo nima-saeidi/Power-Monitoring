@@ -52,22 +52,36 @@ class DeviceRepository:
                 "location_type": location.location_type,
                 "parent_id": location.parent_id,
                 "description": location.description,
-                "address": location.address,  # فیلد جدید
+                "address": location.address,
                 "sub_locations": []
             }
 
-        roots = []
+        db_roots = []
         for location in locations:
             node = nodes[location.id]
             if location.parent_id is None:
-                roots.append(node)
+                db_roots.append(node)
             else:
                 parent_node = nodes.get(location.parent_id)
                 if parent_node:
                     parent_node["sub_locations"].append(node)
 
-        roots = roots[skip: skip + limit]
-        return roots
+        # اعمال pagination روی ریشه‌های دیتابیس (دانشکده‌ها/پردیس‌ها)
+        paginated_roots = db_roots[skip: skip + limit]
+
+        # ساخت ریشه مجازی (پدرِ همه)
+        tabriz_university_tree = {
+            "id": 0,  # شناسه مجازی
+            "campus_name": "دانشگاه تبریز",
+            "location_type": "Main University",
+            "parent_id": None,
+            "description": "ریشه اصلی دانشگاه",
+            "address": "تبریز",
+            "sub_locations": paginated_roots
+        }
+
+        # آن را به صورت یک لیست برمی‌گردانیم تا اگر router شما انتظار لیست دارد (List[LocationOut]) خطا ندهد
+        return [tabriz_university_tree]
 
     # =========================================================
     # GET ROOT LOCATIONS

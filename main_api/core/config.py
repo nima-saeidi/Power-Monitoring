@@ -8,7 +8,7 @@ class Settings(BaseSettings):
     PROJECT_NAME: str = "Power Monitoring System"
 
     DATABASE_URL: str
-    REDIS_URL: str
+    REDIS_URL : str
 
     SECRET_KEY: str = "dfpgoudrgjfdjgr9ugagkpsdlgkspt94"
     ALGORITHM: str = "HS256"
