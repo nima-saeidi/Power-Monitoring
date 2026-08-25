@@ -95,8 +95,6 @@ class Post(Base):
     # روابط
     location = relationship("Location", back_populates="posts")
     feeders = relationship("Feeder", back_populates="post", cascade="all, delete-orphan")
-    command_logs = relationship("CommandLog", back_populates="post")
-    device_tests = relationship("DeviceTestLog", back_populates="post")
 
     outgoing_links = relationship("Link", foreign_keys="[Link.from_post_id]", back_populates="from_post")
     incoming_links = relationship("Link", foreign_keys="[Link.to_post_id]", back_populates="to_post")
@@ -139,8 +137,6 @@ class Feeder(Base):
 
     # --- روابط ---
     post = relationship("Post", back_populates="feeders")
-    command_logs = relationship("CommandLog", back_populates="feeder")
-    device_tests = relationship("DeviceTestLog", back_populates="feeder")
 
     __table_args__ = (
         Index('idx_feeder_post', 'post_id'),

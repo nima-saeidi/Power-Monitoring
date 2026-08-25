@@ -28,4 +28,3 @@ class User(Base):
     notifications = relationship("Notification", back_populates="user", cascade="all, delete-orphan")
     notification_preferences = relationship("NotificationPreference", back_populates="user", uselist=False,
                                             cascade="all, delete-orphan")
-    command_logs = relationship("CommandLog", back_populates="user")

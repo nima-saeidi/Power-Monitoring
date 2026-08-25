@@ -10,13 +10,14 @@ from main_api.modules.auth.models import RoleEnum
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
 
+
 async def get_current_user(token: str = Depends(oauth2_scheme), db: AsyncSession = Depends(get_db)):
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="امکان اعتبارسنجی توکن وجود ندارد.",
         headers={"WWW-Authenticate": "Bearer"},
     )
-    
+
     try:
         payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
         email: str = payload.get("email")
@@ -28,14 +29,14 @@ async def get_current_user(token: str = Depends(oauth2_scheme), db: AsyncSession
             detail="توکن شما منقضی شده است. لطفاً مجدداً وارد شوید.",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    except PyJWTError: 
+    except PyJWTError:
         raise credentials_exception
 
     repo = UserRepository(db)
     user = await repo.get_by_email(email)
     if user is None:
         raise credentials_exception
-        
+
     return user
 
 
@@ -43,7 +44,7 @@ class RoleChecker:
     def __init__(self, allowed_roles: list[RoleEnum]):
         self.allowed_roles = allowed_roles
 
-    def __call__(self, current_user = Depends(get_current_user)):
+    def __call__(self, current_user=Depends(get_current_user)):
         if current_user.role not in self.allowed_roles:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
@@ -52,6 +53,14 @@ class RoleChecker:
         return current_user
 
 
+# ۱. دسترسی "فقط ادمین" (برای ساخت/ویرایش/حذف کاربران)
 require_admin = RoleChecker([RoleEnum.ADMIN])
-require_operator = RoleChecker([RoleEnum.TECHNICAL_OPERATOR])
+
+# ۲. دسترسی "ادمین و اپراتور فنی" (برای عملیاتی مثل تغییر تنظیمات، افزودن دستگاه، ویرایش مکان و...)
 require_tech_or_admin = RoleChecker([RoleEnum.ADMIN, RoleEnum.TECHNICAL_OPERATOR])
+
+# ۳. دسترسی "همه کاربران" (برای مشاهده و خواندن اطلاعات - روت‌های GET)
+require_any_user = RoleChecker([RoleEnum.ADMIN, RoleEnum.TECHNICAL_OPERATOR, RoleEnum.USER])
+
+# (اختیاری) اگر جایی فقط به اپراتور نیاز داشتید:
+require_operator = RoleChecker([RoleEnum.TECHNICAL_OPERATOR])

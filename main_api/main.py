@@ -7,7 +7,9 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from sqlalchemy.exc import IntegrityError
-
+from main_api.modules.audit_logs.router import router as audit_logs_router
+from main_api.modules.audit_logs.router import command_router
+from main_api.modules.audit_logs.router import test_log_router
 # ایمپورت‌های مربوط به دیتابیس
 from main_api.core.database import engine, Base
 
@@ -146,7 +148,9 @@ app.include_router(report_router)
 app.include_router(notifications_router)
 app.include_router(settings_router)
 app.include_router(telemetry_router)
-
+app.include_router(audit_logs_router)
+app.include_router(command_router)
+app.include_router(test_log_router)
 if __name__ == "__main__":
     # اجرای اپلیکیشن
     uvicorn.run("main_api.main:app", host="0.0.0.0", port=8000, reload=True)

@@ -1,33 +1,34 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from typing import List
+from typing import List, Dict
 from datetime import datetime
-from typing import Dict, List
 
-# ایمپورت‌های پروژه (مسیرها را مطابق پروژه خود چک کنید)
+# ایمپورت‌های پروژه
 from main_api.core.database import get_db
-from main_api.modules.auth.dependencies import get_current_user
+from main_api.modules.auth.dependencies import require_any_user
 
-from .schemas import TelemetryReportResponse, AggregatedReportResponse,ChartDataPoint
+from .schemas import TelemetryReportResponse, AggregatedReportResponse, ChartDataPoint
 from .service import ReportService
 
+# اعمال require_any_user به صورت سراسری
 router = APIRouter(
     prefix="/reports",
     tags=["Reports"],
-    dependencies=[Depends(get_current_user)]
+    dependencies=[Depends(require_any_user)]
 )
 
 
-@router.get("/reports/feeder/{feeder_id}/chart", response_model=Dict[str, List[ChartDataPoint]])
+@router.get("/feeder/{feeder_id}/chart", response_model=Dict[str, List[ChartDataPoint]])
 async def get_feeder_chart_data(
     feeder_id: int,
     start_date: datetime,
     end_date: datetime,
-    db: AsyncSession = Depends(get_db) # تابع دریافت دیتابیس خودتان را بگذارید
+    db: AsyncSession = Depends(get_db)
 ):
     service = ReportService(db)
     result = await service.fetch_feeder_report_for_charts(feeder_id, start_date, end_date)
     return result
+
 
 @router.get("/feeder/{feeder_id}", response_model=List[TelemetryReportResponse])
 async def get_feeder_report(
@@ -43,6 +44,7 @@ async def get_feeder_report(
         return data
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
 
 @router.get("/analytics/feeder/{feeder_id}", response_model=AggregatedReportResponse)
 async def get_feeder_analytics(

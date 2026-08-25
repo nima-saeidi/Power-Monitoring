@@ -3,12 +3,14 @@ from datetime import datetime
 from pydantic import BaseModel, Field
 
 
+# ================== Audit Log Schemas ==================
+
 class AuditLogBase(BaseModel):
     action: str
     resource_type: Optional[str] = None
-    resource_id: Optional[int] = None
+    resource_id: Optional[str] = None  # تبدیل به str برای پشتیبانی از فرمت‌های مختلف آیدی
     description: Optional[str] = None
-    severity: str = 'info'
+    severity: str = 'INFO'
 
 
 class AuditLogResponse(BaseModel):
@@ -20,15 +22,15 @@ class AuditLogResponse(BaseModel):
     user_agent: Optional[str]
     action: str
     resource_type: Optional[str]
-    resource_id: Optional[int]
+    resource_id: Optional[str]
     description: Optional[str]
     changes: Optional[Dict[str, Any]]
-    metadata: Optional[Dict[str, Any]]
+    meta_data: Optional[Dict[str, Any]]  # اصلاح نام مطابق با مدل دیتابیس
     success: bool
     error_message: Optional[str]
     severity: str
     timestamp: datetime
-    
+
     class Config:
         from_attributes = True
 
@@ -41,24 +43,17 @@ class AuditLogListResponse(BaseModel):
     pages: int
 
 
-class AuditLogFilterParams(BaseModel):
-    user_id: Optional[int] = None
-    action: Optional[str] = None
-    resource_type: Optional[str] = None
-    severity: Optional[str] = Field(None, pattern='^(debug|info|warning|error|critical)$')
-    success: Optional[bool] = None
-    start_date: Optional[datetime] = None
-    end_date: Optional[datetime] = None
-    search: Optional[str] = None
-    page: int = Field(1, ge=1)
-    page_size: int = Field(50, ge=1, le=100)
+class UserActivityResponse(BaseModel):
+    user_id: int
+    username: str
+    total_actions: int
+    successful_actions: int
+    failed_actions: int
+    recent_logs: List[AuditLogResponse]
+    period_days: int
 
 
-class CommandLogBase(BaseModel):
-    command_type: str
-    target: Optional[str] = None
-    parameters: Optional[Dict[str, Any]] = None
-
+# ================== Command Log Schemas ==================
 
 class CommandLogResponse(BaseModel):
     id: int
@@ -73,12 +68,12 @@ class CommandLogResponse(BaseModel):
     modbus_function: Optional[int]
     register_address: Optional[int]
     success: bool
-    response: Optional[str]
-    response_time_ms: Optional[int]
+    response: Optional[Dict[str, Any]]  # تغییر به Dict به دلیل استفاده از JSON در مدل
+    response_time_ms: Optional[float]  # تغییر به float مطابق با دیتابیس
     error_message: Optional[str]
     error_code: Optional[str]
     timestamp: datetime
-    
+
     class Config:
         from_attributes = True
 
@@ -91,24 +86,29 @@ class CommandLogListResponse(BaseModel):
     pages: int
 
 
-class CommandLogFilterParams(BaseModel):
+# ================== Device Test Log Schemas ==================
 
-    post_id: Optional[int] = None
-    feeder_id: Optional[int] = None
-    user_id: Optional[int] = None
-    command_type: Optional[str] = None
-    success: Optional[bool] = None
-    start_date: Optional[datetime] = None
-    end_date: Optional[datetime] = None
-    page: int = Field(1, ge=1)
-    page_size: int = Field(50, ge=1, le=100)
+class DeviceTestLogResponse(BaseModel):
+    id: int
+    timestamp: datetime
+    tested_by_user_id: Optional[int]
+    post_id: Optional[int]
+    feeder_id: Optional[int]
+    device_name: Optional[str]
+    ip_address: Optional[str]
+    port: Optional[int]
+    test_type: str
+    success: bool
+    response_time_ms: Optional[float]
+    error_message: Optional[str]
+
+    class Config:
+        from_attributes = True
 
 
-class UserActivityResponse(BaseModel):
-    user_id: int
-    username: str
-    total_actions: int
-    successful_actions: int
-    failed_actions: int
-    recent_logs: List[AuditLogResponse]
-    period_days: int
+class DeviceTestLogListResponse(BaseModel):
+    items: List[DeviceTestLogResponse]
+    total: int
+    page: int
+    page_size: int
+    pages: int
