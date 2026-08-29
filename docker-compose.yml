@@ -5,7 +5,7 @@ networks:
     driver: bridge
 
 services:
-  # 1. Database Service (TimescaleDB)
+  # 1. Database Service (TimescaleDB) - برای داده‌های رابطه‌ای و تنظیمات
   db:
     image: timescale/timescaledb:latest-pg15
     container_name: power_monitoring_db
@@ -19,7 +19,7 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - /etc/localtime:/etc/localtime:ro # همگام‌سازی دقیق ساعت با سرور میزبان
+      - /etc/localtime:/etc/localtime:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres -d power_monitoring"]
       interval: 5s
@@ -28,7 +28,7 @@ services:
     networks:
       - power_net
 
-  # 2. Redis Broker Service
+  # 2. Redis Broker Service - برای مدیریت صف و پیام‌ها
   redis:
     image: redis:alpine
     container_name: redis_broker
@@ -45,7 +45,94 @@ services:
     networks:
       - power_net
 
-  # 3. API Service
+  # 3. InfluxDB Service - دیتابیس تخصصی سری‌زمانی برای تلمتری
+  influxdb:
+    image: influxdb:2.7-alpine
+    container_name: power_monitoring_influxdb
+    restart: unless-stopped
+    environment:
+      DOCKER_INFLUXDB_INIT_MODE: setup
+      DOCKER_INFLUXDB_INIT_USERNAME: admin
+      DOCKER_INFLUXDB_INIT_PASSWORD: SecretPassword123!
+      DOCKER_INFLUXDB_INIT_ORG: power_org
+      DOCKER_INFLUXDB_INIT_BUCKET: telemetry_bucket
+      DOCKER_INFLUXDB_INIT_ADMIN_TOKEN: super-secret-token-for-power
+      TZ: Asia/Tehran
+    ports:
+      - "8086:8086"
+    volumes:
+      - influxdb_data:/var/lib/influxdb2
+      - /etc/localtime:/etc/localtime:ro
+    healthcheck:
+      test: ["CMD", "curl", "-sI", "http://localhost:8086/ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - power_net
+
+  # 4. MongoDB Service - پیش‌نیاز Graylog برای ذخیره متادیتا
+  mongodb:
+    image: mongo:6.0
+    container_name: power_monitoring_mongo
+    restart: unless-stopped
+    volumes:
+      - mongodb_data:/data/db
+    networks:
+      - power_net
+
+  # 5. OpenSearch Service - موتور جستجو و ایندکس لاگ‌ها برای Graylog
+  opensearch:
+    image: opensearchproject/opensearch:2.11.0
+    container_name: power_monitoring_opensearch
+    restart: unless-stopped
+    environment:
+      - "OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx512m"
+      - "bootstrap.memory_lock=true"
+      - "discovery.type=single-node"
+      - "action.auto_create_index=false"
+      - "plugins.security.ssl.http.enabled=false"
+      - "plugins.security.disabled=true"
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+      nofile:
+        soft: 65536
+        hard: 65536
+    volumes:
+      - opensearch_data:/usr/share/opensearch/data
+    networks:
+      - power_net
+
+  # 6. Graylog Service - مدیریت متمرکز لاگ‌ها
+  graylog:
+    image: graylog/graylog:5.2
+    container_name: power_monitoring_graylog
+    restart: unless-stopped
+    depends_on:
+      - mongodb
+      - opensearch
+    environment:
+      - GRAYLOG_NODE_ID_FILE=/usr/share/graylog/data/config/node-id
+      # رمز عبور هش شده پیش‌فرض SHA-256 برای admin (رمز: admin)
+      - GRAYLOG_ROOT_PASSWORD_SHA2=8c6976e5b5410415bde908bd4dee15dfb167a9c873fc4bb8a81f6f2ab448a918
+      - GRAYLOG_PASSWORD_SECRET=some_very_long_secret_key_at_least_16_chars_12345
+      - GRAYLOG_HTTP_BIND_ADDRESS=0.0.0.0:9000
+      - GRAYLOG_HTTP_EXTERNAL_URI=http://localhost:9000/
+      - GRAYLOG_ELASTICSEARCH_HOSTS=http://opensearch:9200
+      - GRAYLOG_MONGODB_URI=mongodb://mongodb:27017/graylog
+      - TZ=Asia/Tehran
+    ports:
+      - "9000:9000"       # وب پنل Graylog و REST API
+      - "12201:12201/udp" # پورت دریافت لاگ GELF UDP
+      - "12201:12201/tcp" # پورت دریافت لاگ GELF TCP
+    volumes:
+      - graylog_data:/usr/share/graylog/data
+    networks:
+      - power_net
+
+  # 7. API Service - سرویس اصلی
   api:
     build:
       context: .
@@ -57,6 +144,14 @@ services:
     environment:
       DATABASE_URL: postgresql+asyncpg://postgres:admin@db:5432/power_monitoring
       REDIS_URL: redis://redis:6379/0
+      INFLUX_URL: http://influxdb:8086
+      INFLUX_TOKEN: super-secret-token-for-power
+      INFLUX_ORG: power_org
+      INFLUX_BUCKET: telemetry_bucket
+      # متغیرهای اتصال لاگر به Graylog
+      GRAYLOG_HOST: graylog
+      GRAYLOG_PORT: 12201
+      GRAYLOG_API_URL: http://graylog:9000
       SECRET_KEY: your_super_secret_key
       TZ: Asia/Tehran
     depends_on:
@@ -64,12 +159,15 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-    # 🌟 این خط برای اجرای خودکار مایگریشن اضافه شده است 🌟
+      influxdb:
+        condition: service_healthy
+      graylog:
+        condition: service_started
     command: bash -c "alembic -c main_api/alembic.ini upgrade head && uvicorn main_api.main:app --host 0.0.0.0 --port 8000"
     networks:
       - power_net
 
-  # 4. Telemetry Service (Modbus Reader)
+  # 8. Telemetry Service (Modbus Reader)
   telemetry:
     build:
       context: ./telemetry_service
@@ -78,31 +176,30 @@ services:
     environment:
       DATABASE_URL: postgresql+asyncpg://postgres:admin@db:5432/power_monitoring
       REDIS_URL: redis://redis:6379/0
+      INFLUX_URL: http://influxdb:8086
+      INFLUX_TOKEN: super-secret-token-for-power
+      INFLUX_ORG: power_org
+      INFLUX_BUCKET: telemetry_bucket
       POLLING_INTERVAL: 5
       MAX_TELEMETRY_FAILURES: 3
+      GRAYLOG_HOST: graylog
+      GRAYLOG_PORT: 12201
       TZ: Asia/Tehran
     depends_on:
       db:
         condition: service_healthy
       redis:
         condition: service_healthy
+      influxdb:
+        condition: service_healthy
+      graylog:
+        condition: service_started
     networks:
       - power_net
 
-  # --- OPTIONAL: PgAdmin for Database Management ---
-  # pgadmin:
-  #   image: dpage/pgadmin4
-  #   container_name: power_monitoring_pgadmin
-  #   restart: unless-stopped
-  #   environment:
-  #     PGADMIN_DEFAULT_EMAIL: admin@admin.com
-  #     PGADMIN_DEFAULT_PASSWORD: admin
-  #   ports:
-  #     - "5050:80"
-  #   depends_on:
-  #     - db
-  #   networks:
-  #     - power_net
-
 volumes:
   postgres_data:
+  influxdb_data:
+  mongodb_data:
+  opensearch_data:
+  graylog_data:

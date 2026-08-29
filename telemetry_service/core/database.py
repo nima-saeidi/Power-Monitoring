@@ -1,28 +1,30 @@
-from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
-from sqlalchemy.orm import declarative_base
-
-# ایمپورت تنظیمات از خود سرویس تله‌متری
+# telemetry_service/core/database.py
+from influxdb_client.client.influxdb_client_async import InfluxDBClientAsync
 from core.config import settings
 
-# ساخت موتور دیتابیس غیرهمگام
-engine = create_async_engine(
-    settings.DATABASE_URL,
-    echo=False,
-    # تنظیمات بهینه برای Connection Pool در سرویس تله‌متری که دائم در حال نوشتن است
-    pool_size=10,
-    max_overflow=20
-)
+class InfluxDBManager:
+    def __init__(self):
+        self._client: InfluxDBClientAsync | None = None
 
-# ساخت Session Maker
-AsyncSessionLocal = async_sessionmaker(
-    bind=engine,
-    class_=AsyncSession,
-    expire_on_commit=False
-)
+    def get_client(self) -> InfluxDBClientAsync:
+        if self._client is None:
+            self._client = InfluxDBClientAsync(
+                url=settings.INFLUX_URL,
+                token=settings.INFLUX_TOKEN,
+                org=settings.INFLUX_ORG
+            )
+        return self._client
 
-Base = declarative_base()
+    async def close(self):
+        if self._client is not None:
+            await self._client.close()
+            self._client = None
 
-# Dependency برای استفاده در روت‌های FastAPI تله‌متری (اگر روت داشته باشید)
-async def get_db():
-    async with AsyncSessionLocal() as session:
-        yield session
+influx_manager = InfluxDBManager()
+
+
+async def get_influx_write_api():
+    """Dependency برای دریافت Write API جهت ثبت داده‌ها"""
+    client = influx_manager.get_client()
+    return client.write_api()
+

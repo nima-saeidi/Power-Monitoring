@@ -1,24 +1,36 @@
-from pydantic import BaseModel, ConfigDict
+from datetime import datetime, timezone
 from typing import Optional
-from datetime import datetime
-from uuid import UUID
+from pydantic import BaseModel, ConfigDict, Field
 
 
-# ۱. مدل پایه: فقط فیلدهایی که موقع ثبت و دریافت مشترک هستند (بدون id)
 class TelemetryBase(BaseModel):
+    """مدل پایه داده‌های الکتریکی فیدر"""
+    feeder_id: int
     post_id: Optional[int] = None
-    feeder_id: Optional[int] = None
-    key: str  
-    value_int: Optional[int] = None
-    value_bool: Optional[bool] = None
+    voltage: float = Field(default=0.0, description="Voltage in Volts")
+    current: float = Field(default=0.0, description="Current in Amperes")
+    active_power: float = Field(default=0.0, description="Active Power in Watts/kW")
+    frequency: Optional[float] = Field(default=50.0, description="Frequency in Hz")
 
-# ۲. مدل Create: برای دریافت داده از سمت سنسور/کلاینت (id توسط دیتابیس ساخته می‌شود)
+
 class TelemetryCreate(TelemetryBase):
-    pass
+    """مدل ورودی جهت ثبت در InfluxDB"""
+    timestamp: Optional[datetime] = Field(
+        default_factory=lambda: datetime.now(timezone.utc)
+    )
 
-# ۳. مدل Response: برای ارسال داده به کلاینت (id و timestamp اضافه می‌شوند)
+
 class TelemetryResponse(TelemetryBase):
-    id: UUID  # 👈 نوع id به UUID اصلاح شد
+    """مدل خروجی جهت ارسال به وب‌سوکت یا کلاینت‌ها"""
     timestamp: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class DeviceAlertSchema(BaseModel):
+    """مدل انتشار آلرت‌های وضعیت تجهیزات"""
+    feeder_id: int
+    status: str  # offline | deactivated | online
+    failures: int
+    reason: str
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
