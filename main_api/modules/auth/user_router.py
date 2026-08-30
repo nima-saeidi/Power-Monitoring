@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
+from fastapi import BackgroundTasks
 
 from main_api.core.database import get_db
 from main_api.modules.auth.repository import UserRepository
@@ -13,6 +14,7 @@ from main_api.modules.auth.schemas import (
     UserResponse,
     UserCreate,
     UserUpdate,
+    ChangePasswordRequest, ForgotPasswordRequest, ResetPasswordRequest
 )
 
 user_router = APIRouter(prefix="/users", tags=["User Management"])
@@ -31,6 +33,17 @@ async def get_all_users(
     current_user = Depends(require_any_user)  # ادمین، اپراتور فنی و کاربر عادی
 ):
     return await service.get_all_users()
+
+@user_router.post("/change-password", status_code=status.HTTP_200_OK, summary="Change Password (Current Authenticated User)")
+async def change_password(
+    data: ChangePasswordRequest,
+    service: AuthService = Depends(get_auth_service),
+    current_user = Depends(require_any_user)  # کاربر یا ادمین واردشده
+):
+    """
+    تغییر رمز عبور کاربر/ادمین جاری با دریافت رمز قبلی و رمز جدید
+    """
+    return await service.change_password(user_id=current_user.id, data=data)
 
 @user_router.get("/{user_id}", response_model=UserResponse, summary="Get Single User Info (All Users)")
 async def get_user(
@@ -79,3 +92,26 @@ async def get_roles(
         {"value": RoleEnum.USER.value, "label": "Regular User"},
     ]
     return {"roles": roles}
+
+
+@user_router.post("/forgot-password", status_code=status.HTTP_200_OK, summary="Request Password Reset")
+async def forgot_password(
+    data: ForgotPasswordRequest,
+    background_tasks: BackgroundTasks,
+    service: AuthService = Depends(get_auth_service)
+):
+    """
+    دریافت ایمیل و ارسال لینک حاوی توکن به صورت Background Task
+    """
+    return await service.forgot_password(data, background_tasks)
+
+
+@user_router.post("/reset-password", status_code=status.HTTP_200_OK, summary="Reset Password using Token")
+async def reset_password(
+    data: ResetPasswordRequest,
+    service: AuthService = Depends(get_auth_service)
+):
+    """
+    تغییر رمز عبور در صورت معتبر بودن توکن (ارسال شده از سمت فرانت‌اند)
+    """
+    return await service.reset_password(data)

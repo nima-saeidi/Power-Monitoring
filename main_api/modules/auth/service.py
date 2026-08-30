@@ -1,12 +1,20 @@
 from datetime import timedelta
 from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
-
+from main_api.modules.auth.schemas import ForgotPasswordRequest, ResetPasswordRequest
 from main_api.modules.auth.repository import UserRepository
-from main_api.modules.auth.schemas import AdminRegisterRequest, LoginRequest, TokenResponse, UserResponse, UserCreate, \
-    UserUpdate, UserProfileUpdate
+from main_api.modules.auth.schemas import (
+    AdminRegisterRequest, LoginRequest, TokenResponse, UserResponse, UserCreate,
+    UserUpdate, UserProfileUpdate, ChangePasswordRequest
+)
 from main_api.core.security import hash_password, verify_password, create_access_token
 from main_api.modules.settings.service import SettingService
+
+from datetime import timedelta, datetime
+from jose import jwt, JWTError # مطمئن شوید pip install python-jose نصب است
+from fastapi import BackgroundTasks
+from main_api.core.config import settings
+from main_api.core.email import send_reset_password_email
 
 
 class AuthService:
@@ -121,6 +129,8 @@ class AuthService:
 
     async def update_profile(self, user_id: int, data: UserProfileUpdate) -> UserResponse:
         user = await self.repo.get_by_id(user_id)
+        if not user:
+            raise HTTPException(status_code=404, detail="کاربر یافت نشد.")
 
         if data.phone_number and data.phone_number != user.phone_number:
             existing_phone = await self.repo.get_by_phone_number(data.phone_number)
@@ -134,6 +144,30 @@ class AuthService:
         await self.repo.save_changes()
         return UserResponse.model_validate(user)
 
+    async def change_password(self, user_id: int, data: ChangePasswordRequest):
+        user = await self.repo.get_by_id(user_id)
+        if not user:
+            raise HTTPException(status_code=404, detail="کاربر یافت نشد.")
+
+        # ۱. بررسی صحیح بودن رمز عبور فعلی
+        if not verify_password(data.old_password, user.hashed_password):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="رمز عبور فعلی اشتباه است."
+            )
+
+        # ۲. بررسی اینکه رمز جدید با رمز قبلی یکسان نباشد
+        if verify_password(data.new_password, user.hashed_password):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="رمز عبور جدید نمی‌تواند با رمز عبور فعلی یکسان باشد."
+            )
+
+        # ۳. هش و ذخیره رمز عبور جدید
+        user.hashed_password = hash_password(data.new_password)
+        await self.repo.save_changes()
+        return {"message": "رمز عبور با موفقیت تغییر یافت."}
+
     async def delete_user(self, user_id: int):
         user = await self.repo.get_by_id(user_id)
         if not user:
@@ -141,3 +175,42 @@ class AuthService:
 
         await self.repo.delete_user(user)
         return {"message": "کاربر با موفقیت حذف شد."}
+
+    async def forgot_password(self, data: ForgotPasswordRequest, background_tasks: BackgroundTasks):
+        user = await self.repo.get_by_email(data.email)
+
+        # نکته امنیتی: اگر کاربر نبود، خطای ۴۰۴ نمی‌دهیم تا کسی نتواند ایمیل‌ها را حدس بزند
+        if user:
+            # تولید توکن موقت (مثلاً ۱۵ دقیقه اعتبار)
+            expire = datetime.utcnow() + timedelta(minutes=15)
+            to_encode = {"sub": user.email, "exp": expire, "type": "reset_password"}
+            reset_token = jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
+
+            # ارسال ایمیل به صورت غیرهمگام (Background Task) تا API معطل نشود
+            background_tasks.add_task(send_reset_password_email, user.email, reset_token)
+
+        return {"message": "اگر ایمیل در سیستم موجود باشد، لینک بازیابی ارسال خواهد شد."}
+
+    async def reset_password(self, data: ResetPasswordRequest):
+        try:
+            # اعتبارسنجی توکن
+            payload = jwt.decode(data.token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+            email = payload.get("sub")
+            token_type = payload.get("type")
+
+            if token_type != "reset_password" or email is None:
+                raise HTTPException(status_code=400, detail="توکن نامعتبر است.")
+
+        except JWTError:
+            raise HTTPException(status_code=400, detail="توکن منقضی یا نامعتبر است.")
+
+        # پیدا کردن کاربر
+        user = await self.repo.get_by_email(email)
+        if not user:
+            raise HTTPException(status_code=404, detail="کاربر یافت نشد.")
+
+        # تغییر رمز عبور
+        user.hashed_password = hash_password(data.new_password)
+        await self.repo.save_changes()
+
+        return {"message": "رمز عبور با موفقیت تغییر یافت. اکنون می‌توانید وارد شوید."}

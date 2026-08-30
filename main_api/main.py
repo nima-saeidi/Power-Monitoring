@@ -7,6 +7,17 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from sqlalchemy.exc import IntegrityError
+
+# ================= اضافه شده برای Rate Limiting =================
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
+
+# تعریف محدودکننده با نرخ پیش‌فرض (مثلاً ۵ درخواست در ثانیه یا ۱۰۰ درخواست در دقیقه برای هر IP)
+limiter = Limiter(key_func=get_remote_address, default_limits=["100/minute"])
+# ===============================================================
+
 from main_api.modules.audit_logs.router import router as audit_logs_router
 from main_api.modules.audit_logs.router import command_router
 from main_api.modules.audit_logs.router import test_log_router
@@ -33,8 +44,6 @@ from main_api.modules.notifications.router import router as notifications_router
 
 # ================= اضافه شده برای ردیس =================
 from main_api.modules.telemetry.redis_listener import listen_to_redis_and_save
-
-
 # =======================================================
 
 
@@ -59,6 +68,12 @@ app = FastAPI(
     lifespan=lifespan
 )
 
+# ================= اضافه شده برای Rate Limiting =================
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+app.add_middleware(SlowAPIMiddleware)
+# ===============================================================
+
 # تنظیمات CORS
 app.add_middleware(
     CORSMiddleware,
@@ -72,6 +87,18 @@ app.add_middleware(
 # =======================================================
 # مدیریت سراسری خطاهای API (Exception Handlers)
 # =======================================================
+
+# ۰. مدیریت اختصاصی خطای تجاوز از حد مجاز درخواست‌ها (Rate Limit)
+@app.exception_handler(RateLimitExceeded)
+async def custom_rate_limit_handler(request: Request, exc: RateLimitExceeded):
+    return JSONResponse(
+        status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+        content={
+            "success": False,
+            "message": "تعداد درخواست‌های شما بیش از حد مجاز است. لطفاً کمی صبر کرده و مجدداً تلاش کنید."
+        },
+    )
+
 
 # ۱. مدیریت خطاهای اعتبارسنجی Pydantic (کد 422)
 @app.exception_handler(RequestValidationError)
@@ -151,6 +178,7 @@ app.include_router(telemetry_router)
 app.include_router(audit_logs_router)
 app.include_router(command_router)
 app.include_router(test_log_router)
+
 if __name__ == "__main__":
     # اجرای اپلیکیشن
     uvicorn.run("main_api.main:app", host="0.0.0.0", port=8000, reload=True)

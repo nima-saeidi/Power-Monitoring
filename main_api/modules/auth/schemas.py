@@ -6,7 +6,6 @@ from main_api.modules.auth.models import RoleEnum
 class AdminRegisterRequest(BaseModel):
     name: str
     email: EmailStr
-    # تغییر به phone_number با طول مناسب
     phone_number: Optional[str] = Field(None, min_length=10, max_length=15)
     password: str = Field(..., min_length=6, max_length=50)
 
@@ -30,11 +29,14 @@ class UserUpdate(BaseModel):
     role: Optional[RoleEnum] = None
     is_active: Optional[bool] = None
 
-# اسکمای جدید برای ویرایش پروفایل توسط خود کاربر
 class UserProfileUpdate(BaseModel):
     name: Optional[str] = None
     phone_number: Optional[str] = Field(None, min_length=10, max_length=15)
-    # معمولا ایمیل و پسورد در روت‌های جداگانه‌ای تغییر می‌کنند اما در صورت نیاز می‌توانید اینجا هم اضافه کنید
+
+# اسکماهای جدید تغییر رمز عبور
+class ChangePasswordRequest(BaseModel):
+    old_password: str = Field(..., min_length=6, max_length=50, description="رمز عبور فعلی")
+    new_password: str = Field(..., min_length=6, max_length=50, description="رمز عبور جدید")
 
 class UserResponse(BaseModel):
     id: int
@@ -51,3 +53,11 @@ class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
     user: UserResponse
+# برای دریافت ایمیل از کاربر
+class ForgotPasswordRequest(BaseModel):
+    email: EmailStr = Field(..., description="ایمیل ثبت نامی کاربر")
+
+# برای ثبت رمز جدید با استفاده از توکن
+class ResetPasswordRequest(BaseModel):
+    token: str = Field(..., description="توکن ارسال شده به ایمیل")
+    new_password: str = Field(..., min_length=6, max_length=50, description="رمز عبور جدید")
