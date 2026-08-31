@@ -8,14 +8,18 @@ services:
     image: timescale/timescaledb:latest-pg15
     container_name: power_monitoring_db
     restart: unless-stopped
-    env_file:
-      - .env
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: admin
+      POSTGRES_DB: power_monitoring
+      TZ: Asia/Tehran
     ports:
       - "5432:5432"
     volumes:
-      - postgres_data:/var/6:8086"
-    volumes:
-      - influxdb_data:/var/lib/infl      test: ["CMD-SHELL", "pg_isready -U postgres -d power_monitoring"]
+      - postgres_data:/var/lib/postgresql/data
+      - /etc/localtime:/etc/localtime:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d power_monitoring"]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -27,8 +31,8 @@ services:
     image: redis:alpine
     container_name: redis_broker
     restart: unless-stopped
-    env_file:
-      - .env
+    environment:
+      TZ: Asia/Tehran
     ports:
       - "6379:6379"
     healthcheck:
@@ -44,8 +48,14 @@ services:
     image: influxdb:2.7-alpine
     container_name: power_monitoring_influxdb
     restart: unless-stopped
-    env_file:
-      - .env
+    environment:
+      DOCKER_INFLUXDB_INIT_MODE: setup
+      DOCKER_INFLUXDB_INIT_USERNAME: admin
+      DOCKER_INFLUXDB_INIT_PASSWORD: SecretPassword123!
+      DOCKER_INFLUXDB_INIT_ORG: power_org
+      DOCKER_INFLUXDB_INIT_BUCKET: telemetry_bucket
+      DOCKER_INFLUXDB_INIT_ADMIN_TOKEN: super-secret-token-for-power
+      TZ: Asia/Tehran
     ports:
       - "8086:8086"
     volumes:
@@ -74,8 +84,6 @@ services:
     image: opensearchproject/opensearch:2.11.0
     container_name: power_opensearch
     restart: unless-stopped
-    env_file:
-      - .env
     environment:
       - "OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx512m"
       - "bootstrap.memory_lock=true"
@@ -100,11 +108,19 @@ services:
     image: graylog/graylog:5.2
     container_name: power_monitoring_graylog
     restart: unless-stopped
-    env_file:
-      - .env
     depends_on:
       - mongodb
       - opensearch
+    environment:
+      - GRAYLOG_NODE_ID_FILE=/usr/share/graylog/data/config/node-id
+      # رمز عبور هش شده پیش‌فرض SHA-256 برای admin (رمز: admin)
+      - GRAYLOG_ROOT_PASSWORD_SHA2=8c6976e5b5410415bde908bd4dee15dfb167a9c873fc4bb8a81f6f2ab448a918
+      - GRAYLOG_PASSWORD_SECRET=some_very_long_secret_key_at_least_16_chars_12345
+      - GRAYLOG_HTTP_BIND_ADDRESS=0.0.0.0:9000
+      - GRAYLOG_HTTP_EXTERNAL_URI=http://localhost:9000/
+      - GRAYLOG_ELASTICSEARCH_HOSTS=http://opensearch:9200
+      - GRAYLOG_MONGODB_URI=mongodb://mongodb:27017/graylog
+      - TZ=Asia/Tehran
     ports:
       - "9000:9000"       # وب پنل Graylog و REST API
       - "12201:12201/udp" # پورت دریافت لاگ GELF UDP
@@ -121,10 +137,21 @@ services:
       dockerfile: ./main_api/Dockerfile
     container_name: power_monitoring_api
     restart: unless-stopped
-    env_file:
-      - .env
     ports:
       - "8000:8000"
+    environment:
+      DATABASE_URL: postgresql+asyncpg://postgres:admin@db:5432/power_monitoring
+      REDIS_URL: redis://redis:6379/0
+      INFLUX_URL: http://influxdb:8086
+      INFLUX_TOKEN: super-secret-token-for-power
+      INFLUX_ORG: power_org
+      INFLUX_BUCKET: telemetry_bucket
+      TELEMETRY_SERVICE_URL: http://telemetry:8000
+      GRAYLOG_HOST: graylog
+      GRAYLOG_PORT: 12201
+      GRAYLOG_API_URL: http://graylog:9000
+      SECRET_KEY: your_super_secret_key
+      TZ: Asia/Tehran
     depends_on:
       db:
         condition: service_healthy
@@ -135,7 +162,7 @@ services:
       graylog:
         condition: service_started
       telemetry:
-        condition: service_started # اطمینان از بالا بودن سرویس تلماتری برای پروکسی
+        condition: service_started
     command: bash -c "alembic -c main_api/alembic.ini upgrade head && uvicorn main_api.main:app --host 0.0.0.0 --port 8000"
     networks:
       - power_net
@@ -146,10 +173,20 @@ services:
       context: ./telemetry_service
     container_name: power_monitoring_telemetry
     restart: unless-stopped
-    env_file:
-      - .env
     ports:
-      - "8001:8000" # پورت ۸۰۰۱ هاست به ۸۰۰۰ کانتینر متصل شد تا API این سرویس در دسترس باشد
+      - "8001:8000"
+    environment:
+      DATABASE_URL: postgresql+asyncpg://postgres:admin@db:5432/power_monitoring
+      REDIS_URL: redis://redis:6379/0
+      INFLUX_URL: http://influxdb:8086
+      INFLUX_TOKEN: super-secret-token-for-power
+      INFLUX_ORG: power_org
+      INFLUX_BUCKET: telemetry_bucket
+      POLLING_INTERVAL: 5
+      MAX_TELEMETRY_FAILURES: 3
+      GRAYLOG_HOST: graylog
+      GRAYLOG_PORT: 12201
+      TZ: Asia/Tehran
     depends_on:
       db:
         condition: service_healthy
