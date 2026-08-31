@@ -1,62 +1,52 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Query, Depends
+from typing import List
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import joinedload
-from sqlalchemy.future import select
-from typing import List, Dict, Any
 
-# مسیر ایمپورت‌ها را بر اساس ساختار پروژه خود تنظیم کنید
 from main_api.core.database import get_db
-from main_api.modules.devices.models import Feeder
+from main_api.modules.telemetry.service import TelemetryService
+from main_api.modules.telemetry.schemas import ActiveFeederConfig
+from main_api.modules.telemetry.ws_manager import ws_manager
 
-router = APIRouter(prefix="/api/v1/telemetry", tags=["Telemetry Worker API"])
+router = APIRouter(prefix="/telemetry", tags=["Telemetry"])
 
+# --- اندپوینت دریافت لیست فیدرهای فعال برای میکروسرویس تلمتری (Worker) ---
+@router.get("/active-feeders", response_model=List[ActiveFeederConfig])
+async def get_active_feeders(db: AsyncSession = Depends(get_db)):
+    service = TelemetryService(db)
+    return await service.get_active_feeders()
 
-@router.get("/active-feeders", response_model=List[Dict[str, Any]])
-async def get_active_feeders_for_worker(db: AsyncSession = Depends(get_db)):
-    """
-    این اندپوینت لیست فیدرهای فعال را برای telemetry_service ارسال می‌کند.
-    شامل IP، پورت، آدرس مدباس و رجیسترهای پارامترها (metadata) است.
-    """
+# --- WebSocket Endpoint (برای نمودارهای زنده فرانت‌اند) ---
+@router.websocket("/ws")
+async def telemetry_websocket(websocket: WebSocket):
+    await ws_manager.connect(websocket)
     try:
-        # ایجاد کوئری به روش Async (استفاده از select)
-        stmt = (
-            select(Feeder)
-            .options(joinedload(Feeder.post))
-            .filter(Feeder.is_active == True)
-        )
+        while True:
+            await websocket.receive_text()
+    except WebSocketDisconnect:
+        ws_manager.disconnect(websocket)
 
-        # اجرای کوئری
-        result = await db.execute(stmt)
-        # به دلیل استفاده از joinedload بهتر است از unique استفاده کنیم تا رکوردهای تکراری برنگردد
-        active_feeders = result.unique().scalars().all()
+# --- REST Endpoints (پروکسی به میکروسرویس) ---
+@router.get("/latest/{feeder_id}")
+async def get_latest(feeder_id: str):
+    return await TelemetryService.get_latest_telemetry(feeder_id)
 
-        output = []
-        for feeder in active_feeders:
-            # ۱. تعیین IP: اگر خود فیدر IP داشت آن را برمی‌داریم، در غیر این صورت IP پست را قرار می‌دهیم
-            ip = feeder.ip_address
-            if not ip and feeder.post:
-                ip = feeder.post.ip_address
+@router.get("/history/{feeder_id}")
+async def get_history(
+    feeder_id: str,
+    start: str = Query(default="-1h", description="Flux time format, e.g., -1h, -24h"),
+    stop: str = Query(default="now()", description="Flux time format"),
+    window: str = Query(default="1m", description="Aggregation window, e.g., 1m, 5m")
+):
+    return await TelemetryService.get_history(feeder_id, start, stop, window)
 
-            # ۲. تعیین پورت مدباس (از پست می‌خوانیم، پیش‌فرض 502)
-            port = feeder.post.port if feeder.post and getattr(feeder.post, 'port', None) else 502
-
-            # اگر هیچ IP برای این فیدر یا پست آن ثبت نشده بود، از آن رد می‌شویم
-            if not ip:
-                continue
-
-            # اضافه کردن اطلاعات فیدر به لیست خروجی
-            output.append({
-                "id": feeder.id,
-                "name": feeder.name,
-                "post_id": feeder.post_id,
-                "ip_address": ip,
-                "port": port,
-                "modbus_address": feeder.modbus_address or 1,  # پیش‌فرض مدباس 1
-                "metadata_info": feeder.metadata_info or {}  # رجیسترها برای خواندن مقادیر توسط worker
-            })
-
-        return output
-
-    except Exception as e:
-        # در صورت بروز خطا در دیتابیس، ارور 500 برمی‌گردانیم
-        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+@router.get("/chart/{feeder_id}")
+async def get_chart_data(
+    feeder_id: str,
+    start: str = Query(default="-24h", description="Flux time format or ISO datetime string"),
+    stop: str = Query(default="now()", description="Flux time format or ISO datetime string"),
+    window: str = Query(default="5m", description="Aggregation window, e.g., 1m, 5m, 1h")
+):
+    """
+    دریافت داده‌های تفکیک‌شده نمودار (سری‌های زمانی + timestamps) پروکسی شده از میکروسرویس تلمتری
+    """
+    return await TelemetryService.get_chart_data(feeder_id, start, stop, window)

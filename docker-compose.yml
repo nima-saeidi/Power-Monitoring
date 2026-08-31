@@ -83,12 +83,13 @@ services:
 
   # 5. OpenSearch Service - موتور جستجو و ایندکس لاگ‌ها برای Graylog
   opensearch:
-    image: opensearchproject/opensearch:2.11.0
-    container_name: power_monitoring_opensearch
+    image: opensearchproject
     restart: unless-stopped
     environment:
       - "OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx512m"
       - "bootstrap.memory_lock=true"
+      - "discovery.type=single-node"
+      - "action.auto_create_true"
       - "discovery.type=single-node"
       - "action.auto_create_index=false"
       - "plugins.security.ssl.http.enabled=false"
@@ -148,6 +149,8 @@ services:
       INFLUX_TOKEN: super-secret-token-for-power
       INFLUX_ORG: power_org
       INFLUX_BUCKET: telemetry_bucket
+      # آدرس سرویس تلماتری در شبکه داخلی داکر اضافه شد (پورت 8000 پورت داخلی کانتینر تلماتری است)
+      TELEMETRY_SERVICE_URL: http://telemetry:8000
       # متغیرهای اتصال لاگر به Graylog
       GRAYLOG_HOST: graylog
       GRAYLOG_PORT: 12201
@@ -163,16 +166,20 @@ services:
         condition: service_healthy
       graylog:
         condition: service_started
+      telemetry:
+        condition: service_started # اطمینان از بالا بودن سرویس تلماتری برای پروکسی
     command: bash -c "alembic -c main_api/alembic.ini upgrade head && uvicorn main_api.main:app --host 0.0.0.0 --port 8000"
     networks:
       - power_net
 
-  # 8. Telemetry Service (Modbus Reader)
+  # 8. Telemetry Service (Modbus Reader & Chart API)
   telemetry:
     build:
       context: ./telemetry_service
     container_name: power_monitoring_telemetry
     restart: unless-stopped
+    ports:
+      - "8001:8000" # پورت ۸۰۰۱ هاست به ۸۰۰۰ کانتینر متصل شد تا API این سرویس در دسترس باشد
     environment:
       DATABASE_URL: postgresql+asyncpg://postgres:admin@db:5432/power_monitoring
       REDIS_URL: redis://redis:6379/0
@@ -194,6 +201,8 @@ services:
         condition: service_healthy
       graylog:
         condition: service_started
+    # اگر اجرای Uvicorn در Dockerfile این سرویس نیست، این خط را اضافه کنید:
+    # command: bash -c "uvicorn main:app --host 0.0.0.0 --port 8000"
     networks:
       - power_net
 

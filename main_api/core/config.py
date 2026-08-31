@@ -11,7 +11,7 @@ class Settings(BaseSettings):
     REDIS_URL: str
     SECRET_KEY: str = "dfpgoudrgjfdjgr9ugagkpsdlgkspt94"
     ALGORITHM: str = "HS256"
-
+    TELEMETRY_SERVICE_URL: str = ""
     # تنظیمات جدید برای ایمیل
     SMTP_SERVER: str = "smtp.gmail.com"
     SMTP_PORT: int = 465

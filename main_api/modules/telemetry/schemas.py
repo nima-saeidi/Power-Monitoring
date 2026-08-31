@@ -1,24 +1,36 @@
-from pydantic import BaseModel, ConfigDict
-from typing import Optional
+from pydantic import BaseModel, Field
+from typing import Optional, List
 from datetime import datetime
-from uuid import UUID
 
-
-# ۱. مدل پایه: فقط فیلدهایی که موقع ثبت و دریافت مشترک هستند (بدون id)
 class TelemetryBase(BaseModel):
-    post_id: Optional[int] = None
-    feeder_id: Optional[int] = None
-    key: str  
-    value_int: Optional[int] = None
-    value_bool: Optional[bool] = None
+    device_id: str
+    active_power: float
+    reactive_power: float
+    voltage: float
+    current: float
+    power_factor: float
+    frequency: Optional[float] = 50.0
 
-# ۲. مدل Create: برای دریافت داده از سمت سنسور/کلاینت (id توسط دیتابیس ساخته می‌شود)
 class TelemetryCreate(TelemetryBase):
     pass
 
-# ۳. مدل Response: برای ارسال داده به کلاینت (id و timestamp اضافه می‌شوند)
 class TelemetryResponse(TelemetryBase):
-    id: int    # 👈 نوع id به UUID اصلاح شد
-    timestamp: datetime
+    id: Optional[int] = None
+    created_at: Optional[datetime] = None
 
-    model_config = ConfigDict(from_attributes=True)
+    class Config:
+        from_attributes = True
+
+# --- ساختار اطلاعات ارسالی به شِدولر/ورکر تلمتری ---
+class ActiveFeederConfig(BaseModel):
+    feeder_id: int
+    post_id: int
+    name: str
+    ip_address: str
+    port: int = 502
+    slave_id: int = 1
+    scan_interval: int = 5
+    is_active: bool = True
+
+    class Config:
+        from_attributes = True

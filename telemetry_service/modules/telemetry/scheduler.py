@@ -30,22 +30,29 @@ class TelemetryScheduler:
         self._tasks: list[asyncio.Task] = []
 
     async def handle_success(self, feeder_id: int, data: list):
-        """پردازش دیتای موفق: ذخیره در InfluxDB و برادکست روی ردیس"""
-        voltage_val = float(data[0]) if len(data) > 0 else 0.0
-        current_val = float(data[1]) if len(data) > 1 else 0.0
-        active_power = float(data[2]) if len(data) > 2 else 0.0
-        frequency_val = float(data[3]) if len(data) > 3 else 50.0
+        """پردازش و تفکیک ۵ پارامتر الکتریکی: ذخیره در دیتابیس سری‌زمانی و ارسال به ردیس"""
+        active_power_val   = float(data[0]) if len(data) > 0 else 0.0
+        reactive_power_val = float(data[1]) if len(data) > 1 else 0.0
+        voltage_val        = float(data[2]) if len(data) > 2 else 0.0
+        current_val        = float(data[3]) if len(data) > 3 else 0.0
+        power_factor_val   = float(data[4]) if len(data) > 4 else 0.0
 
         logger.info(
-            f"📊 Feeder {feeder_id} Data - V: {voltage_val:.1f}V, I: {current_val:.2f}A, P: {active_power:.1f}W"
+            f"📊 Feeder {feeder_id} Data | "
+            f"Active Power: {active_power_val:.2f} W, "
+            f"Reactive Power: {reactive_power_val:.2f} VAr, "
+            f"Voltage: {voltage_val:.2f} V, "
+            f"Current: {current_val:.2f} A, "
+            f"Power Factor: {power_factor_val:.2f}"
         )
 
         telemetry_in = TelemetryCreate(
             feeder_id=feeder_id,
+            active_power=active_power_val,
+            reactive_power=reactive_power_val,
             voltage=voltage_val,
             current=current_val,
-            active_power=active_power,
-            frequency=frequency_val,
+            power_factor=power_factor_val,
             timestamp=datetime.now(timezone.utc)
         )
 
@@ -80,7 +87,7 @@ class TelemetryScheduler:
     async def poll_device(
         self, feeder_id: int, device_ip: str, port: int, modbus_address: int, polling_interval: int
     ):
-        """پایش مداوم یک فیدر با مودباس"""
+        """پایش مداوم یک فیدر با مودباس (خواندن ۵ پارامتر اول)"""
         reader = ModbusReader(host=device_ip, port=port)
         max_failures = getattr(settings, "MAX_TELEMETRY_FAILURES", 3)
         current_fails = 0
@@ -88,7 +95,8 @@ class TelemetryScheduler:
         try:
             while self.is_running:
                 try:
-                    data = await reader.read_data(address=0, count=10, slave=modbus_address)
+                    # تغییر count از ۱۰ به ۵ برای بهبود سرعت شبکه و خواندن تنها پارامترهای ضروری
+                    data = await reader.read_data(address=0, count=5, slave=modbus_address)
                     if data:
                         current_fails = 0
                         await self.handle_success(feeder_id, data)
@@ -110,16 +118,20 @@ class TelemetryScheduler:
 
     async def get_active_feeders_from_api(self) -> list[dict]:
         """واکشی لیست فیدرهای فعال از main_api"""
-        main_api_url = getattr(settings, "MAIN_API_URL", "http://127.0.0.1:8000")
+        main_api_url = getattr(settings, "MAIN_API_URL", "http://127.0.0.1:8000").rstrip("/")
+        url = f"{main_api_url}/telemetry/active-feeders"
         try:
             async with httpx.AsyncClient() as client:
-                response = await client.get(f"{main_api_url}/api/v1/telemetry/active-feeders", timeout=10.0)
+                response = await client.get(url, timeout=10.0)
                 if response.status_code == 200:
                     return response.json()
-                logger.error(f"Failed to fetch feeders. Status: {response.status_code}")
+                logger.error(
+                    f"Failed to fetch feeders. URL: {url} | Status: {response.status_code} | Body: {response.text}"
+                )
         except Exception as e:
-            logger.error(f"Cannot connect to main_api for feeders list: {e}")
+            logger.error(f"Cannot connect to main_api at {url}: {e}")
         return []
+
 
     async def start(self):
         """راه‌اندازی وظایف پایش برای تمامی فیدرهای فعال"""
@@ -130,7 +142,7 @@ class TelemetryScheduler:
         if not active_feeders:
             logger.warning("⚠️ No active feeders found or main_api is unreachable. Worker is idle.")
 
-        interval = getattr(settings, "POLLING_INTERVAL", 5)
+        interval = getattr(settings, "POLLING_INTERVAL", 300)
 
         for feeder in active_feeders:
             feeder_id = feeder.get("id")

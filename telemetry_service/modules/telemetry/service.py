@@ -1,56 +1,23 @@
 import json
 import logging
-from datetime import timezone
-from influxdb_client import Point
-from core.config import settings
-from core.database import influx_manager
+from datetime import datetime
+from typing import List, Optional
 from modules.telemetry.schemas import TelemetryCreate, TelemetryResponse
+from modules.telemetry.repository import TelemetryRepository
 
 logger = logging.getLogger(__name__)
 
 
 class TelemetryService:
     @staticmethod
-    async def save_telemetry_to_influx(data: TelemetryCreate) -> bool:
-        """تبدیل متریک‌ها به Time-Series Point و ذخیره در InfluxDB"""
-        try:
-            client = influx_manager.get_client()
-            write_api = client.write_api()
-
-            ts = data.timestamp if data.timestamp else datetime.now(timezone.utc)
-
-            point = (
-                Point("feeder_telemetry")
-                .tag("feeder_id", str(data.feeder_id))
-                .field("voltage", float(data.voltage))
-                .field("current", float(data.current))
-                .field("active_power", float(data.active_power))
-                .field("frequency", float(data.frequency if data.frequency is not None else 50.0))
-                .time(ts)
-            )
-
-            if data.post_id:
-                point.tag("post_id", str(data.post_id))
-
-            await write_api.write(
-                bucket=settings.INFLUX_BUCKET,
-                org=settings.INFLUX_ORG,
-                record=point
-            )
-            return True
-        except Exception as e:
-            logger.error(f"Failed to write telemetry to InfluxDB: {e}")
-            return False
-
-    @classmethod
-    async def process_and_store(cls, data: TelemetryCreate, redis_client=None) -> TelemetryResponse:
-        """ذخیره در دیتابیس سری‌زمانی و انتشار زنده روی Message Broker"""
-        # ۱. ذخیره سری‌زمانی در InfluxDB
-        await cls.save_telemetry_to_influx(data)
+    async def process_and_store(data: TelemetryCreate, redis_client=None) -> TelemetryResponse:
+        """۱. ذخیره در InfluxDB و ۲. انتشار روی Redis برای اطلاع لحظه‌ای Main API"""
+        # ذخیره در ریپازیتوری
+        await TelemetryRepository.write_point(data)
 
         response_data = TelemetryResponse.model_validate(data)
 
-        # ۲. انتشار زنده برای main_api یا سرویس وب‌سوکت
+        # انتشار در پاب/ساب ردیس
         if redis_client:
             try:
                 payload = response_data.model_dump(mode="json")
@@ -59,3 +26,39 @@ class TelemetryService:
                 logger.error(f"Error publishing live data to Redis: {e}")
 
         return response_data
+
+    @staticmethod
+    async def get_latest_telemetry(feeder_id: int) -> Optional[TelemetryResponse]:
+        """دریافت آخرین دیتای پایش‌شده فیدر"""
+        return await TelemetryRepository.get_latest_by_feeder(feeder_id)
+
+    @staticmethod
+    async def get_telemetry_history(
+        feeder_id: int,
+        start_time: datetime,
+        end_time: datetime,
+        window_period: str = "1m"
+    ) -> List[TelemetryResponse]:
+        """دریافت دیتای تاریخی و گزارش فیدر"""
+        return await TelemetryRepository.get_range_report(
+            feeder_id=feeder_id,
+            start_time=start_time,
+            end_time=end_time,
+            window_period=window_period
+        )
+
+    @staticmethod
+    async def get_chart_data(
+        feeder_id: int,
+        start_time: datetime,
+        end_time: datetime,
+        window_period: str = "1m"
+    ) -> dict:
+        """دریافت داده‌های نمودار جهت نمایش در فرانت‌اند"""
+        # خروجی repository از قبل ساختار استاندارد {"feeder_id": ..., "series": {"voltage": [{"timestamp": ..., "value": ...}], ...}} دارد
+        return await TelemetryRepository.get_chart_data(
+            feeder_id=feeder_id,
+            start_time=start_time,
+            end_time=end_time,
+            window_period=window_period
+        )

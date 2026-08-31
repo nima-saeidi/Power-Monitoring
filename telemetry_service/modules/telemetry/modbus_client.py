@@ -6,9 +6,8 @@ from pymodbus.exceptions import ModbusException
 
 logger = logging.getLogger(__name__)
 
-# ترتیب اولویت نام‌هایی که pymodbus در نسخه‌های مختلف برای شناسه‌ی slave/unit استفاده کرده
+# ترتیب اولویت نام‌هایی که pymodbus در نسخه‌های مختلف برای شناسه‌ی slave/unit استفاده کرده است
 _SLAVE_KWARG_CANDIDATES = ("slave", "device_id", "unit")
-
 
 class ModbusReader:
     def __init__(self, host: str, port: int = 502, timeout: int = 3, retries: int = 3):
@@ -16,18 +15,17 @@ class ModbusReader:
         self.port = port
         self.timeout = timeout
         self.retries = retries
-        # پورت به درستی به کلاینت پاس داده می‌شود
         self.client = AsyncModbusTcpClient(self.host, port=self.port, timeout=self.timeout)
 
-        # تشخیص یک‌باره‌ی نام صحیح پارامتر (slave/device_id/unit) بر اساس نسخه‌ی نصب‌شده‌ی pymodbus
+        # تشخیص یک‌باره‌ی نام صحیح پارامتر بر اساس نسخه‌ی نصب‌شده‌ی pymodbus
         self._slave_kwarg = self._detect_slave_kwarg()
         logger.debug(f"Detected pymodbus slave-id kwarg: '{self._slave_kwarg}'")
 
     @staticmethod
     def _detect_slave_kwarg(candidates=_SLAVE_KWARG_CANDIDATES) -> str:
         """
-        بررسی می‌کنه امضای متد read_holding_registers در نسخه‌ی نصب‌شده‌ی pymodbus
-        از کدام نام (slave / device_id / unit) پشتیبانی می‌کند.
+        بررسی امضای متد read_holding_registers در نسخه‌ی نصب‌شده‌ی pymodbus
+        جهت پشتیبانی از slave / device_id / unit
         """
         try:
             params = inspect.signature(AsyncModbusTcpClient.read_holding_registers).parameters
@@ -51,7 +49,7 @@ class ModbusReader:
             await self.client.connect()
         return self.client.connected
 
-    async def read_data(self, address: int, count: int, slave: int = 1):
+    async def read_data(self, address: int, count: int = 5, slave: int = 1):
         for attempt in range(self.retries):
             try:
                 is_connected = await self.connect()
