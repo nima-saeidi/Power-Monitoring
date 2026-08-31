@@ -146,7 +146,7 @@ services:
       INFLUX_TOKEN: super-secret-token-for-power
       INFLUX_ORG: power_org
       INFLUX_BUCKET: telemetry_bucket
-      TELEMETRY_SERVICE_URL: http://telemetry:8000
+      TELEMETRY_SERVICE_URL: http://telemetry:8001
       GRAYLOG_HOST: graylog
       GRAYLOG_PORT: 12201
       GRAYLOG_API_URL: http://graylog:9000
@@ -174,7 +174,7 @@ services:
     container_name: power_monitoring_telemetry
     restart: unless-stopped
     ports:
-      - "8001:8000"
+      - "8001:8001"
     environment:
       DATABASE_URL: postgresql+asyncpg://postgres:admin@db:5432/power_monitoring
       REDIS_URL: redis://redis:6379/0
@@ -182,6 +182,7 @@ services:
       INFLUX_TOKEN: super-secret-token-for-power
       INFLUX_ORG: power_org
       INFLUX_BUCKET: telemetry_bucket
+      MAIN_API_URL: http://api:8000
       POLLING_INTERVAL: 5
       MAX_TELEMETRY_FAILURES: 3
       GRAYLOG_HOST: graylog
