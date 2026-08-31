@@ -71,7 +71,7 @@ services:
 
   # 4. MongoDB Service - پیش‌نیاز Graylog برای ذخیره متادیتا
   mongodb:
-    image: mongo:6.0
+    image: mongo:4.4
     container_name: power_monitoring_mongo
     restart: unless-stopped
     volumes:
@@ -81,7 +81,7 @@ services:
 
   # 5. OpenSearch Service - موتور جستجو و ایندکس لاگ‌ها برای Graylog
   opensearch:
-    image: opensearchproject/opensearch:2.11.0
+    image: opensearchproject/opensearch:1.3.14
     container_name: power_opensearch
     restart: unless-stopped
     environment:
@@ -105,7 +105,7 @@ services:
 
   # 6. Graylog Service - مدیریت متمرکز لاگ‌ها
   graylog:
-    image: graylog/graylog:5.2
+    image: graylog/graylog:4.3
     container_name: power_monitoring_graylog
     restart: unless-stopped
     depends_on:
