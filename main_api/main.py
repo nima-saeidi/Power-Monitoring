@@ -8,7 +8,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from sqlalchemy.exc import IntegrityError
-
+from main_api.core.rabbitmq import send_log_to_rabbitmq
 # ================= Rate Limiting =================
 from slowapi import Limiter
 from slowapi.util import get_remote_address
