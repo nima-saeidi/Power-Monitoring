@@ -3,7 +3,6 @@ import json
 import logging
 from datetime import datetime, timezone
 import httpx
-import redis.asyncio as redis
 
 # ایمپورت‌های پروژه
 from core.config import settings
@@ -15,14 +14,6 @@ from modules.telemetry.service import TelemetryService
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# کلاینت ردیس با سازگاری پروتکل
-REDIS_URL = getattr(settings, "REDIS_URL", "redis://127.0.0.1:6379/0")
-try:
-    redis_client = redis.from_url(REDIS_URL, protocol=2)
-except Exception as e:
-    logger.warning(f"⚠️ Redis init error: {e}. Running in WITHOUT-REDIS mode.")
-    redis_client = None
-
 
 class TelemetryScheduler:
     def __init__(self):
@@ -30,12 +21,12 @@ class TelemetryScheduler:
         self._tasks: list[asyncio.Task] = []
 
     async def handle_success(self, feeder_id: int, data: list):
-        """پردازش و تفکیک ۵ پارامتر الکتریکی: ذخیره در دیتابیس سری‌زمانی و ارسال به ردیس"""
-        active_power_val   = float(data[0]) if len(data) > 0 else 0.0
+        """پردازش و تفکیک ۵ پارامتر الکتریکی: فقط ذخیره در دیتابیس سری‌زمانی"""
+        active_power_val = float(data[0]) if len(data) > 0 else 0.0
         reactive_power_val = float(data[1]) if len(data) > 1 else 0.0
-        voltage_val        = float(data[2]) if len(data) > 2 else 0.0
-        current_val        = float(data[3]) if len(data) > 3 else 0.0
-        power_factor_val   = float(data[4]) if len(data) > 4 else 0.0
+        voltage_val = float(data[2]) if len(data) > 2 else 0.0
+        current_val = float(data[3]) if len(data) > 3 else 0.0
+        power_factor_val = float(data[4]) if len(data) > 4 else 0.0
 
         logger.info(
             f"📊 Feeder {feeder_id} Data | "
@@ -56,36 +47,19 @@ class TelemetryScheduler:
             timestamp=datetime.now(timezone.utc)
         )
 
-        await TelemetryService.process_and_store(telemetry_in, redis_client=redis_client)
+        # ذخیره در دیتابیس (بدون ارسال ردیس)
+        await TelemetryService.process_and_store(telemetry_in)
 
     async def handle_failure(self, feeder_id: int, current_failures: int, error_msg: str):
-        """عملیات در صورت عدم پاسخگویی تجهیز (ارسال آلرت وضعیت به ردیس)"""
+        """عملیات در صورت عدم پاسخگویی تجهیز (ثبت در لاگ)"""
         logger.warning(
             f"⚠️ Feeder ID {feeder_id} failed to respond. Failures: {current_failures} | Error: {error_msg}"
         )
 
-        if redis_client:
-            max_failures = getattr(settings, "MAX_TELEMETRY_FAILURES", 3)
-            status = "deactivated" if current_failures >= max_failures else "offline"
-
-            alert = DeviceAlertSchema(
-                feeder_id=feeder_id,
-                status=status,
-                failures=current_failures,
-                reason=error_msg,
-                timestamp=datetime.now(timezone.utc)
-            )
-
-            try:
-                await redis_client.publish(
-                    "device_alerts",
-                    json.dumps(alert.model_dump(mode="json"))
-                )
-            except Exception as e:
-                logger.error(f"Failed to publish alert to Redis: {e}")
+        # در صورت نیاز به ارسال آلرت به RabbitMQ به جای Redis، می‌توانید لاجیک انتشار پیام را در آینده اینجا اضافه کنید.
 
     async def poll_device(
-        self, feeder_id: int, device_ip: str, port: int, modbus_address: int, polling_interval: int
+            self, feeder_id: int, device_ip: str, port: int, modbus_address: int, polling_interval: int
     ):
         """پایش مداوم یک فیدر با مودباس (خواندن ۵ پارامتر اول)"""
         reader = ModbusReader(host=device_ip, port=port)
@@ -132,7 +106,6 @@ class TelemetryScheduler:
             logger.error(f"Cannot connect to main_api at {url}: {e}")
         return []
 
-
     async def start(self):
         """راه‌اندازی وظایف پایش برای تمامی فیدرهای فعال"""
         self.is_running = True
@@ -160,7 +133,7 @@ class TelemetryScheduler:
                 )
 
     async def stop(self):
-        """توقف ایمن تسک‌ها و بستن اتصالات"""
+        """توقف ایمن تسک‌ها"""
         logger.info("🛑 Stopping Telemetry Scheduler...")
         self.is_running = False
 
@@ -170,14 +143,5 @@ class TelemetryScheduler:
         if self._tasks:
             await asyncio.gather(*self._tasks, return_exceptions=True)
         self._tasks.clear()
-
-        if redis_client:
-            try:
-                if hasattr(redis_client, "aclose"):
-                    await redis_client.aclose()
-                else:
-                    await redis_client.close()
-            except Exception as e:
-                logger.error(f"Error closing Redis connection: {e}")
 
         logger.info("All telemetry scheduler tasks and connections stopped cleanly.")
