@@ -161,6 +161,16 @@ async def sqlalchemy_integrity_error_handler(request: Request, exc: IntegrityErr
     )
 
 
+@app.post("/test-log")
+async def create_test_log(message: str = "Test log event", level: str = "INFO"):
+    await send_log_to_rabbitmq(
+        level=level,
+        message=message,
+        service="main_api",
+        extra_data={"user_id": 1, "action": "manual_test"}
+    )
+    return {"status": "success", "message": "Log sent to queue"}
+
 # =======================================================
 # ثبت روترها (Include Routers)
 # =======================================================

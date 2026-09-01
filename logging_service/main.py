@@ -8,18 +8,32 @@ from core.config import settings
 from core.consumer import start_consumer
 from modules.routers import router as logs_router
 
+# ایمپورت engine و Base و مدل‌ها برای رجیستر شدن جدول‌ها
+from core.database import engine, Base
+import modules.models  # حتماً ایمپورت شود تا مدل‌ها در Base شناسایی شوند
+
 logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # ۱. شروع Consumer به عنوان تسک پس‌زمینه در زمان بالا آمدن سرویس
+    # ۱. ساخت خودکار جداول در صورت عدم وجود (Database Initialization)
+    logger.info("Initializing database tables...")
+    try:
+        # اگر از AsyncEngine استفاده می‌کنید:
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+        logger.info("Database tables initialized successfully.")
+    except Exception as e:
+        logger.error(f"Error creating database tables: {e}")
+
+    # ۲. شروع Consumer به عنوان تسک پس‌زمینه در زمان بالا آمدن سرویس
     logger.info("Starting RabbitMQ Consumer task...")
     consumer_task = asyncio.create_task(start_consumer())
 
     yield
 
-    # ۲. توقف و کنسل کردن تسک هنگام خاموش شدن سرویس
+    # ۳. توقف و کنسل کردن تسک هنگام خاموش شدن سرویس
     logger.info("Stopping RabbitMQ Consumer task...")
     consumer_task.cancel()
     try:

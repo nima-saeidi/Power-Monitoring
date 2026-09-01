@@ -8,3 +8,4 @@ pydantic
 pydantic-settings
 requests
 graypy
+sqlalchemy>=2.0.0
