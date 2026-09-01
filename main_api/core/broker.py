@@ -1,9 +1,8 @@
-# main_api/core/broker.py
 import json
 import logging
 from typing import Any, Dict, Optional
 import aio_pika
-from main_api.core.config import settings  # یا تنظیمات RABBITMQ_URL شما
+from main_api.core.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -15,7 +14,6 @@ class MessageBroker:
 
     async def connect(self):
         """برقراری اتصال پایدار به RabbitMQ"""
-        # دریافت آدرس از config یا مقدار پیش‌فرض لوکال
         rabbitmq_url = getattr(settings, "RABBITMQ_URL", "amqp://guest:guest@localhost:5672/")
         try:
             self.connection = await aio_pika.connect_robust(rabbitmq_url)
@@ -55,5 +53,21 @@ class MessageBroker:
             logger.error(f"Error publishing message to {queue_name}: {e}")
 
 
-# نمونه سراسری که در main.py ایمپورت می‌شود:
+# نمونه سراسری بروکر
 message_broker = MessageBroker()
+
+
+async def send_log_to_rabbitmq(
+    level: str,
+    message: str,
+    service: str = "main_api",
+    queue_name: str = "audit_logs"
+):
+    """ارسال ساختاریافته لاگ به صف RabbitMQ از طریق message_broker"""
+    log_payload = {
+        "service_name": service,
+        "level": level.upper(),
+        "message": message,
+        "extra_data": extra_data or {}
+    }
+    await message_broker.publish(queue_name=queue_name, message=log_payload)

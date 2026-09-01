@@ -8,7 +8,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from sqlalchemy.exc import IntegrityError
-from main_api.core.rabbitmq import send_log_to_rabbitmq
+
 # ================= Rate Limiting =================
 from slowapi import Limiter
 from slowapi.util import get_remote_address
@@ -21,7 +21,7 @@ limiter = Limiter(key_func=get_remote_address, default_limits=["100/minute"])
 
 # هسته لاگینگ و بروکر پیام
 from main_api.core.logging import setup_logging
-from main_api.core.broker import message_broker
+from main_api.core.broker import message_broker, send_log_to_rabbitmq
 
 # ماژول‌های برنامه و روترها
 from main_api.modules.auth.auth_router import auth_router
@@ -161,8 +161,13 @@ async def sqlalchemy_integrity_error_handler(request: Request, exc: IntegrityErr
     )
 
 
-@app.post("/test-log")
+# =======================================================
+# روت‌های سیستمی و تست
+# =======================================================
+
+@app.post("/test-log", tags=["System / Testing"])
 async def create_test_log(message: str = "Test log event", level: str = "INFO"):
+    """ارسال دستی لاگ تستی به صف RabbitMQ جهت بررسی کارکرد سرویس لاگینگ"""
     await send_log_to_rabbitmq(
         level=level,
         message=message,
@@ -170,6 +175,7 @@ async def create_test_log(message: str = "Test log event", level: str = "INFO"):
         extra_data={"user_id": 1, "action": "manual_test"}
     )
     return {"status": "success", "message": "Log sent to queue"}
+
 
 # =======================================================
 # ثبت روترها (Include Routers)
@@ -191,8 +197,6 @@ app.include_router(telemetry_router)
 # نوتیفیکیشن و تنظیمات
 app.include_router(notifications_router)
 app.include_router(settings_router)
-
-
 
 
 if __name__ == "__main__":
