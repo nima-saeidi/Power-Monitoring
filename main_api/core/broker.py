@@ -3,6 +3,7 @@ import logging
 from typing import Any, Dict, Optional
 import aio_pika
 from main_api.core.config import settings
+from typing import Optional, Dict, Any
 
 logger = logging.getLogger(__name__)
 
@@ -61,13 +62,19 @@ async def send_log_to_rabbitmq(
     level: str,
     message: str,
     service: str = "main_api",
-    queue_name: str = "audit_logs"
+    extra_data: dict[str, Any] | None = None,
+    queue_name: str = "audit_logs",
+    **kwargs
 ):
-    """ارسال ساختاریافته لاگ به صف RabbitMQ از طریق message_broker"""
+    """ارسال لاگ به صف RabbitMQ"""
+    payload_extra = extra_data or {}
+    if kwargs:
+        payload_extra.update(kwargs)
+
     log_payload = {
         "service_name": service,
         "level": level.upper(),
         "message": message,
-        "extra_data": extra_data or {}
+        "extra_data": payload_extra
     }
     await message_broker.publish(queue_name=queue_name, message=log_payload)
