@@ -3,7 +3,7 @@ networks:
     driver: bridge
 
 services:
-  # 1. Database Service (TimescaleDB) - برای داده‌های رابطه‌ای و تنظیمات
+  # 1. Database Service (TimescaleDB) - داده‌های رابطه‌ای و تنظیمات
   db:
     image: timescale/timescaledb:latest-pg15
     container_name: power_monitoring_db
@@ -26,24 +26,29 @@ services:
     networks:
       - power_net
 
-  # 2. Redis Broker Service - برای مدیریت صف و پیام‌ها
-  redis:
-    image: redis:alpine
-    container_name: redis_broker
+  # 2. RabbitMQ Service - مدیریت صف و پیام‌ها
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: power_monitoring_rabbitmq
     restart: unless-stopped
     environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
       TZ: Asia/Tehran
     ports:
-      - "6379:6379"
+      - "5672:5672"     # پورت ارتباطی AMQP
+      - "15672:15672"   # پنل مدیریت تحت وب
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      timeout: 3s
+      test: ["CMD", "rabbitmq-diagnostics", "check_running"]
+      interval: 10s
+      timeout: 5s
       retries: 5
     networks:
       - power_net
 
-  # 3. InfluxDB Service - دیتابیس تخصصی سری‌زمانی برای تلمتری
+  # 3. InfluxDB Service - دیتابیس سری‌زمانی برای تلمتری
   influxdb:
     image: influxdb:2.7-alpine
     container_name: power_monitoring_influxdb
@@ -69,7 +74,7 @@ services:
     networks:
       - power_net
 
-  # 4. MongoDB Service - پیش‌نیاز Graylog برای ذخیره متادیتا
+  # 4. MongoDB Service - دیتابیس متادیتا برای Graylog
   mongodb:
     image: mongo:4.4
     container_name: power_monitoring_mongo
@@ -79,7 +84,7 @@ services:
     networks:
       - power_net
 
-  # 5. OpenSearch Service - موتور جستجو و ایندکس لاگ‌ها برای Graylog
+  # 5. OpenSearch Service - ذخیره و جستجوی لاگ‌ها برای Graylog
   opensearch:
     image: opensearchproject/opensearch:1.3.14
     container_name: power_opensearch
@@ -89,8 +94,9 @@ services:
       - "bootstrap.memory_lock=true"
       - "discovery.type=single-node"
       - "action.auto_create_index=false"
-      - "plugins.security.ssl.http.enabled=false"
       - "plugins.security.disabled=true"
+    volumes:
+      - opensearch_data:/usr/share/opensearch/data
     ulimits:
       memlock:
         soft: -1
@@ -98,12 +104,10 @@ services:
       nofile:
         soft: 65536
         hard: 65536
-    volumes:
-      - opensearch_data:/usr/share/opensearch/data
     networks:
       - power_net
 
-  # 6. Graylog Service - مدیریت متمرکز لاگ‌ها
+  # 6. Graylog Service - مدیریت و مانیتورینگ متمرکز لاگ‌ها
   graylog:
     image: graylog/graylog:4.3
     container_name: power_monitoring_graylog
@@ -113,7 +117,6 @@ services:
       - opensearch
     environment:
       - GRAYLOG_NODE_ID_FILE=/usr/share/graylog/data/config/node-id
-      # رمز عبور هش شده پیش‌فرض SHA-256 برای admin (رمز: admin)
       - GRAYLOG_ROOT_PASSWORD_SHA2=8c6976e5b5410415bde908bd4dee15dfb167a9c873fc4bb8a81f6f2ab448a918
       - GRAYLOG_PASSWORD_SECRET=some_very_long_secret_key_at_least_16_chars_12345
       - GRAYLOG_HTTP_BIND_ADDRESS=0.0.0.0:9000
@@ -122,15 +125,15 @@ services:
       - GRAYLOG_MONGODB_URI=mongodb://mongodb:27017/graylog
       - TZ=Asia/Tehran
     ports:
-      - "9000:9000"       # وب پنل Graylog و REST API
-      - "12201:12201/udp" # پورت دریافت لاگ GELF UDP
-      - "12201:12201/tcp" # پورت دریافت لاگ GELF TCP
+      - "9000:9000"       # پنل وب و REST API
+      - "12201:12201/udp" # ورودی لاگ GELF UDP
+      - "12201:12201/tcp" # ورودی لاگ GELF TCP
     volumes:
       - graylog_data:/usr/share/graylog/data
     networks:
       - power_net
 
-  # 7. API Service - سرویس اصلی
+  # 7. Main API Service
   api:
     build:
       context: .
@@ -141,12 +144,13 @@ services:
       - "8000:8000"
     environment:
       DATABASE_URL: postgresql+asyncpg://postgres:admin@db:5432/power_monitoring
-      REDIS_URL: redis://redis:6379/0
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
       INFLUX_URL: http://influxdb:8086
       INFLUX_TOKEN: super-secret-token-for-power
       INFLUX_ORG: power_org
       INFLUX_BUCKET: telemetry_bucket
       TELEMETRY_SERVICE_URL: http://telemetry:8001
+      LOGGING_SERVICE_URL: http://logging:8002
       GRAYLOG_HOST: graylog
       GRAYLOG_PORT: 12201
       GRAYLOG_API_URL: http://graylog:9000
@@ -155,7 +159,7 @@ services:
     depends_on:
       db:
         condition: service_healthy
-      redis:
+      rabbitmq:
         condition: service_healthy
       influxdb:
         condition: service_healthy
@@ -167,17 +171,44 @@ services:
     networks:
       - power_net
 
-  # 8. Telemetry Service (Modbus Reader & Chart API)
+  # 8. Logging Service - ثبت و مدیریت لاگ‌ها از RabbitMQ به Graylog
+  logging:
+    build:
+      context: ./logging_service
+      dockerfile: Dockerfile
+    container_name: power_monitoring_logging
+    restart: unless-stopped
+    command: uvicorn main:app --host 0.0.0.0 --port 8002
+    ports:
+      - "8002:8002"
+    environment:
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
+      GRAYLOG_HOST: graylog
+      GRAYLOG_PORT: 12201
+      GRAYLOG_API_URL: http://graylog:9000/api
+      GRAYLOG_USER: admin
+      GRAYLOG_PASSWORD: admin
+      TZ: Asia/Tehran
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      graylog:
+        condition: service_started
+    networks:
+      - power_net
+
+  # 9. Telemetry Service (Modbus Reader & Chart API)
   telemetry:
     build:
       context: ./telemetry_service
+      dockerfile: Dockerfile
     container_name: power_monitoring_telemetry
     restart: unless-stopped
     ports:
       - "8001:8001"
     environment:
       DATABASE_URL: postgresql+asyncpg://postgres:admin@db:5432/power_monitoring
-      REDIS_URL: redis://redis:6379/0
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
       INFLUX_URL: http://influxdb:8086
       INFLUX_TOKEN: super-secret-token-for-power
       INFLUX_ORG: power_org
@@ -191,7 +222,7 @@ services:
     depends_on:
       db:
         condition: service_healthy
-      redis:
+      rabbitmq:
         condition: service_healthy
       influxdb:
         condition: service_healthy
@@ -202,6 +233,7 @@ services:
 
 volumes:
   postgres_data:
+  rabbitmq_data:
   influxdb_data:
   mongodb_data:
   opensearch_data:

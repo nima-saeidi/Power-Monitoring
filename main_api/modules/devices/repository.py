@@ -66,22 +66,12 @@ class DeviceRepository:
                 if parent_node:
                     parent_node["sub_locations"].append(node)
 
-        # اعمال pagination روی ریشه‌های دیتابیس (دانشکده‌ها/پردیس‌ها)
+        # اعمال pagination روی ریشه‌های دیتابیس
         paginated_roots = db_roots[skip: skip + limit]
 
-        # ساخت ریشه مجازی (پدرِ همه)
-        tabriz_university_tree = {
-            "id": 0,  # شناسه مجازی
-            "campus_name": "دانشگاه تبریز",
-            "location_type": "Main University",
-            "parent_id": None,
-            "description": "ریشه اصلی دانشگاه",
-            "address": "تبریز",
-            "sub_locations": paginated_roots
-        }
+        # اصلاح: خود لیست را برگردانید، نه داخل یک براکت دیگر
+        return paginated_roots
 
-        # آن را به صورت یک لیست برمی‌گردانیم تا اگر router شما انتظار لیست دارد (List[LocationOut]) خطا ندهد
-        return [tabriz_university_tree]
 
     # =========================================================
     # GET ROOT LOCATIONS

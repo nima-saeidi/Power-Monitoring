@@ -1,7 +1,7 @@
 from typing import List
 from datetime import datetime
 from core.graylog_client import graylog_client
-from modules.logs.schemas import LogFilterRequest, LogListResponse, LogItem
+from modules.schemas import LogFilterRequest, LogListResponse, LogItem
 
 
 class LoggingService:
@@ -21,7 +21,6 @@ class LoggingService:
         for msg in messages:
             msg_payload = msg.get("message", {})
 
-            # استخراج فیلدهای اصلی
             log_id = msg_payload.get("_id", "")
             ts_str = msg_payload.get("timestamp", datetime.utcnow().isoformat())
             message_text = msg_payload.get("message", "")
@@ -29,7 +28,6 @@ class LoggingService:
             service = msg_payload.get("service_name") or msg_payload.get("facility")
             source = msg_payload.get("source")
 
-            # جداسازی فیلدهای اضافی
             known_keys = {"_id", "timestamp", "message", "level", "service_name", "facility", "source"}
             extra = {k: v for k, v in msg_payload.items() if k not in known_keys}
 

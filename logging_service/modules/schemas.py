@@ -4,7 +4,7 @@ from datetime import datetime
 
 class LogFilterRequest(BaseModel):
     query: Optional[str] = Field(default="*", description="Lucene query e.g. level:3 OR service_name:main_api")
-    range_seconds: int = Field(default=86400, description="Range in seconds, default 24 hours (86400)")
+    range_seconds: int = Field(default=86400, description="Range in seconds, default 24 hours")
     limit: int = Field(default=100, ge=1, le=1000)
     offset: int = Field(default=0, ge=0)
 
