@@ -9,9 +9,9 @@ services:
     container_name: power_monitoring_db
     restart: unless-stopped
     environment:
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: admin
+      POSTGRES_DB: power_monitoring
       TZ: Asia/Tehran
     ports:
       - "5432:5432"
@@ -19,7 +19,7 @@ services:
       - postgres_data:/var/lib/postgresql/data
       - /etc/localtime:/etc/localtime:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      test: ["CMD-SHELL", "pg_isready -U postgres -d power_monitoring"]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -143,22 +143,18 @@ services:
     ports:
       - "8000:8000"
     environment:
-      DATABASE_URL: ${DATABASE_URL}
+      DATABASE_URL: postgresql+asyncpg://postgres:admin@db:5432/power_monitoring
       RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
       INFLUX_URL: http://influxdb:8086
       INFLUX_TOKEN: super-secret-token-for-power
       INFLUX_ORG: power_org
       INFLUX_BUCKET: telemetry_bucket
-      TELEMETRY_SERVICE_URL: ${TELEMETRY_SERVICE_URL}
+      TELEMETRY_SERVICE_URL: http://telemetry:8001
       LOGGING_SERVICE_URL: http://logging:8002
       GRAYLOG_HOST: graylog
       GRAYLOG_PORT: 12201
       GRAYLOG_API_URL: http://graylog:9000
       SECRET_KEY: your_super_secret_key
-      SMTP_SERVER: ${SMTP_SERVER}
-      SMTP_PORT: ${SMTP_PORT}
-      SMTP_USERNAME: ${SMTP_USERNAME}
-      SMTP_PASSWORD: ${SMTP_PASSWORD}
       TZ: Asia/Tehran
     depends_on:
       db:
@@ -211,7 +207,7 @@ services:
     ports:
       - "8001:8001"
     environment:
-      DATABASE_URL: ${DATABASE_URL}
+      DATABASE_URL: postgresql+asyncpg://postgres:admin@db:5432/power_monitoring
       RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
       INFLUX_URL: http://influxdb:8086
       INFLUX_TOKEN: super-secret-token-for-power
