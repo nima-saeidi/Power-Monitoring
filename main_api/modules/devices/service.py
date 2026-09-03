@@ -1,7 +1,8 @@
 from typing import List, Optional
 import pandas as pd
 from fastapi import HTTPException, status
-
+from typing import Union, List
+from fastapi import HTTPException, status
 # Import Repository and Schemas
 from main_api.modules.devices.repository import DeviceRepository
 from main_api.modules.devices.schemas import (
@@ -157,9 +158,18 @@ class DeviceService:
     # FEEDER SERVICES
     # =========================================================
 
-    async def create_feeders(self, data_list: List[FeederCreate]) -> List[FeederResponse]:
+    async def create_feeders(self, data_input: Union[List[FeederCreate], FeederCreate]):
+        # 🟢 مرحله مهم: یکسان‌سازی ورودی
+        # اگر دیتای ورودی لیست نبود (یعنی شیء تکی بود)، آن را داخل یک لیست می‌گذاریم
+        if not isinstance(data_input, list):
+            data_list = [data_input]
+        else:
+            data_list = data_input
+
         created_feeders = []
         post_cache = {}
+
+        # حالا حلقه با خیال راحت کار می‌کند
         for data in data_list:
             if data.post_id not in post_cache:
                 post = await self.repo.get_post_by_id(data.post_id)
@@ -169,8 +179,14 @@ class DeviceService:
                         detail=f"پست مربوط به فیدر '{data.name}' با شناسه {data.post_id} یافت نشد."
                     )
                 post_cache[data.post_id] = post
+
             new_feeder = await self.repo.create_feeder(data)
             created_feeders.append(new_feeder)
+
+        # اگر می‌خواهید وقتی کاربر دیتای تکی فرستاد، خروجی هم تکی باشد:
+        if not isinstance(data_input, list):
+            return created_feeders[0]
+
         return created_feeders
 
     async def get_feeders(self, post_id: Optional[int] = None, skip: int = 0, limit: int = 100) -> List[FeederResponse]:

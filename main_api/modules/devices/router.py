@@ -155,12 +155,21 @@ async def import_feeders_from_excel(file: UploadFile = File(...), service: Devic
         raise HTTPException(status_code=400, detail=f"Error reading the Excel file: {str(e)}")
     return await service.import_feeders_from_excel(df)
 
+from typing import List, Union
+from fastapi import Body, Depends, status
 
-@feeders_router.post("", response_model=FeederResponse, status_code=status.HTTP_201_CREATED,
-                     summary="Create New Feeder")
-async def create_feeder(data: FeederCreate, service: DeviceService = Depends(get_device_service),
-                        current_user=Depends(require_tech_or_admin)):
-    return await service.create_feeder(data)
+@feeders_router.post(
+    "",
+    response_model=Union[List[FeederResponse], FeederResponse],
+    status_code=status.HTTP_201_CREATED,
+    summary="ایجاد فیدر جدید (تکی یا گروهی)"
+)
+async def create_feeder(
+    data: Union[List[FeederCreate], FeederCreate] = Body(...),
+    service: DeviceService = Depends(get_device_service),
+    current_user = Depends(require_tech_or_admin)
+):
+    return await service.create_feeders(data)
 
 
 @feeders_router.get("", response_model=List[FeederResponse], summary="Get All Feeders")

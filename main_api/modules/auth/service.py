@@ -1,20 +1,17 @@
-from datetime import timedelta
-from fastapi import HTTPException, status
+from datetime import datetime, timedelta
+from fastapi import HTTPException, status, BackgroundTasks
 from sqlalchemy.ext.asyncio import AsyncSession
-from main_api.modules.auth.schemas import ForgotPasswordRequest, ResetPasswordRequest
+from jose import jwt, JWTError  # مطمئن شوید pip install python-jose نصب است
+
+from main_api.core.config import settings
+from main_api.core.security import hash_password, verify_password, create_access_token
+from main_api.core.email import send_reset_password_email
 from main_api.modules.auth.repository import UserRepository
 from main_api.modules.auth.schemas import (
     AdminRegisterRequest, LoginRequest, TokenResponse, UserResponse, UserCreate,
-    UserUpdate, UserProfileUpdate, ChangePasswordRequest
+    UserUpdate, UserProfileUpdate, ChangePasswordRequest, ForgotPasswordRequest, ResetPasswordRequest
 )
-from main_api.core.security import hash_password, verify_password, create_access_token
 from main_api.modules.settings.service import SettingService
-
-from datetime import timedelta, datetime
-from jose import jwt, JWTError # مطمئن شوید pip install python-jose نصب است
-from fastapi import BackgroundTasks
-from main_api.core.config import settings
-from main_api.core.email import send_reset_password_email
 
 
 class AuthService:
@@ -58,8 +55,12 @@ class AuthService:
                 detail="حساب کاربری غیرفعال است."
             )
 
-        settings = await SettingService.get_or_create_settings(db)
-        expires_delta = timedelta(minutes=settings.access_token_expire_minutes)
+        db_settings = await SettingService.get_or_create_settings(db)
+
+        # ۱. اصلاح زمان: حذف میکروثانیه برای دقت دقیق ثانیه‌ای
+        now = datetime.utcnow().replace(microsecond=0)
+        expires_delta = timedelta(minutes=db_settings.access_token_expire_minutes)
+        expire_time = now + expires_delta
 
         token = create_access_token(
             data={"sub": str(user.id), "email": user.email, "role": user.role},
@@ -68,6 +69,9 @@ class AuthService:
 
         return TokenResponse(
             access_token=token,
+            token_type="bearer",
+            expires_in=int(expires_delta.total_seconds()),
+            expires_at=expire_time,
             user=UserResponse.model_validate(user)
         )
 

@@ -53,6 +53,8 @@ class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
     user: UserResponse
+    expires_in: int            # مدت زمان اعتبار توکن به ثانیه
+    expires_at: datetime       # زمان دقیق منقضی شدن توکن
 # برای دریافت ایمیل از کاربر
 class ForgotPasswordRequest(BaseModel):
     email: EmailStr = Field(..., description="ایمیل ثبت نامی کاربر")
