@@ -8,11 +8,10 @@ class Settings(BaseSettings):
     # تنظیمات ردیس
     CACHE_URL: str = "redis://127.0.0.1:6379/0"
 
-    # تنظیمات InfluxDB
-    INFLUX_URL: str = "http://localhost:8086"
-    INFLUX_TOKEN: str = "BVYrFxd0cWMf4aSX4U8E0kXQtSJZpoTXDbDl4XA3lvaf8MX1HNPtzqTRp9wBn4fz-Ogj3aDUJ3BA5Uw3wFb9ew=="
-    INFLUX_ORG: str = "sahand"
-    INFLUX_BUCKET: str = "nmo"
+    INFLUX_URL: str = "http://influxdb:8086"
+    INFLUX_TOKEN: str = "super-secret-token-for-power"
+    INFLUX_ORG: str = "power_org"
+    INFLUX_BUCKET: str = "telemetry_bucket"
 
     # تنظیمات سرویس تلمتری
     POLLING_INTERVAL: int = 5
