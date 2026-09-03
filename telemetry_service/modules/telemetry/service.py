@@ -33,26 +33,19 @@ class TelemetryService:
         return await TelemetryRepository.get_latest_by_feeder(feeder_id)
 
     @staticmethod
-    async def get_telemetry_history(feeder_id: str, start_time: str, end_time: str):
-        # مطمئن شوید feeder_id رشته است
-        feeder_id_str = str(feeder_id)
-
-        query = f'''
-        from(bucket: "{settings.INFLUX_BUCKET}")
-          |> range(start: {start_time}, stop: {end_time})
-          |> filter(fn: (r) => r["_measurement"] == "feeder_telemetry")
-          |> filter(fn: (r) => r["feeder_id"] == "{feeder_id_str}")
-          |> pivot(rowKey:["_time"], columnKey: ["_field"], valueColumn: "_value")
-        '''
-
-        result = await influx_client.query_api().query(query=query, org=settings.INFLUX_ORG)
-
-        records = []
-        for table in result:
-            for record in table.records:
-                records.append(record.values)
-
-        return records
+    async def get_telemetry_history(
+        feeder_id: int,
+        start_time: datetime,
+        end_time: datetime,
+        window_period: str = "1m"
+    ) -> List[TelemetryResponse]:
+        """دریافت دیتای تاریخی و گزارش فیدر"""
+        return await TelemetryRepository.get_range_report(
+            feeder_id=feeder_id,
+            start_time=start_time,
+            end_time=end_time,
+            window_period=window_period
+        )
 
     @staticmethod
     async def get_chart_data(
