@@ -6,7 +6,7 @@ from influxdb_client.client.write_api import SYNCHRONOUS
 
 # ۱. تنظیمات اتصال به InfluxDB
 INFLUX_URL = "http://localhost:8086"
-INFLUX_TOKEN = "SecretPassword123!"  # در صورت نیاز توکن واقعی را جایگزین کنید
+INFLUX_TOKEN = "super-secret-token-for-power"  # در صورت نیاز توکن واقعی را جایگزین کنید
 INFLUX_ORG = "power_org"
 INFLUX_BUCKET = "telemetry_bucket"
 
