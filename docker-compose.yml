@@ -1,9 +1,19 @@
+version: "3.8"
+
 networks:
   power_net:
     driver: bridge
 
+volumes:
+  postgres_data:
+  rabbitmq_data:
+  influxdb_data:
+  mongodb_data:
+  opensearch_data:
+  graylog_data:
+
 services:
-  # 1. Database Service (TimescaleDB) - داده‌های رابطه‌ای و تنظیمات
+  # 1. Database Service (TimescaleDB)
   db:
     image: timescale/timescaledb:latest-pg15
     container_name: power_monitoring_db
@@ -26,7 +36,7 @@ services:
     networks:
       - power_net
 
-  # 2. RabbitMQ Service - مدیریت صف و پیام‌ها
+  # 2. RabbitMQ Service
   rabbitmq:
     image: rabbitmq:3-management
     container_name: power_monitoring_rabbitmq
@@ -36,8 +46,8 @@ services:
       RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASS}
       TZ: ${TZ}
     ports:
-      - "5672:5672"     # پورت ارتباطی AMQP
-      - "15672:15672"   # پنل مدیریت تحت وب
+      - "5672:5672"
+      - "15672:15672"
     volumes:
       - rabbitmq_data:/var/lib/rabbitmq
     healthcheck:
@@ -48,7 +58,7 @@ services:
     networks:
       - power_net
 
-  # 3. InfluxDB Service - دیتابیس سری‌زمانی برای تلمتری
+  # 3. InfluxDB Service
   influxdb:
     image: influxdb:2.7-alpine
     container_name: power_monitoring_influxdb
@@ -74,7 +84,7 @@ services:
     networks:
       - power_net
 
-  # 4. MongoDB Service - دیتابیس متادیتا برای Graylog
+  # 4. MongoDB Service for Graylog
   mongodb:
     image: mongo:4.4
     container_name: power_monitoring_mongo
@@ -84,7 +94,7 @@ services:
     networks:
       - power_net
 
-  # 5. OpenSearch Service - ذخیره و جستجوی لاگ‌ها برای Graylog
+  # 5. OpenSearch Service for Graylog
   opensearch:
     image: opensearchproject/opensearch:1.3.14
     container_name: power_opensearch
@@ -95,8 +105,6 @@ services:
       - "discovery.type=single-node"
       - "action.auto_create_index=false"
       - "plugins.security.disabled=true"
-    volumes:
-      - opensearch_data:/usr/share/opensearch/data
     ulimits:
       memlock:
         soft: -1
@@ -104,17 +112,16 @@ services:
       nofile:
         soft: 65536
         hard: 65536
+    volumes:
+      - opensearch_data:/usr/share/opensearch/data
     networks:
       - power_net
 
-  # 6. Graylog Service - مدیریت و مانیتورینگ متمرکز لاگ‌ها
+  # 6. Graylog Service
   graylog:
     image: graylog/graylog:4.3
     container_name: power_monitoring_graylog
     restart: unless-stopped
-    depends_on:
-      - mongodb
-      - opensearch
     environment:
       - GRAYLOG_NODE_ID_FILE=/usr/share/graylog/data/config/node-id
       - GRAYLOG_ROOT_PASSWORD_SHA2=${GRAYLOG_ROOT_PASSWORD_SHA2}
@@ -125,52 +132,44 @@ services:
       - GRAYLOG_MONGODB_URI=mongodb://mongodb:27017/graylog
       - TZ=${TZ}
     ports:
-      - "9000:9000"       # پنل وب و REST API
-      - "12201:12201/udp" # ورودی لاگ GELF UDP
-      - "12201:12201/tcp" # ورودی لاگ GELF TCP
-    volumesdisabled=true"
-    volumes:
-      - opensearch_data:/usr/share/opensearch/data
-    ulimits:
-      memlock:
-        soft: -1
-        hard: -1
-      nofile:
-        soft: 65536
-        hard: 65536
-    networks:
-      - power_net
-
-  # 6. Graylog Service - مدیریت و مانیتورینگ متمرکز لاگ‌ها
-  graylog:
-    image: graylog/graylog:4.3
-    container_name: power_monitoring_graylog
-    restart: unless-stopped
-    depends_on:
-      - mongodb
-      - opensearch
-    environment:
-      - GRAYLOG_NODE_ID_FILE=/usr/share/graylog/data/config/node-id
-      - GRAYLOG_ROOT_PASSWORD_SHA2=${GRAYLOG_ROOT_PASSWORD_SHA2}
-      - GRAYLOG_PASSWORD_SECRET=${GRAYLOG_PASSWORD_SECRET}
-      - GRAYLOG_HTTP_BIND_ADDRESS=0.0.0.0:9000
-      - GRAYLOG_HTTP_EXTERNAL_URI=http://localhost:9000/
-      - GRAYLOG_ELASTICSEARCH_HOSTS=http://opensearch:9200
-      - GRAYLOG_MONGODB_URI=mongodb://mongodb:27017/graylog
-      - TZ=${TZ}
-    ports:
-      - "9000:9000"       # پنل وب و REST API
-      - "12201:12201/udp" # ورودی لاگ GELF UDP
-      - "12201:12201/tcp" # ورودی لاگ GELF TCP
+      - "9000:9000"
+      - "12201:12201/udp"
+      - "12201:12201/tcp"
     volumes:
       - graylog_data:/usr/share/graylog/data
+    depends_on:
+      - mongodb
+      - opensearch
     networks:
       - power_net
 
   # 7. Main API Service
   api:
     build:
-      context:8. Logging Service - ثبت و مدیریت لاگ‌ها از RabbitMQ به Graylog
+      context: ./api_service  # <--- مسیر پوشه سرویس اصلی شما
+      dockerfile: Dockerfile
+    container_name: power_monitoring_api
+    restart: unless-stopped
+    command: uvicorn main:app --host 0.0.0.0 --port 8000
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+      RABBITMQ_URL: amqp://${RABBITMQ_USER}:${RABBITMQ_PASS}@rabbitmq:5672/
+      GRAYLOG_HOST: graylog
+      GRAYLOG_PORT: 12201
+      TZ: ${TZ}
+    depends_on:
+      db:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      graylog:
+        condition: service_started
+    networks:
+      - power_net
+
+  # 8. Logging Service
   logging:
     build:
       context: ./logging_service
@@ -196,7 +195,7 @@ services:
     networks:
       - power_net
 
-  # 9. Telemetry Service (Modbus Reader & Chart API)
+  # 9. Telemetry Service
   telemetry:
     build:
       context: ./telemetry_service
@@ -227,13 +226,7 @@ services:
         condition: service_healthy
       graylog:
         condition: service_started
+      api:
+        condition: service_started
     networks:
       - power_net
-
-volumes:
-  postgres_data:
-  rabbitmq_data:
-  influxdb_data:
-  mongodb_data:
-  opensearch_data:
-  graylog_data:
