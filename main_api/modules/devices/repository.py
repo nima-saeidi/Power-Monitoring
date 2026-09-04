@@ -34,6 +34,18 @@ class DeviceRepository:
         await self.db.refresh(location)
 
         return location
+    # =========================================================
+    # GET FLAT LOCATIONS (بدون ساختار درختی)
+    # =========================================================
+    async def get_all_locations_flat(self, skip: int = 0, limit: int = 100) -> List[Location]:
+        stmt = (
+            select(Location)
+            .order_by(Location.id)
+            .offset(skip)
+            .limit(limit)
+        )
+        result = await self.db.execute(stmt)
+        return list(result.scalars().all())
 
     # =========================================================
     # GET ALL LOCATIONS AS TREE

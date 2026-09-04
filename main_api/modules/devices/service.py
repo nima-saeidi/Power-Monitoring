@@ -22,6 +22,8 @@ class DeviceService:
     # =========================================================
     # LOCATION SERVICES
     # =========================================================
+    async def get_locations_flat(self, skip: int = 0, limit: int = 100):
+        return await self.repo.get_all_locations_flat(skip=skip, limit=limit)
 
     async def create_campus_with_subsections(self, data: CampusWithSubsectionsCreate):
         campus_create_data = LocationCreate(

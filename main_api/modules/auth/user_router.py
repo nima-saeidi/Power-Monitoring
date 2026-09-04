@@ -14,7 +14,8 @@ from main_api.modules.auth.schemas import (
     UserResponse,
     UserCreate,
     UserUpdate,
-    ChangePasswordRequest, ForgotPasswordRequest, ResetPasswordRequest
+    ChangePasswordRequest, ForgotPasswordRequest, ResetPasswordRequest, VerifyCodeRequest, ForgotPasswordResponse,
+    VerifyCodeResponse
 )
 
 user_router = APIRouter(prefix="/users", tags=["User Management"])
@@ -94,24 +95,26 @@ async def get_roles(
     return {"roles": roles}
 
 
-@user_router.post("/forgot-password", status_code=status.HTTP_200_OK, summary="Request Password Reset")
+@user_router.post("/forgot-password", response_model=ForgotPasswordResponse, status_code=status.HTTP_200_OK, summary="Request OTP Code")
 async def forgot_password(
     data: ForgotPasswordRequest,
     background_tasks: BackgroundTasks,
     service: AuthService = Depends(get_auth_service)
 ):
-    """
-    دریافت ایمیل و ارسال لینک حاوی توکن به صورت Background Task
-    """
     return await service.forgot_password(data, background_tasks)
 
+# ۲. مرحله دوم: تایید کد ارسالی
+@user_router.post("/verify-code", response_model=VerifyCodeResponse, status_code=status.HTTP_200_OK, summary="Verify OTP Code")
+async def verify_code(
+    data: VerifyCodeRequest,
+    service: AuthService = Depends(get_auth_service)
+):
+    return await service.verify_reset_code(data)
 
-@user_router.post("/reset-password", status_code=status.HTTP_200_OK, summary="Reset Password using Token")
+# ۳. مرحله سوم: ثبت رمز عبور جدید
+@user_router.post("/reset-password", status_code=status.HTTP_200_OK, summary="Set New Password")
 async def reset_password(
     data: ResetPasswordRequest,
     service: AuthService = Depends(get_auth_service)
 ):
-    """
-    تغییر رمز عبور در صورت معتبر بودن توکن (ارسال شده از سمت فرانت‌اند)
-    """
     return await service.reset_password(data)

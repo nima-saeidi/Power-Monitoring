@@ -56,10 +56,23 @@ class TokenResponse(BaseModel):
     expires_in: int            # مدت زمان اعتبار توکن به ثانیه
     expires_at: datetime       # زمان دقیق منقضی شدن توکن
 # برای دریافت ایمیل از کاربر
-class ForgotPasswordRequest(BaseModel):
-    email: EmailStr = Field(..., description="ایمیل ثبت نامی کاربر")
+from pydantic import BaseModel, EmailStr
 
-# برای ثبت رمز جدید با استفاده از توکن
+class ForgotPasswordRequest(BaseModel):
+    email: EmailStr
+
+class ForgotPasswordResponse(BaseModel):
+    message: str
+    session_token: str  # توکن موقت حاوی هش کد جهت اعتبارسنجی مرحله بعد
+
+class VerifyCodeRequest(BaseModel):
+    code: str
+    session_token: str
+
+class VerifyCodeResponse(BaseModel):
+    message: str
+    reset_token: str  # توکن مجاز برای تغییر رمز
+
 class ResetPasswordRequest(BaseModel):
-    token: str = Field(..., description="توکن ارسال شده به ایمیل")
-    new_password: str = Field(..., min_length=6, max_length=50, description="رمز عبور جدید")
+    reset_token: str
+    new_password: str

@@ -4,6 +4,16 @@ from pydantic.types import UUID4
 
 
 # ----------------- Location Schemas -----------------
+# در انتهای بخش Location Schemas
+class LocationFlatResponse(BaseModel):
+    id: int
+    campus_name: Optional[str] = Field(default=None, validation_alias="name")
+    location_type: Optional[str] = None
+    parent_id: Optional[int] = None
+    description: Optional[str] = None
+    address: Optional[str] = None
+
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
 
 class LocationBase(BaseModel):
     name: str = Field(alias="campus_name")

@@ -14,7 +14,7 @@ from main_api.modules.devices.schemas import (
     FeederCreate, FeederUpdate, FeederResponse,
     LinkCreate, LinkUpdate, LinkResponse,
     LocationCreate, LocationUpdate, LocationResponse, CommandRequest,
-    CampusWithSubsectionsCreate
+    CampusWithSubsectionsCreate, LocationFlatResponse
 )
 from main_api.modules.auth.dependencies import require_any_user, require_tech_or_admin
 
@@ -53,6 +53,22 @@ async def create_location(data: LocationCreate, service: DeviceService = Depends
 async def get_root_locations(service: DeviceService = Depends(get_device_service),
                              current_user=Depends(require_any_user)):
     return await service.get_root_locations()
+
+@locations_router.get(
+    "/flat",
+    response_model=List[LocationFlatResponse],
+    summary="Get All Locations (Flat List)"
+)
+async def get_locations_flat(
+    skip: int = Query(0, ge=0),
+    limit: int = Query(100, ge=1),
+    service: DeviceService = Depends(get_device_service),
+    current_user = Depends(require_any_user)
+):
+    """
+    دریافت لیست ساده و تخت از تمام مکان‌ها بدون ساختار درختی و زیرمجموعه‌ها
+    """
+    return await service.get_locations_flat(skip=skip, limit=limit)
 
 
 @locations_router.get("", response_model=List[LocationResponse], summary="Get All Locations")

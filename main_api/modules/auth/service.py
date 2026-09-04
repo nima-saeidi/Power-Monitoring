@@ -1,15 +1,29 @@
-from datetime import datetime, timedelta
+import random
+from datetime import datetime, timedelta, timezone
 from fastapi import HTTPException, status, BackgroundTasks
 from sqlalchemy.ext.asyncio import AsyncSession
-from jose import jwt, JWTError  # مطمئن شوید pip install python-jose نصب است
+from jose import jwt, JWTError
 
 from main_api.core.config import settings
-from main_api.core.security import hash_password, verify_password, create_access_token
-from main_api.core.email import send_reset_password_email
+from main_api.core.security import (
+    hash_password,
+    verify_password,
+    create_access_token
+)
+from main_api.core.email import send_reset_code_email
 from main_api.modules.auth.repository import UserRepository
 from main_api.modules.auth.schemas import (
-    AdminRegisterRequest, LoginRequest, TokenResponse, UserResponse, UserCreate,
-    UserUpdate, UserProfileUpdate, ChangePasswordRequest, ForgotPasswordRequest, ResetPasswordRequest
+    AdminRegisterRequest,
+    LoginRequest,
+    TokenResponse,
+    UserResponse,
+    UserCreate,
+    UserUpdate,
+    UserProfileUpdate,
+    ChangePasswordRequest,
+    ForgotPasswordRequest,
+    ResetPasswordRequest,
+    VerifyCodeRequest
 )
 from main_api.modules.settings.service import SettingService
 
@@ -29,7 +43,10 @@ class AuthService:
         if data.phone_number:
             existing_phone = await self.repo.get_by_phone_number(data.phone_number)
             if existing_phone:
-                raise HTTPException(status_code=400, detail="این شماره تلفن قبلاً ثبت شده است.")
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="این شماره تلفن قبلاً ثبت شده است."
+                )
 
         hashed_pwd = hash_password(data.password)
         new_user = await self.repo.create_user(
@@ -43,12 +60,22 @@ class AuthService:
 
     async def login(self, data: LoginRequest, db: AsyncSession) -> TokenResponse:
         user = await self.repo.get_by_email(data.email)
-        if not user or not verify_password(data.password, user.hashed_password):
+
+        # ۱. بررسی وجود کاربر
+        if not user:
             raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="ایمیل یا رمز عبور اشتباه است."
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="کاربری با این ایمیل یافت نشد."
             )
 
+        # ۲. بررسی صحت رمز عبور
+        if not verify_password(data.password, user.hashed_password):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="رمز عبور اشتباه است."
+            )
+
+        # ۳. بررسی فعال بودن حساب کاربری
         if not user.is_active:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
@@ -57,8 +84,7 @@ class AuthService:
 
         db_settings = await SettingService.get_or_create_settings(db)
 
-        # ۱. اصلاح زمان: حذف میکروثانیه برای دقت دقیق ثانیه‌ای
-        now = datetime.utcnow().replace(microsecond=0)
+        now = datetime.now(timezone.utc).replace(microsecond=0)
         expires_delta = timedelta(minutes=db_settings.access_token_expire_minutes)
         expire_time = now + expires_delta
 
@@ -123,10 +149,14 @@ class AuthService:
                 raise HTTPException(status_code=400, detail="این شماره تلفن توسط شخص دیگری ثبت شده است.")
             user.phone_number = data.phone_number
 
-        if data.name: user.name = data.name
-        if data.role: user.role = data.role
-        if data.is_active is not None: user.is_active = data.is_active
-        if data.password: user.hashed_password = hash_password(data.password)
+        if data.name:
+            user.name = data.name
+        if data.role:
+            user.role = data.role
+        if data.is_active is not None:
+            user.is_active = data.is_active
+        if data.password:
+            user.hashed_password = hash_password(data.password)
 
         await self.repo.save_changes()
         return UserResponse.model_validate(user)
@@ -153,21 +183,20 @@ class AuthService:
         if not user:
             raise HTTPException(status_code=404, detail="کاربر یافت نشد.")
 
-        # ۱. بررسی صحیح بودن رمز عبور فعلی
+        # بررسی رمز فعلی
         if not verify_password(data.old_password, user.hashed_password):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="رمز عبور فعلی اشتباه است."
             )
 
-        # ۲. بررسی اینکه رمز جدید با رمز قبلی یکسان نباشد
+        # عدم یکسانی رمز جدید و قدیم
         if verify_password(data.new_password, user.hashed_password):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="رمز عبور جدید نمی‌تواند با رمز عبور فعلی یکسان باشد."
             )
 
-        # ۳. هش و ذخیره رمز عبور جدید
         user.hashed_password = hash_password(data.new_password)
         await self.repo.save_changes()
         return {"message": "رمز عبور با موفقیت تغییر یافت."}
@@ -182,39 +211,119 @@ class AuthService:
 
     async def forgot_password(self, data: ForgotPasswordRequest, background_tasks: BackgroundTasks):
         user = await self.repo.get_by_email(data.email)
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="کاربری با این ایمیل یافت نشد."
+            )
 
-        # نکته امنیتی: اگر کاربر نبود، خطای ۴۰۴ نمی‌دهیم تا کسی نتواند ایمیل‌ها را حدس بزند
-        if user:
-            # تولید توکن موقت (مثلاً ۱۵ دقیقه اعتبار)
-            expire = datetime.utcnow() + timedelta(minutes=15)
-            to_encode = {"sub": user.email, "exp": expire, "type": "reset_password"}
-            reset_token = jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
+        # ۱. تولید کد تصادفی ۶ رقمی
+        code = str(random.randint(100000, 999999))
 
-            # ارسال ایمیل به صورت غیرهمگام (Background Task) تا API معطل نشود
-            background_tasks.add_task(send_reset_password_email, user.email, reset_token)
+        # ۲. تولید session_token موقت ۵ دقیقه‌ای
+        expire = datetime.now(timezone.utc) + timedelta(minutes=5)
+        session_token = jwt.encode(
+            {
+                "sub": user.email,
+                "code": code,
+                "type": "otp_session",
+                "exp": expire
+            },
+            settings.SECRET_KEY,
+            algorithm=settings.ALGORITHM
+        )
 
-        return {"message": "اگر ایمیل در سیستم موجود باشد، لینک بازیابی ارسال خواهد شد."}
+        # ۳. ارسال کد به ایمیل در پس‌زمینه
+        background_tasks.add_task(send_reset_code_email, user.email, code)
 
-    async def reset_password(self, data: ResetPasswordRequest):
+        return {
+            "message": "کد تأیید به ایمیل شما ارسال شد.",
+            "session_token": session_token
+        }
+
+    async def verify_reset_code(self, data: VerifyCodeRequest):
+        """
+        بررسی کد ۶ رقمی ارسالی کاربر و صدور reset_token
+        """
         try:
-            # اعتبارسنجی توکن
-            payload = jwt.decode(data.token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
-            email = payload.get("sub")
-            token_type = payload.get("type")
+            payload = jwt.decode(
+                data.session_token,
+                settings.SECRET_KEY,
+                algorithms=[settings.ALGORITHM]
+            )
+            email: str = payload.get("sub")
+            expected_code: str = payload.get("code")
+            token_type: str = payload.get("type")
 
-            if token_type != "reset_password" or email is None:
-                raise HTTPException(status_code=400, detail="توکن نامعتبر است.")
+            if not email or not expected_code or token_type != "otp_session":
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="توکن جلسه نامعتبر است."
+                )
 
         except JWTError:
-            raise HTTPException(status_code=400, detail="توکن منقضی یا نامعتبر است.")
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="توکن جلسه منقضی شده یا نامعتبر است."
+            )
 
-        # پیدا کردن کاربر
+        # بررسی تطابق کد
+        if str(data.code).strip() != str(expected_code).strip():
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="کد تایید وارد شده اشتباه است."
+            )
+
+        # صدور reset_token با اعتبار ۱۰ دقیقه
+        reset_expire = datetime.now(timezone.utc) + timedelta(minutes=10)
+        reset_token = jwt.encode(
+            {
+                "sub": email,
+                "type": "password_reset",
+                "exp": reset_expire
+            },
+            settings.SECRET_KEY,
+            algorithm=settings.ALGORITHM
+        )
+
+        return {
+            "message": "کد تایید شد.",
+            "reset_token": reset_token
+        }
+
+    async def reset_password(self, data: ResetPasswordRequest):
+        """
+        تغییر رمز عبور با استفاده از reset_token معتبر
+        """
+        try:
+            payload = jwt.decode(
+                data.reset_token,
+                settings.SECRET_KEY,
+                algorithms=[settings.ALGORITHM]
+            )
+            email: str = payload.get("sub")
+            token_type: str = payload.get("type")
+
+            if not email or token_type != "password_reset":
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="توکن نامعتبر است."
+                )
+
+        except JWTError:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="توکن بازنشانی رمز عبور منقضی شده یا نامعتبر است."
+            )
+
         user = await self.repo.get_by_email(email)
         if not user:
-            raise HTTPException(status_code=404, detail="کاربر یافت نشد.")
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="کاربر یافت نشد."
+            )
 
-        # تغییر رمز عبور
         user.hashed_password = hash_password(data.new_password)
         await self.repo.save_changes()
 
-        return {"message": "رمز عبور با موفقیت تغییر یافت. اکنون می‌توانید وارد شوید."}
+        return {"message": "رمز عبور با موفقیت تغییر یافت."}
