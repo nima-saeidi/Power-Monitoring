@@ -9,17 +9,17 @@ services:
     container_name: power_monitoring_db
     restart: unless-stopped
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: admin
-      POSTGRES_DB: power_monitoring
-      TZ: Asia/Tehran
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+      TZ: ${TZ}
     ports:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - /etc/localtime:/etc/localtime:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d power_monitoring"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -32,9 +32,9 @@ services:
     container_name: power_monitoring_rabbitmq
     restart: unless-stopped
     environment:
-      RABBITMQ_DEFAULT_USER: guest
-      RABBITMQ_DEFAULT_PASS: guest
-      TZ: Asia/Tehran
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASS}
+      TZ: ${TZ}
     ports:
       - "5672:5672"     # پورت ارتباطی AMQP
       - "15672:15672"   # پنل مدیریت تحت وب
@@ -55,12 +55,12 @@ services:
     restart: unless-stopped
     environment:
       DOCKER_INFLUXDB_INIT_MODE: setup
-      DOCKER_INFLUXDB_INIT_USERNAME: admin
-      DOCKER_INFLUXDB_INIT_PASSWORD: SecretPassword123!
-      DOCKER_INFLUXDB_INIT_ORG: power_org
-      DOCKER_INFLUXDB_INIT_BUCKET: telemetry_bucket
-      DOCKER_INFLUXDB_INIT_ADMIN_TOKEN: super-secret-token-for-power
-      TZ: Asia/Tehran
+      DOCKER_INFLUXDB_INIT_USERNAME: ${INFLUX_USER}
+      DOCKER_INFLUXDB_INIT_PASSWORD: ${INFLUX_PASSWORD}
+      DOCKER_INFLUXDB_INIT_ORG: ${INFLUX_ORG}
+      DOCKER_INFLUXDB_INIT_BUCKET: ${INFLUX_BUCKET}
+      DOCKER_INFLUXDB_INIT_ADMIN_TOKEN: ${INFLUX_TOKEN}
+      TZ: ${TZ}
     ports:
       - "8086:8086"
     volumes:
@@ -117,13 +117,47 @@ services:
       - opensearch
     environment:
       - GRAYLOG_NODE_ID_FILE=/usr/share/graylog/data/config/node-id
-      - GRAYLOG_ROOT_PASSWORD_SHA2=8c6976e5b5410415bde908bd4dee15dfb167a9c873fc4bb8a81f6f2ab448a918
-      - GRAYLOG_PASSWORD_SECRET=some_very_long_secret_key_at_least_16_chars_12345
+      - GRAYLOG_ROOT_PASSWORD_SHA2=${GRAYLOG_ROOT_PASSWORD_SHA2}
+      - GRAYLOG_PASSWORD_SECRET=${GRAYLOG_PASSWORD_SECRET}
       - GRAYLOG_HTTP_BIND_ADDRESS=0.0.0.0:9000
       - GRAYLOG_HTTP_EXTERNAL_URI=http://localhost:9000/
       - GRAYLOG_ELASTICSEARCH_HOSTS=http://opensearch:9200
       - GRAYLOG_MONGODB_URI=mongodb://mongodb:27017/graylog
-      - TZ=Asia/Tehran
+      - TZ=${TZ}
+    ports:
+      - "9000:9000"       # پنل وب و REST API
+      - "12201:12201/udp" # ورودی لاگ GELF UDP
+      - "12201:12201/tcp" # ورودی لاگ GELF TCP
+    volumesdisabled=true"
+    volumes:
+      - opensearch_data:/usr/share/opensearch/data
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+      nofile:
+        soft: 65536
+        hard: 65536
+    networks:
+      - power_net
+
+  # 6. Graylog Service - مدیریت و مانیتورینگ متمرکز لاگ‌ها
+  graylog:
+    image: graylog/graylog:4.3
+    container_name: power_monitoring_graylog
+    restart: unless-stopped
+    depends_on:
+      - mongodb
+      - opensearch
+    environment:
+      - GRAYLOG_NODE_ID_FILE=/usr/share/graylog/data/config/node-id
+      - GRAYLOG_ROOT_PASSWORD_SHA2=${GRAYLOG_ROOT_PASSWORD_SHA2}
+      - GRAYLOG_PASSWORD_SECRET=${GRAYLOG_PASSWORD_SECRET}
+      - GRAYLOG_HTTP_BIND_ADDRESS=0.0.0.0:9000
+      - GRAYLOG_HTTP_EXTERNAL_URI=http://localhost:9000/
+      - GRAYLOG_ELASTICSEARCH_HOSTS=http://opensearch:9200
+      - GRAYLOG_MONGODB_URI=mongodb://mongodb:27017/graylog
+      - TZ=${TZ}
     ports:
       - "9000:9000"       # پنل وب و REST API
       - "12201:12201/udp" # ورودی لاگ GELF UDP
@@ -136,42 +170,7 @@ services:
   # 7. Main API Service
   api:
     build:
-      context: .
-      dockerfile: ./main_api/Dockerfile
-    container_name: power_monitoring_api
-    restart: unless-stopped
-    ports:
-      - "8000:8000"
-    environment:
-      DATABASE_URL: postgresql+asyncpg://postgres:admin@db:5432/power_monitoring
-      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
-      INFLUX_URL: http://influxdb:8086
-      INFLUX_TOKEN: super-secret-token-for-power
-      INFLUX_ORG: power_org
-      INFLUX_BUCKET: telemetry_bucket
-      TELEMETRY_SERVICE_URL: http://telemetry:8001
-      LOGGING_SERVICE_URL: http://logging:8002
-      GRAYLOG_HOST: graylog
-      GRAYLOG_PORT: 12201
-      GRAYLOG_API_URL: http://graylog:9000
-      SECRET_KEY: your_super_secret_key
-      TZ: Asia/Tehran
-    depends_on:
-      db:
-        condition: service_healthy
-      rabbitmq:
-        condition: service_healthy
-      influxdb:
-        condition: service_healthy
-      graylog:
-        condition: service_started
-      telemetry:
-        condition: service_started
-    command: bash -c "alembic -c main_api/alembic.ini upgrade head && uvicorn main_api.main:app --host 0.0.0.0 --port 8000"
-    networks:
-      - power_net
-
-  # 8. Logging Service - ثبت و مدیریت لاگ‌ها از RabbitMQ به Graylog
+      context:8. Logging Service - ثبت و مدیریت لاگ‌ها از RabbitMQ به Graylog
   logging:
     build:
       context: ./logging_service
@@ -182,13 +181,13 @@ services:
     ports:
       - "8002:8002"
     environment:
-      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
+      RABBITMQ_URL: amqp://${RABBITMQ_USER}:${RABBITMQ_PASS}@rabbitmq:5672/
       GRAYLOG_HOST: graylog
       GRAYLOG_PORT: 12201
       GRAYLOG_API_URL: http://graylog:9000/api
-      GRAYLOG_USER: admin
-      GRAYLOG_PASSWORD: admin
-      TZ: Asia/Tehran
+      GRAYLOG_USER: ${GRAYLOG_API_USER}
+      GRAYLOG_PASSWORD: ${GRAYLOG_API_PASSWORD}
+      TZ: ${TZ}
     depends_on:
       rabbitmq:
         condition: service_healthy
@@ -207,18 +206,18 @@ services:
     ports:
       - "8001:8001"
     environment:
-      DATABASE_URL: postgresql+asyncpg://postgres:admin@db:5432/power_monitoring
-      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+      RABBITMQ_URL: amqp://${RABBITMQ_USER}:${RABBITMQ_PASS}@rabbitmq:5672/
       INFLUX_URL: http://influxdb:8086
-      INFLUX_TOKEN: super-secret-token-for-power
-      INFLUX_ORG: power_org
-      INFLUX_BUCKET: telemetry_bucket
+      INFLUX_TOKEN: ${INFLUX_TOKEN}
+      INFLUX_ORG: ${INFLUX_ORG}
+      INFLUX_BUCKET: ${INFLUX_BUCKET}
       MAIN_API_URL: http://api:8000
       POLLING_INTERVAL: 5
       MAX_TELEMETRY_FAILURES: 3
       GRAYLOG_HOST: graylog
       GRAYLOG_PORT: 12201
-      TZ: Asia/Tehran
+      TZ: ${TZ}
     depends_on:
       db:
         condition: service_healthy
