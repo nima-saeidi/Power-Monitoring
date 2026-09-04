@@ -18,11 +18,7 @@ services:
     image: timescale/timescaledb:latest-pg15
     container_name: power_monitoring_db
     restart: unless-stopped
-    environment:
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      POSTGRES_DB: ${POSTGRES_DB}
-      TZ: ${TZ}
+    env_file: .env
     ports:
       - "5432:5432"
     volumes:
@@ -41,10 +37,7 @@ services:
     image: rabbitmq:3-management
     container_name: power_monitoring_rabbitmq
     restart: unless-stopped
-    environment:
-      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER}
-      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASS}
-      TZ: ${TZ}
+    env_file: .env
     ports:
       - "5672:5672"
       - "15672:15672"
@@ -63,14 +56,7 @@ services:
     image: influxdb:2.7-alpine
     container_name: power_monitoring_influxdb
     restart: unless-stopped
-    environment:
-      DOCKER_INFLUXDB_INIT_MODE: setup
-      DOCKER_INFLUXDB_INIT_USERNAME: ${INFLUX_USER}
-      DOCKER_INFLUXDB_INIT_PASSWORD: ${INFLUX_PASSWORD}
-      DOCKER_INFLUXDB_INIT_ORG: ${INFLUX_ORG}
-      DOCKER_INFLUXDB_INIT_BUCKET: ${INFLUX_BUCKET}
-      DOCKER_INFLUXDB_INIT_ADMIN_TOKEN: ${INFLUX_TOKEN}
-      TZ: ${TZ}
+    env_file: .env
     ports:
       - "8086:8086"
     volumes:
@@ -84,7 +70,7 @@ services:
     networks:
       - power_net
 
-  # 4. MongoDB Service for Graylog
+  # 4. MongoDB Service
   mongodb:
     image: mongo:4.4
     container_name: power_monitoring_mongo
@@ -94,7 +80,7 @@ services:
     networks:
       - power_net
 
-  # 5. OpenSearch Service for Graylog
+  # 5. OpenSearch Service
   opensearch:
     image: opensearchproject/opensearch:1.3.14
     container_name: power_opensearch
@@ -122,15 +108,7 @@ services:
     image: graylog/graylog:4.3
     container_name: power_monitoring_graylog
     restart: unless-stopped
-    environment:
-      - GRAYLOG_NODE_ID_FILE=/usr/share/graylog/data/config/node-id
-      - GRAYLOG_ROOT_PASSWORD_SHA2=${GRAYLOG_ROOT_PASSWORD_SHA2}
-      - GRAYLOG_PASSWORD_SECRET=${GRAYLOG_PASSWORD_SECRET}
-      - GRAYLOG_HTTP_BIND_ADDRESS=0.0.0.0:9000
-      - GRAYLOG_HTTP_EXTERNAL_URI=http://localhost:9000/
-      - GRAYLOG_ELASTICSEARCH_HOSTS=http://opensearch:9200
-      - GRAYLOG_MONGODB_URI=mongodb://mongodb:27017/graylog
-      - TZ=${TZ}
+    env_file: .env
     ports:
       - "9000:9000"
       - "12201:12201/udp"
@@ -146,23 +124,20 @@ services:
   # 7. Main API Service
   api:
     build:
-      context: ./api_service  # <--- مسیر پوشه سرویس اصلی شما
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: ./main_api/Dockerfile
     container_name: power_monitoring_api
     restart: unless-stopped
-    command: uvicorn main:app --host 0.0.0.0 --port 8000
+    command: bash -c "alembic -c main_api/alembic.ini upgrade head && uvicorn main_api.main:app --host 0.0.0.0 --port 8000"
     ports:
       - "8000:8000"
-    environment:
-      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
-      RABBITMQ_URL: amqp://${RABBITMQ_USER}:${RABBITMQ_PASS}@rabbitmq:5672/
-      GRAYLOG_HOST: graylog
-      GRAYLOG_PORT: 12201
-      TZ: ${TZ}
+    env_file: .env
     depends_on:
       db:
         condition: service_healthy
       rabbitmq:
+        condition: service_healthy
+      influxdb:
         condition: service_healthy
       graylog:
         condition: service_started
@@ -179,14 +154,7 @@ services:
     command: uvicorn main:app --host 0.0.0.0 --port 8002
     ports:
       - "8002:8002"
-    environment:
-      RABBITMQ_URL: amqp://${RABBITMQ_USER}:${RABBITMQ_PASS}@rabbitmq:5672/
-      GRAYLOG_HOST: graylog
-      GRAYLOG_PORT: 12201
-      GRAYLOG_API_URL: http://graylog:9000/api
-      GRAYLOG_USER: ${GRAYLOG_API_USER}
-      GRAYLOG_PASSWORD: ${GRAYLOG_API_PASSWORD}
-      TZ: ${TZ}
+    env_file: .env
     depends_on:
       rabbitmq:
         condition: service_healthy
@@ -204,19 +172,7 @@ services:
     restart: unless-stopped
     ports:
       - "8001:8001"
-    environment:
-      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
-      RABBITMQ_URL: amqp://${RABBITMQ_USER}:${RABBITMQ_PASS}@rabbitmq:5672/
-      INFLUX_URL: http://influxdb:8086
-      INFLUX_TOKEN: ${INFLUX_TOKEN}
-      INFLUX_ORG: ${INFLUX_ORG}
-      INFLUX_BUCKET: ${INFLUX_BUCKET}
-      MAIN_API_URL: http://api:8000
-      POLLING_INTERVAL: 5
-      MAX_TELEMETRY_FAILURES: 3
-      GRAYLOG_HOST: graylog
-      GRAYLOG_PORT: 12201
-      TZ: ${TZ}
+    env_file: .env
     depends_on:
       db:
         condition: service_healthy
