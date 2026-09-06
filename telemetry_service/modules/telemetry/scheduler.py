@@ -3,65 +3,116 @@ import json
 import logging
 from datetime import datetime, timezone
 import httpx
+import aio_pika
 
-# ایمپورت‌های پروژه
+# ایمپورت تنظیمات و ماژول‌ها
 from core.config import settings
 from modules.telemetry.modbus_client import ModbusReader
-from modules.telemetry.schemas import TelemetryCreate, DeviceAlertSchema
-from modules.telemetry.service import TelemetryService
 
 # تنظیمات لاگر
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+logger = logging.getLogger("telemetry_scheduler")
 
 
 class TelemetryScheduler:
     def __init__(self):
         self.is_running = False
-        # ذخیره تسک‌ها به همراه کانفیگ آن‌ها بر اساس feeder_id
+        # نگهداری تسک‌ها و تنظیمات بر اساس feeder_id
         self._tasks: dict[int, asyncio.Task] = {}
         self._task_configs: dict[int, dict] = {}
         self._sync_task: asyncio.Task | None = None
 
+        # مدیریت اتصال پایدار RabbitMQ
+        self._rmq_connection: aio_pika.abc.AbstractRobustConnection | None = None
+        self._rmq_channel: aio_pika.abc.AbstractChannel | None = None
+        self._telemetry_exchange: aio_pika.abc.AbstractExchange | None = None
+
+    async def _init_rabbitmq(self):
+        """راه‌اندازی اتصال و Exchange در RabbitMQ"""
+        try:
+            rabbitmq_url = getattr(settings, "RABBITMQ_URL", "amqp://guest:guest@rabbitmq:5672/")
+            exchange_name = getattr(settings, "TELEMETRY_EXCHANGE", "telemetry_events")
+
+            self._rmq_connection = await aio_pika.connect_robust(rabbitmq_url)
+            self._rmq_channel = await self._rmq_connection.channel()
+
+            self._telemetry_exchange = await self._rmq_channel.declare_exchange(
+                name=exchange_name,
+                type=aio_pika.ExchangeType.TOPIC,
+                durable=True
+            )
+            logger.info(f"✅ RabbitMQ publisher connected. Exchange: '{exchange_name}'")
+        except Exception as e:
+            logger.error(f"❌ Failed to connect to RabbitMQ: {e}", exc_info=True)
+            raise
+
+    async def _publish_event(self, routing_key: str, payload: dict):
+        """ارسال امن پیام به Exchange در RabbitMQ"""
+        if not self._telemetry_exchange:
+            logger.error("RabbitMQ exchange is not ready. Message dropped.")
+            return
+
+        try:
+            message_body = json.dumps(payload, default=str).encode("utf-8")
+            message = aio_pika.Message(
+                body=message_body,
+                content_type="application/json",
+                delivery_mode=aio_pika.DeliveryMode.PERSISTENT
+            )
+            await self._telemetry_exchange.publish(message, routing_key=routing_key)
+        except Exception as e:
+            logger.error(f"❌ Error publishing event to {routing_key}: {e}")
+
     async def handle_success(self, feeder_id: int, values: dict):
-        """پردازش و تفکیک ۵ پارامتر الکتریکی خوانده شده از رجیسترهای داینامیک و ذخیره در دیتابیس"""
+        """پردازش ۵ پارامتر الکتریکی و ارسال پیام Event به RabbitMQ برای ذخیره‌سازی سری‌زمانی"""
         active_power_val = float(values.get('active_power', 0.0))
         reactive_power_val = float(values.get('reactive_power', 0.0))
         voltage_val = float(values.get('voltage', 0.0))
         current_val = float(values.get('current', 0.0))
         power_factor_val = float(values.get('power_factor', 0.0))
+        now_utc = datetime.now(timezone.utc).isoformat()
 
         logger.info(
             f"📊 Feeder {feeder_id} Data | "
-            f"Active Power: {active_power_val:.2f} W, "
-            f"Reactive Power: {reactive_power_val:.2f} VAr, "
-            f"Voltage: {voltage_val:.2f} V, "
-            f"Current: {current_val:.2f} A, "
-            f"Power Factor: {power_factor_val:.2f}"
+            f"Active: {active_power_val:.2f} W | "
+            f"Reactive: {reactive_power_val:.2f} VAr | "
+            f"V: {voltage_val:.2f} V | "
+            f"I: {current_val:.2f} A | "
+            f"PF: {power_factor_val:.2f}"
         )
 
-        telemetry_in = TelemetryCreate(
-            feeder_id=feeder_id,
-            active_power=active_power_val,
-            reactive_power=reactive_power_val,
-            voltage=voltage_val,
-            current=current_val,
-            power_factor=power_factor_val,
-            timestamp=datetime.now(timezone.utc)
-        )
+        payload = {
+            "feeder_id": feeder_id,
+            "active_power": active_power_val,
+            "reactive_power": reactive_power_val,
+            "voltage": voltage_val,
+            "current": current_val,
+            "power_factor": power_factor_val,
+            "timestamp": now_utc
+        }
 
-        await TelemetryService.process_and_store(telemetry_in)
+        # انتشار داده برای مصرف در timeseries_storage_service
+        await self._publish_event(routing_key="telemetry.metric", payload=payload)
 
     async def handle_failure(self, feeder_id: int, current_failures: int, error_msg: str):
-        """عملیات در صورت عدم پاسخگویی تجهیز"""
+        """ارسال رویداد خطا/هشدار در صورت عدم پاسخگویی تجهیز به صف رخدادها"""
         logger.warning(
             f"⚠️ Feeder ID {feeder_id} failed to respond. Failures: {current_failures} | Error: {error_msg}"
         )
 
+        # انتشار لاگ یا آلرت تجهیز برای سیستم مانیتورینگ/لاگینگ
+        alert_payload = {
+            "feeder_id": feeder_id,
+            "failures_count": current_failures,
+            "error_message": error_msg,
+            "timestamp": datetime.now(timezone.utc).isoformat()
+        }
+        await self._publish_event(routing_key="telemetry.alert.device_offline", payload=alert_payload)
+
     async def poll_device(
-        self, feeder_id: int, device_ip: str, port: int, modbus_address: int, polling_interval: int, registers: dict
+            self, feeder_id: int, device_ip: str, port: int, modbus_address: int, polling_interval: int, registers: dict
     ):
-        """پایش مداوم یک فیدر"""
+        """پایش مداوم و ناهمگام یک فیدر با هندل کردن کامل خطاها"""
         reader = ModbusReader(host=device_ip, port=port)
         max_failures = getattr(settings, "MAX_TELEMETRY_FAILURES", 3)
         current_fails = 0
@@ -91,12 +142,12 @@ class TelemetryScheduler:
                         await self.handle_failure(feeder_id, current_fails, "Failed to read one or more registers.")
 
                 except asyncio.CancelledError:
-                    # توقف تمیز تسک هنگام لغو
                     raise
                 except Exception as e:
                     current_fails += 1
                     await self.handle_failure(feeder_id, current_fails, f"Modbus Read Error: {str(e)}")
 
+                # در صورت خطای متوالی، فاصله زمانی جهت جلوگیری از Spam افزایش می‌یابد
                 if current_fails >= max_failures:
                     await asyncio.sleep(60)
                 else:
@@ -109,7 +160,7 @@ class TelemetryScheduler:
 
     async def get_active_feeders_from_api(self) -> list[dict]:
         """واکشی لیست فیدرهای فعال از main_api"""
-        main_api_url = getattr(settings, "MAIN_API_URL", "http://127.0.0.1:8000").rstrip("/")
+        main_api_url = getattr(settings, "MAIN_API_URL", "http://main_api:8000").rstrip("/")
         url = f"{main_api_url}/telemetry/active-feeders"
         try:
             async with httpx.AsyncClient() as client:
@@ -124,9 +175,9 @@ class TelemetryScheduler:
         return []
 
     async def _sync_feeders_loop(self):
-        """حلقه دوره‌ای برای همگام‌سازی فیدرهای فعال (افزودن و حذف خودکار بدون نیاز به ری‌استارت)"""
+        """حلقه همگام‌سازی دوره‌ای فیدرهای فعال بدون نیاز به ری‌استارت سرویس"""
         default_interval = getattr(settings, "POLLING_INTERVAL", 300)
-        sync_interval = getattr(settings, "FEEDER_SYNC_INTERVAL", 1000)  # هر ۱۰ ثانیه چک می‌کند
+        sync_interval = getattr(settings, "FEEDER_SYNC_INTERVAL", 10)  # بررسی هر ۱۰ ثانیه
 
         while self.is_running:
             try:
@@ -137,7 +188,11 @@ class TelemetryScheduler:
                     feeder_id = feeder.get("feeder_id") or feeder.get("id")
                     ip = feeder.get("ip_address")
                     port = feeder.get("port", 502)
-                    modbus_addr = feeder.get("slave_id") if feeder.get("slave_id") is not None else feeder.get("modbus_address", 1)
+                    modbus_addr = (
+                        feeder.get("slave_id")
+                        if feeder.get("slave_id") is not None
+                        else feeder.get("modbus_address", 1)
+                    )
                     interval = feeder.get("scan_interval") or default_interval
 
                     if not (feeder_id and ip):
@@ -161,14 +216,14 @@ class TelemetryScheduler:
                         "registers": registers
                     }
 
-                    # ۱. بررسی تغییر کانفیگ فیدر موجود
+                    # ۱. ری‌استارت تسک در صورت تغییر کانفیگ
                     if feeder_id in self._tasks:
                         if self._task_configs.get(feeder_id) != config_fingerprint:
                             logger.info(f"🔄 Config changed for Feeder ID {feeder_id}. Restarting task...")
                             self._tasks[feeder_id].cancel()
                             self._tasks.pop(feeder_id, None)
 
-                    # ۲. افزودن فیدر جدید یا تسک بازنشانی‌شده
+                    # ۲. شروع تسک جدید یا بازنشانی‌شده
                     if feeder_id not in self._tasks or self._tasks[feeder_id].done():
                         task = asyncio.create_task(
                             self.poll_device(feeder_id, ip, port, modbus_addr, interval, registers)
@@ -176,10 +231,11 @@ class TelemetryScheduler:
                         self._tasks[feeder_id] = task
                         self._task_configs[feeder_id] = config_fingerprint
                         logger.info(
-                            f"➕ Started monitor for Feeder ID {feeder_id} at {ip}:{port} (Modbus Slave ID: {modbus_addr}) every {interval}s."
+                            f"➕ Started monitor for Feeder ID {feeder_id} at {ip}:{port} "
+                            f"(Slave ID: {modbus_addr}) every {interval}s."
                         )
 
-                # ۳. حذف فیدرهایی که دیگر فعال نیستند یا حذف شده‌اند
+                # ۳. حذف فیدرهای غیرفعال شده
                 stale_ids = set(self._tasks.keys()) - current_active_ids
                 for stale_id in stale_ids:
                     logger.info(f"➖ Feeder ID {stale_id} is no longer active. Stopping task...")
@@ -194,13 +250,14 @@ class TelemetryScheduler:
             await asyncio.sleep(sync_interval)
 
     async def start(self):
-        """راه‌اندازی ورکر و آغاز حلقه همگام‌سازی"""
+        """راه‌اندازی کامل سرویس اسکجولر و اتصال به پیام‌رسان"""
         self.is_running = True
         logger.info("🚀 Starting Dynamic Telemetry Scheduler...")
+        await self._init_rabbitmq()
         self._sync_task = asyncio.create_task(self._sync_feeders_loop())
 
     async def stop(self):
-        """توقف کامل و ایمن تمام تسک‌ها"""
+        """توقف ایمن و بستن تسک‌ها و کانکشن‌های باز"""
         logger.info("🛑 Stopping Telemetry Scheduler...")
         self.is_running = False
 
@@ -220,4 +277,9 @@ class TelemetryScheduler:
 
         self._tasks.clear()
         self._task_configs.clear()
+
+        if self._rmq_connection and not self._rmq_connection.is_closed:
+            await self._rmq_connection.close()
+            logger.info("RabbitMQ connection closed.")
+
         logger.info("All telemetry tasks cleanly stopped.")

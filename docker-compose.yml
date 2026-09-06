@@ -13,7 +13,7 @@ volumes:
   graylog_data:
 
 services:
-  # 1. Database Service (TimescaleDB)
+  # 1. Database Service (TimescaleDB / PostgreSQL)
   db:
     image: timescale/timescaledb:latest-pg15
     container_name: power_monitoring_db
@@ -144,7 +144,41 @@ services:
     networks:
       - power_net
 
-  # 8. Logging Service
+  # 8. Postgres Storage Service (RabbitMQ Consumer / DB Writer)
+  postgres_storage:
+    build:
+      context: ./postgres_storage_service
+      dockerfile: Dockerfile
+    container_name: power_monitoring_postgres_storage
+    restart: unless-stopped
+    command: python main.py
+    env_file: .env
+    depends_on:
+      db:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - power_net
+
+  # 9. Timeseries Storage Service (RabbitMQ Consumer / InfluxDB Writer)
+  timeseries_storage:
+    build:
+      context: ./timeseries_storage_service
+      dockerfile: Dockerfile
+    container_name: power_monitoring_timeseries_storage
+    restart: unless-stopped
+    command: python main.py
+    env_file: .env
+    depends_on:
+      influxdb:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - power_net
+
+  # 10. Logging Service
   logging:
     build:
       context: ./logging_service
@@ -163,7 +197,7 @@ services:
     networks:
       - power_net
 
-  # 9. Telemetry Service
+  # 11. Telemetry Service (Poller -> RabbitMQ Publisher)
   telemetry:
     build:
       context: ./telemetry_service
@@ -174,14 +208,8 @@ services:
       - "8001:8001"
     env_file: .env
     depends_on:
-      db:
-        condition: service_healthy
       rabbitmq:
         condition: service_healthy
-      influxdb:
-        condition: service_healthy
-      graylog:
-        condition: service_started
       api:
         condition: service_started
     networks:

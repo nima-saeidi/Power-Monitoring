@@ -5,7 +5,10 @@ from datetime import datetime
 
 # ⚠️ بسیار مهم: Base را باید از فایل database.py همین سرویس (postgres_storage_service) ایمپورت کنید
 # به هیچ وجه نباید از main_api چیزی ایمپورت شود.
-from .database import Base
+from core.database import Base
+
+
+
 
 
 class Location(Base):

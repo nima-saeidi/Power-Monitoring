@@ -49,20 +49,23 @@ async def lifespan(app: FastAPI):
     # -------- Startup --------
     logger.info("🚀 Main API is starting up...")
 
-    # اتصال به RabbitMQ جهت ارسال لاگ‌ها و انتشار رویدادهای مانیتورینگ
+    # اتصال به RabbitMQ جهت ارسال لاگ‌ها و انتشار رویدادهای CQRS
     try:
         await message_broker.connect()
         logger.info("✅ Connected to RabbitMQ message broker successfully.")
 
-        # لاگ سیستمی آغاز به کار
-        await send_log_to_rabbitmq(
-            level="INFO",
-            message="Main API service started successfully.",
-            service="main_api",
-            extra_data={"status": "online"}
-        )
+        try:
+            await send_log_to_rabbitmq(
+                level="INFO",
+                message="Main API service started successfully.",
+                service="main_api",
+                extra_data={"status": "online"}
+            )
+        except Exception as log_err:
+            logger.warning(f"⚠️ Failed to send startup log to RabbitMQ: {log_err}")
+
     except Exception as e:
-        logger.error(f"❌ Failed to connect to RabbitMQ broker: {e}", exc_info=True)
+        logger.error(f"❌ Failed to connect to RabbitMQ broker on startup: {e}", exc_info=True)
 
     yield  # برنامه در حال سرویس‌دهی است
 
@@ -71,12 +74,16 @@ async def lifespan(app: FastAPI):
 
     # بستن ایمن ارتباط با RabbitMQ
     try:
-        await send_log_to_rabbitmq(
-            level="INFO",
-            message="Main API service is shutting down.",
-            service="main_api",
-            extra_data={"status": "offline"}
-        )
+        try:
+            await send_log_to_rabbitmq(
+                level="INFO",
+                message="Main API service is shutting down.",
+                service="main_api",
+                extra_data={"status": "offline"}
+            )
+        except Exception as log_err:
+            logger.warning(f"⚠️ Failed to send shutdown log to RabbitMQ: {log_err}")
+
         await message_broker.close()
         logger.info("✅ RabbitMQ connection closed cleanly.")
     except Exception as e:
@@ -116,7 +123,8 @@ app.add_middleware(
 # ۰. مدیریت خطای Rate Limit (کد 429)
 @app.exception_handler(RateLimitExceeded)
 async def custom_rate_limit_handler(request: Request, exc: RateLimitExceeded):
-    logger.warning(f"Rate limit exceeded for IP: {request.client.host if request.client else 'unknown'}")
+    client_ip = request.client.host if request.client else "unknown"
+    logger.warning(f"Rate limit exceeded for IP: {client_ip}")
     return JSONResponse(
         status_code=status.HTTP_429_TOO_MANY_REQUESTS,
         content={
@@ -180,14 +188,17 @@ async def http_exception_handler(request: Request, exc: StarletteHTTPException):
 @app.exception_handler(IntegrityError)
 async def sqlalchemy_integrity_error_handler(request: Request, exc: IntegrityError):
     orig_error = str(exc.orig) if hasattr(exc, "orig") else str(exc)
-    logger.error(f"Database IntegrityError: {orig_error}")
+    logger.error(f"Database IntegrityError on {request.url.path}: {orig_error}")
 
-    await send_log_to_rabbitmq(
-        level="ERROR",
-        message=f"Database Integrity Error: {orig_error}",
-        service="main_api",
-        extra_data={"path": request.url.path}
-    )
+    try:
+        await send_log_to_rabbitmq(
+            level="ERROR",
+            message=f"Database Integrity Error: {orig_error}",
+            service="main_api",
+            extra_data={"path": request.url.path, "method": request.method}
+        )
+    except Exception as log_err:
+        logger.warning(f"⚠️ Could not send error log to RabbitMQ: {log_err}")
 
     return JSONResponse(
         status_code=status.HTTP_400_BAD_REQUEST,
@@ -202,7 +213,7 @@ async def sqlalchemy_integrity_error_handler(request: Request, exc: IntegrityErr
 # ۴. مدیریت سایر خطاهای دیتابیس (SQLAlchemyError)
 @app.exception_handler(SQLAlchemyError)
 async def sqlalchemy_general_error_handler(request: Request, exc: SQLAlchemyError):
-    logger.error(f"Database Error: {str(exc)}", exc_info=True)
+    logger.error(f"Database Error on {request.url.path}: {str(exc)}", exc_info=True)
     return JSONResponse(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
         content={
@@ -218,12 +229,15 @@ async def sqlalchemy_general_error_handler(request: Request, exc: SQLAlchemyErro
 async def global_exception_handler(request: Request, exc: Exception):
     logger.error(f"Unhandled Exception on {request.url.path}: {str(exc)}", exc_info=True)
 
-    await send_log_to_rabbitmq(
-        level="CRITICAL",
-        message=f"Unhandled 500 Exception: {str(exc)}",
-        service="main_api",
-        extra_data={"path": request.url.path, "method": request.method}
-    )
+    try:
+        await send_log_to_rabbitmq(
+            level="CRITICAL",
+            message=f"Unhandled 500 Exception: {str(exc)}",
+            service="main_api",
+            extra_data={"path": request.url.path, "method": request.method}
+        )
+    except Exception as log_err:
+        logger.warning(f"⚠️ Could not send critical log to RabbitMQ: {log_err}")
 
     return JSONResponse(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -242,7 +256,7 @@ async def global_exception_handler(request: Request, exc: Exception):
 @app.get("/health", tags=["System / Monitoring"], summary="بررسی سلامت سرویس")
 async def health_check():
     """بررسی وضعیت کارکرد Main API و اتصال به RabbitMQ"""
-    broker_connected = message_broker.is_connected if hasattr(message_broker, "is_connected") else True
+    broker_connected = getattr(message_broker, "is_connected", False)
     return {
         "status": "healthy" if broker_connected else "degraded",
         "service": "main_api",
@@ -253,13 +267,20 @@ async def health_check():
 @app.post("/test-log", tags=["System / Testing"], summary="ارسال لاگ تستی")
 async def create_test_log(message: str = "Test log event", level: str = "INFO"):
     """ارسال دستی لاگ تستی به صف RabbitMQ جهت بررسی کارکرد سرویس لاگینگ"""
-    await send_log_to_rabbitmq(
-        level=level,
-        message=message,
-        service="main_api",
-        extra_data={"action": "manual_test"}
-    )
-    return {"status": "success", "message": "Log sent to queue"}
+    try:
+        await send_log_to_rabbitmq(
+            level=level,
+            message=message,
+            service="main_api",
+            extra_data={"action": "manual_test"}
+        )
+        return {"status": "success", "message": "Log sent to queue successfully"}
+    except Exception as e:
+        logger.error(f"Failed to send test log: {e}")
+        return JSONResponse(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            content={"status": "error", "message": f"Could not dispatch log: {str(e)}"}
+        )
 
 
 # =======================================================
