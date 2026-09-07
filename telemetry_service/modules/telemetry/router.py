@@ -106,7 +106,7 @@ async def get_telemetry_chart(
             stop.replace("Z", "+00:00")
         )
 
-    return await TelemetryRepository.get_chart_data(
+    return await TelemetryService.get_chart_data(
         feeder_id=feeder_id,
         start_time=start_time,
         end_time=end_time,
