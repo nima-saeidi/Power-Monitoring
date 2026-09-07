@@ -78,42 +78,37 @@ async def get_feeder_history(
 
 from modules.telemetry.schemas import TelemetryCreate, TelemetryResponse, TelemetryChartResponse
 
-@router.get("/chart/{feeder_id}", response_model=TelemetryChartResponse)
-async def get_feeder_chart_data(
+@router.get(
+    "/telemetry/chart/{feeder_id}",
+    response_model=TelemetryChartResponse,
+)
+async def get_telemetry_chart(
     feeder_id: int,
-    start_time: Optional[datetime] = Query(
-        default=None,
-        description="زمان شروع (پیش‌فرض: ۲۴ ساعت گذشته)"
-    ),
-    end_time: Optional[datetime] = Query(
-        default=None,
-        description="زمان پایان (پیش‌فرض: اکنون)"
-    ),
-    window: str = Query(
-        default="5m",
-        regex="^(10s|30s|1m|5m|15m|1h|1d)$",
-        description="دوره فشرده‌سازی داده‌ها"
-    )
+    start: Optional[str] = Query(default="-30d"),
+    stop: Optional[str] = Query(default="now()"),
+    window: str = Query(default="5m"),
 ):
-    """
-    دریافت داده‌های تفکیک‌شده بر اساس عنوان، مقادیر و آرایه زمان جهت استفاده مستقیم در کتابخانه‌های نمودار فرانت‌اند (مانند ApexCharts، Chart.js یا Highcharts)
-    """
     now = datetime.now(timezone.utc)
-    if not end_time:
-        end_time = now
-    if not start_time:
-        start_time = end_time - timedelta(hours=24)
 
-    if start_time >= end_time:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="start_time must be before end_time"
+    # تبدیل start
+    if start in (None, "", "-30d"):
+        start_time = now - timedelta(days=30)
+    else:
+        start_time = datetime.fromisoformat(
+            start.replace("Z", "+00:00")
         )
 
-    chart_data = await TelemetryService.get_chart_data(
+    # تبدیل stop
+    if stop in (None, "", "now()"):
+        end_time = now
+    else:
+        end_time = datetime.fromisoformat(
+            stop.replace("Z", "+00:00")
+        )
+
+    return await TelemetryRepository.get_chart_data(
         feeder_id=feeder_id,
         start_time=start_time,
         end_time=end_time,
-        window_period=window
+        window_period=window,
     )
-    return chart_data
