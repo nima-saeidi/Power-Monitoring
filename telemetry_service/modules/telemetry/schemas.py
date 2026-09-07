@@ -1,59 +1,165 @@
 from datetime import datetime, timezone
-from typing import Optional, List
-from pydantic import BaseModel, ConfigDict, Field
+from typing import Dict, List, Optional, Union
 
-from pydantic import BaseModel
-from typing import List, Dict, Optional
-from datetime import datetime
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class TelemetryBase(BaseModel):
-    """مدل پایه داده‌های ۵ گانه الکتریکی فیدر"""
-    feeder_id: int
-    post_id: Optional[int] = None
-    voltage: float = Field(default=0.0, description="ولتاژ (V)")
-    current: float = Field(default=0.0, description="جریان (A)")
-    active_power: float = Field(default=0.0, description="توان اکتیو (kW)")
-    reactive_power: float = Field(default=0.0, description="توان راکتیو (kVAR)")
-    power_factor: float = Field(default=1.0, description="ضریب توان (PF)")
-    frequency: Optional[float] = Field(default=50.0, description="فرکانس (Hz)")
+    """
+    مدل پایه داده‌های الکتریکی فیدر.
+    """
+
+    feeder_id: int = Field(
+        ...,
+        description="شناسه فیدر",
+    )
+
+    post_id: Optional[str] = Field(
+        default=None,
+        description="شناسه پست، مانند POST_1",
+    )
+
+    voltage: float = Field(
+        default=0.0,
+        description="ولتاژ برحسب ولت",
+    )
+
+    current: float = Field(
+        default=0.0,
+        description="جریان برحسب آمپر",
+    )
+
+    active_power: float = Field(
+        default=0.0,
+        description="توان اکتیو برحسب کیلووات",
+    )
+
+    reactive_power: float = Field(
+        default=0.0,
+        description="توان راکتیو برحسب کیلووار",
+    )
+
+    power_factor: float = Field(
+        default=1.0,
+        description="ضریب توان",
+    )
+
+    frequency: Optional[float] = Field(
+        default=50.0,
+        description="فرکانس برحسب هرتز",
+    )
 
 
 class TelemetryCreate(TelemetryBase):
-    """مدل ورودی جهت ثبت در InfluxDB"""
+    """
+    مدل ورودی برای ثبت داده در InfluxDB.
+    """
+
     timestamp: Optional[datetime] = Field(
-        default_factory=lambda: datetime.now(timezone.utc)
+        default_factory=lambda: datetime.now(timezone.utc),
+        description="زمان ثبت داده",
     )
 
 
 class TelemetryResponse(TelemetryBase):
-    """مدل خروجی برای وب‌سوکت، API و کلاینت‌ها"""
-    timestamp: datetime
+    """
+    مدل خروجی برای API، وب‌سوکت و کلاینت‌ها.
+    """
 
-    model_config = ConfigDict(from_attributes=True)
+    timestamp: datetime = Field(
+        ...,
+        description="زمان داده",
+    )
+
+    model_config = ConfigDict(
+        from_attributes=True,
+    )
 
 
 class TelemetryReportQuery(BaseModel):
-    """فیلترهای گزارش‌گیری بازه زمانی"""
-    feeder_id: int
-    start_time: datetime
-    end_time: Optional[datetime] = Field(default_factory=lambda: datetime.now(timezone.utc))
-    window_period: Optional[str] = Field(default="1m", description="بازه میانگین‌گیری (e.g., 10s, 1m, 5m, 1h)")
+    """
+    فیلترهای گزارش‌گیری بازه زمانی.
+    """
+
+    feeder_id: int = Field(
+        ...,
+        description="شناسه فیدر",
+    )
+
+    start_time: datetime = Field(
+        ...,
+        description="زمان شروع گزارش",
+    )
+
+    end_time: Optional[datetime] = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+        description="زمان پایان گزارش",
+    )
+
+    window_period: str = Field(
+        default="1m",
+        description="بازه میانگین‌گیری؛ مانند 10s، 1m، 5m یا 1h",
+    )
 
 
 class DeviceAlertSchema(BaseModel):
-    """مدل انتشار آلرت‌های وضعیت تجهیزات"""
-    feeder_id: int
-    status: str  # offline | deactivated | online
-    failures: int
-    reason: str
-    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    """
+    مدل انتشار هشدارهای وضعیت تجهیزات.
+    """
+
+    feeder_id: int = Field(
+        ...,
+        description="شناسه فیدر",
+    )
+
+    status: str = Field(
+        ...,
+        description="وضعیت تجهیز: offline، deactivated یا online",
+    )
+
+    failures: int = Field(
+        default=0,
+        description="تعداد خطاها",
+    )
+
+    reason: str = Field(
+        ...,
+        description="علت هشدار",
+    )
+
+    timestamp: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+        description="زمان هشدار",
+    )
 
 
 class ChartDataPoint(BaseModel):
-    timestamp: datetime | str
-    value: Optional[float]
+    """
+    یک نقطه از داده‌های نمودار.
+    """
+
+    timestamp: Union[datetime, str] = Field(
+        ...,
+        description="زمان نقطه",
+    )
+
+    value: Optional[float] = Field(
+        default=None,
+        description="مقدار نقطه",
+    )
+
 
 class TelemetryChartResponse(BaseModel):
-    feeder_id: int
-    series: Dict[str, List[ChartDataPoint]]
+    """
+    پاسخ داده‌های نمودار تله‌متری.
+    """
+
+    feeder_id: int = Field(
+        ...,
+        description="شناسه فیدر",
+    )
+
+    series: Dict[str, List[ChartDataPoint]] = Field(
+        default_factory=dict,
+        description="سری‌های زمانی به تفکیک پارامتر",
+    )
