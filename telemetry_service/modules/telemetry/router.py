@@ -79,7 +79,7 @@ async def get_feeder_history(
 from modules.telemetry.schemas import TelemetryCreate, TelemetryResponse, TelemetryChartResponse
 
 @router.get(
-    "/telemetry/chart/{feeder_id}",
+    "/chart/{feeder_id}",
     response_model=TelemetryChartResponse,
 )
 async def get_telemetry_chart(
