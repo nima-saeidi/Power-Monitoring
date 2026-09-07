@@ -1,6 +1,7 @@
 from typing import List
+from datetime import datetime, timezone
+from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
 # مدل‌های سیستم
@@ -60,13 +61,25 @@ class TelemetryRepository:
 
     async def create_record(self, data: TelemetryCreate) -> TimeseriesData:
         """
-        ذخیره داده تله‌متری جدید در دیتابیس رابطه ای.
+        ذخیره داده تله‌متری جدید در دیتابیس رابطه‌ای.
         """
+        # استخراج ایمن شناسه فیدر (سازگار با هر دو فیلد feeder_id یا device_id)
+        raw_id = getattr(data, "feeder_id", getattr(data, "device_id", None))
+        try:
+            target_feeder_id = int(raw_id) if raw_id is not None else 1
+        except (ValueError, TypeError):
+            target_feeder_id = 1
+
+        # تعیین زمان ثبت
+        ts = getattr(data, "timestamp", None)
+        if ts is None:
+            ts = func.now()
+
         db_record = TimeseriesData(
-            feeder_id=int(data.device_id) if str(data.device_id).isdigit() else 1,
+            feeder_id=target_feeder_id,
             key="telemetry_packet",
-            value=data.active_power,
-            timestamp=func.now()
+            value=getattr(data, "active_power", 0.0),
+            timestamp=ts
         )
 
         self.session.add(db_record)
