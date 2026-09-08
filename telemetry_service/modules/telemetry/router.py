@@ -1,10 +1,56 @@
+import re
 from datetime import datetime, timezone, timedelta
 from typing import List, Optional
 from fastapi import APIRouter, HTTPException, Query, status
-from modules.telemetry.schemas import TelemetryCreate, TelemetryResponse
+
+from modules.telemetry.schemas import (
+    TelemetryCreate,
+    TelemetryResponse,
+    TelemetryChartResponse,
+)
 from modules.telemetry.service import TelemetryService
 
 router = APIRouter(prefix="/telemetry", tags=["Telemetry"])
+
+
+def parse_time_param(time_str: Optional[str], default_delta: Optional[timedelta] = None) -> datetime:
+    """
+    پارس کردن تاریخ هم به صورت عبارات نسبی (-24h, -30d, now()) و هم استاندارد ISO
+    """
+    now = datetime.now(timezone.utc)
+
+    if not time_str or time_str.strip() in ("", "now", "now()"):
+        if default_delta:
+            return now - default_delta
+        return now
+
+    time_str = time_str.strip()
+
+    # بررسی فرمت‌های نسبی مانند -24h, -30d, -15m, -60s
+    relative_match = re.match(r"^-(\d+)([smhd])$", time_str)
+    if relative_match:
+        value, unit = int(relative_match.group(1)), relative_match.group(2)
+        if unit == "s":
+            return now - timedelta(seconds=value)
+        elif unit == "m":
+            return now - timedelta(minutes=value)
+        elif unit == "h":
+            return now - timedelta(hours=value)
+        elif unit == "d":
+            return now - timedelta(days=value)
+
+    # بررسی و تبدیل رشته استاندارد ISO
+    try:
+        dt = datetime.fromisoformat(time_str.replace("Z", "+00:00"))
+        # اطمینان از داشتن timezone
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"فرمت زمان نامعتبر است: '{time_str}'. از عبارات نسبی مانند -24h, -30d یا استاندارد ISO استفاده کنید."
+        )
 
 
 @router.post("/", response_model=TelemetryResponse, status_code=status.HTTP_201_CREATED)
@@ -49,7 +95,7 @@ async def get_feeder_history(
     ),
     window: str = Query(
         default="5m",
-        regex="^(10s|30s|1m|5m|15m|1h|1d)$",
+        pattern="^(10s|30s|1m|5m|15m|1h|1d)$",
         description="دوره فشرده‌سازی/میانگین داده‌ها"
     )
 ):
@@ -76,7 +122,6 @@ async def get_feeder_history(
     )
     return records
 
-from modules.telemetry.schemas import TelemetryCreate, TelemetryResponse, TelemetryChartResponse
 
 @router.get(
     "/chart/{feeder_id}",
@@ -84,26 +129,20 @@ from modules.telemetry.schemas import TelemetryCreate, TelemetryResponse, Teleme
 )
 async def get_telemetry_chart(
     feeder_id: int,
-    start: Optional[str] = Query(default="-30d"),
-    stop: Optional[str] = Query(default="now()"),
-    window: str = Query(default="5m"),
+    start: Optional[str] = Query(default="-24h", description="مانند -24h, -7d, -30d یا تاریخ ISO"),
+    stop: Optional[str] = Query(default="now()", description="مانند now(), -1h یا تاریخ ISO"),
+    window: str = Query(default="5m", pattern="^(10s|30s|1m|5m|15m|1h|1d)$"),
 ):
-    now = datetime.now(timezone.utc)
+    """
+    دریافت داده‌های ساختاریافته برای رسم نمودارهای تله‌متری
+    """
+    start_time = parse_time_param(start, default_delta=timedelta(days=1))
+    end_time = parse_time_param(stop)
 
-    # تبدیل start
-    if start in (None, "", "-30d"):
-        start_time = now - timedelta(days=30)
-    else:
-        start_time = datetime.fromisoformat(
-            start.replace("Z", "+00:00")
-        )
-
-    # تبدیل stop
-    if stop in (None, "", "now()"):
-        end_time = now
-    else:
-        end_time = datetime.fromisoformat(
-            stop.replace("Z", "+00:00")
+    if start_time >= end_time:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="زمان شروع (start) باید قبل از زمان پایان (stop) باشد."
         )
 
     return await TelemetryService.get_chart_data(
