@@ -3,12 +3,13 @@ import json
 import logging
 import aio_pika
 from core.config import settings
-from schemas.notification import NotificationPayload, NotificationChannel
-from providers.email_provider import EmailProvider
-from providers.sms_provider import SMSProvider
+from modules.notifications.schemas import NotificationPayload, NotificationChannel
+from modules.notifications.email_provider import EmailProvider
+from modules.notifications.sms_provider import SMSProvider
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("NotificationService")
+
 
 class NotificationWorker:
     def __init__(self):
@@ -16,7 +17,6 @@ class NotificationWorker:
         self.sms_provider = SMSProvider()
 
     async def process_notification(self, payload: NotificationPayload):
-        """منطق اصلی توزیع پیام بر اساس کانال انتخاب شده"""
         tasks = []
 
         if payload.channel in [NotificationChannel.EMAIL, NotificationChannel.ALL]:
@@ -39,7 +39,9 @@ class NotificationWorker:
         async with connection:
             channel = await connection.channel()
             # تعریف صف
-            queue = await channel.declare_queue(settings.RABBITMQ_NOTIFICATION_QUEUE, durable=True)
+            queue = await channel.declare_queue(
+                settings.RABBITMQ_NOTIFICATION_QUEUE, durable=True
+            )
 
             logger.info("[*] Waiting for notification messages. To exit press CTRL+C")
 
@@ -53,6 +55,7 @@ class NotificationWorker:
                             await self.process_notification(payload)
                         except Exception as e:
                             logger.error(f"Error processing message: {e}")
+
 
 if __name__ == "__main__":
     worker = NotificationWorker()
