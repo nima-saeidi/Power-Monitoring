@@ -2,11 +2,15 @@ import httpx
 from fastapi import APIRouter, Depends, status, Query, UploadFile, File, HTTPException
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
-from typing import List, Optional, Dict
+from typing import List, Optional, Dict, Union
 import pandas as pd
 from io import BytesIO
+from fastapi import Body
 
 from main_api.core.database import get_db
+# 1. اضافه کردن ایمپورت مربوط به MessageBroker (مسیر را در صورت نیاز اصلاح کنید)
+from main_api.common.message_broker import MessageBroker
+
 from main_api.modules.devices.repository import DeviceRepository
 from main_api.modules.devices.service import DeviceService
 from main_api.modules.devices.schemas import (
@@ -18,17 +22,31 @@ from main_api.modules.devices.schemas import (
 )
 from main_api.modules.auth.dependencies import require_any_user, require_tech_or_admin
 
+
 # --- Routers Definition ---
 locations_router = APIRouter(prefix="/locations", tags=["Locations (مکان‌ها)"])
 posts_router = APIRouter(prefix="/posts", tags=["Posts (پست‌های برق)"])
 feeders_router = APIRouter(prefix="/feeders", tags=["Feeders (فیدرها و تجهیزات)"])
 links_router = APIRouter(prefix="/links", tags=["Links (اتصالات شبکه)"])
 
+# 2. اضافه کردن یک Dependency برای دریافت Broker (اگر سینگلتون است مستقیما نمونه‌سازی کنید)
+async def get_message_broker():
+    # فرض بر این است که کلاسی به این شکل دارید.
+    # اگر در پروژه شما Broker از جای دیگری تامین می‌شود، آن را اینجا قرار دهید.
+    broker = MessageBroker()
+    await broker.connect() # اگر نیاز به اتصال صریح دارد
+    try:
+        yield broker
+    finally:
+        pass # یا broker.close() اگر نیاز است
 
-# --- Service Dependency ---
-def get_device_service(db: AsyncSession = Depends(get_db)) -> DeviceService:
+# 3. به‌روزرسانی سرویس برای دریافت Broker و پاس دادن آن به DeviceService
+def get_device_service(
+    db: AsyncSession = Depends(get_db),
+    broker: MessageBroker = Depends(get_message_broker) # اضافه شدن Broker
+) -> DeviceService:
     repo = DeviceRepository(db)
-    return DeviceService(repo)
+    return DeviceService(repo=repo, broker=broker) # تزریق Broker به سرویس
 
 
 # =============================================================================
@@ -171,8 +189,6 @@ async def import_feeders_from_excel(file: UploadFile = File(...), service: Devic
         raise HTTPException(status_code=400, detail=f"Error reading the Excel file: {str(e)}")
     return await service.import_feeders_from_excel(df)
 
-from typing import List, Union
-from fastapi import Body, Depends, status
 
 @feeders_router.post(
     "",
@@ -235,7 +251,7 @@ async def send_command_to_feeder(feeder_id: int, request: CommandRequest, db: As
         async with httpx.AsyncClient() as client:
             response = await client.post(TELEMETRY_SERVICE_URL, json=payload, timeout=10.0)
 
-        response.raise_for_status()  # Raises HTTPStatusError for 4xx/5xx responses
+        response.raise_for_status()
         return response.json()
 
     except httpx.HTTPStatusError as e:

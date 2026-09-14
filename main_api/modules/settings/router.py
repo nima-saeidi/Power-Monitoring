@@ -24,15 +24,10 @@ async def get_system_settings(
     return await SettingService.get_or_create_settings(db)
 
 
-@router.patch(
-    "/",
-    response_model=SettingResponse,
-    summary="Update system settings"
-)
+@router.put("/", response_model=SettingResponse)
 async def update_system_settings(
     data: SettingUpdate,
     db: AsyncSession = Depends(get_db),
-    publisher: RabbitMQPublisher = Depends(get_rabbitmq_publisher),
-    current_user=Depends(require_admin)
+    broker: MessageBroker = Depends(get_message_broker) # اضافه شدن تزریق وابستگی
 ):
-    return await SettingService.update_settings(db, data, publisher)
+    return await SettingService.update_settings(db=db, data=data, broker=broker)

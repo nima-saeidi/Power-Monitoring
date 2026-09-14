@@ -3,7 +3,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from .repository import SettingRepository
 from .models import SystemSetting
 from .schemas import SettingUpdate, SettingResponse
-from main_api.core.broker import RabbitMQPublisher
+
+# جایگزینی ایمپورت قدیمی با ساختار جدید بروکر پیام
+from main_api.common.message_broker import MessageBroker
 
 # متغیر سراسری (Global) برای کش کردن تنظیمات در RAM
 _settings_cache: SystemSetting | None = None
@@ -35,7 +37,7 @@ class SettingService:
     async def update_settings(
             db: AsyncSession,
             data: SettingUpdate,
-            publisher: RabbitMQPublisher
+            broker: MessageBroker  # تغییر نوع ورودی به MessageBroker جدید
     ) -> SystemSetting:
         """
         بروزرسانی تنظیمات سیستم، اعمال فوری در کش و انتشار رویداد در صف.
@@ -60,7 +62,8 @@ class SettingService:
         # تبدیل مدل دیتابیس به دیکشنری تمیز با استفاده از Pydantic
         settings_dict = SettingResponse.model_validate(updated_settings).model_dump(mode="json")
 
-        await publisher.publish_event(
+        # استفاده از متد بروکر جدید برای ارسال پیام (نام متد را در صورت تفاوت در MessageBroker اصلاح کنید)
+        await broker.publish_event(
             routing_key="settings.updated",
             message={
                 "event": "SETTINGS_UPDATED",
