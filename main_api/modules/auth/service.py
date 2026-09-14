@@ -1,4 +1,5 @@
 import random
+import uuid
 from datetime import datetime, timedelta, timezone
 from fastapi import HTTPException, status, BackgroundTasks
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -37,10 +38,16 @@ class AuthService:
         self.db_routing_key = "db.users.write"
 
     async def _publish(self, payload: dict):
-        """ارسال رویدادهای تغییر وضعیت کاربر به صَف RabbitMQ"""
+        """ارسال رویدادهای استاندارد تغییر وضعیت کاربر به صف RabbitMQ"""
+        event_payload = {
+            "event_id": str(uuid.uuid4()),
+            "entity": payload.get("entity", "user"),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            **payload
+        }
         await self.publisher.publish_event(
             routing_key=self.db_routing_key,
-            message=payload
+            message=event_payload
         )
 
     # ==========================================
@@ -142,6 +149,7 @@ class AuthService:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="این شماره تلفن قبلاً ثبت شده است.")
 
         await self._publish({
+            "entity": "user",
             "action": "CREATE_USER",
             "data": {
                 "name": data.name,
@@ -161,6 +169,7 @@ class AuthService:
             raise HTTPException(status_code=400, detail="این شماره تلفن قبلاً ثبت شده است.")
 
         await self._publish({
+            "entity": "user",
             "action": "CREATE_USER",
             "data": {
                 "name": data.name,
@@ -185,6 +194,7 @@ class AuthService:
 
         if update_data:
             await self._publish({
+                "entity": "user",
                 "action": "UPDATE_USER",
                 "user_id": user_id,
                 "data": update_data
@@ -203,6 +213,7 @@ class AuthService:
         update_data = data.model_dump(exclude_unset=True)
         if update_data:
             await self._publish({
+                "entity": "user",
                 "action": "UPDATE_USER",
                 "user_id": user_id,
                 "data": update_data
@@ -221,6 +232,7 @@ class AuthService:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="رمز عبور جدید نمی‌تواند با قبلی یکسان باشد.")
 
         await self._publish({
+            "entity": "user",
             "action": "UPDATE_USER",
             "user_id": user_id,
             "data": {"hashed_password": hash_password(data.new_password)}
@@ -241,6 +253,7 @@ class AuthService:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="کاربر یافت نشد.")
 
         await self._publish({
+            "entity": "user",
             "action": "UPDATE_USER",
             "user_id": user.id,
             "data": {"hashed_password": hash_password(data.new_password)}
@@ -251,5 +264,9 @@ class AuthService:
         if not await self.repo.get_by_id(user_id):
             raise HTTPException(status_code=404, detail="کاربر یافت نشد.")
 
-        await self._publish({"action": "DELETE_USER", "user_id": user_id})
+        await self._publish({
+            "entity": "user",
+            "action": "DELETE_USER",
+            "user_id": user_id
+        })
         return {"status": "accepted", "message": "درخواست حذف کاربر در صف قرار گرفت."}
