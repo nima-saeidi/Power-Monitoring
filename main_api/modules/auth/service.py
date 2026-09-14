@@ -38,7 +38,6 @@ class AuthService:
 
     async def _publish(self, payload: dict):
         """ارسال رویدادهای تغییر وضعیت کاربر به صَف RabbitMQ"""
-        # اصلاح شد: فراخوانی متد publish_event از RabbitMQPublisher با پارامترهای صحیح (routing_key و message)
         await self.publisher.publish_event(
             routing_key=self.db_routing_key,
             message=payload
@@ -59,9 +58,7 @@ class AuthService:
         if not user.is_active:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="حساب کاربری غیرفعال است.")
 
-        # دریافت زمان انقضا از کش/دیتابیس تنظیمات
         db_settings = await SettingService.get_or_create_settings(self.db)
-
         now = datetime.now(timezone.utc).replace(microsecond=0)
         expires_delta = timedelta(minutes=db_settings.access_token_expire_minutes)
         expire_time = now + expires_delta
@@ -200,8 +197,7 @@ class AuthService:
             raise HTTPException(status_code=404, detail="کاربر یافت نشد.")
 
         if data.phone_number and data.phone_number != user.phone_number:
-            existing_phone = await self.repo.get_by_phone_number(data.phone_number)
-            if existing_phone:
+            if await self.repo.get_by_phone_number(data.phone_number):
                 raise HTTPException(status_code=400, detail="این شماره تلفن قبلاً ثبت شده است.")
 
         update_data = data.model_dump(exclude_unset=True)
