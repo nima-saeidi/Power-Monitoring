@@ -1,16 +1,21 @@
 import os
 from pydantic_settings import BaseSettings
 
+
 class Settings(BaseSettings):
-    # تنظیمات RabbitMQ
+    # RabbitMQ Settings
     RABBITMQ_HOST: str = "rabbitmq"
     RABBITMQ_PORT: int = 5672
     RABBITMQ_USER: str = "guest"
     RABBITMQ_PASSWORD: str = "guest"
-    RABBITMQ_QUEUE: str = "telemetry_events"
 
-    # تنظیمات InfluxDB
-    INFLUXDB_URL: str = "http://db:8086"
+    # Exchange & Queue Settings
+    TELEMETRY_EXCHANGE: str = "telemetry_exchange"
+    TIMESERIES_QUEUE: str = "telemetry_timeseries_queue"
+    ROUTING_KEY: str = "telemetry.*"  # یا telemetry.metric یا الگوی دلخواه
+
+    # InfluxDB Settings
+    INFLUXDB_URL: str = "http://influxdb:8086"
     INFLUXDB_TOKEN: str = "my-super-secret-auth-token"
     INFLUXDB_ORG: str = "power_monitoring_org"
     INFLUXDB_BUCKET: str = "power_monitoring_telemetry"
@@ -22,5 +27,6 @@ class Settings(BaseSettings):
     class Config:
         env_file = ".env"
         extra = "ignore"
+
 
 settings = Settings()
