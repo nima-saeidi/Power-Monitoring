@@ -3,10 +3,13 @@ from typing import Dict, Any, List
 from datetime import datetime
 from sqlalchemy import delete, update, inspect
 from core.database import AsyncSessionLocal
-from models import Location, Post, Feeder, Link
+
+# ۱. مدل User به لیست ایمپورت‌ها اضافه شد
+from models import Location, Post, Feeder, Link, User
 
 logger = logging.getLogger("postgres_storage")
 
+# ۲. مدل user و users به مپینگ اضافه شدند
 MODEL_MAPPING = {
     "location": Location,
     "locations": Location,
@@ -16,6 +19,8 @@ MODEL_MAPPING = {
     "feeders": Feeder,
     "link": Link,
     "links": Link,
+    "user": User,
+    "users": User,
 }
 
 
@@ -55,8 +60,8 @@ async def handle_db_write_event(payload: Dict[str, Any]):
     """
     پردازش انواع عملیات نوشتنی روی دیتابیس بر اساس پیلود پیام
     """
-    entity_name = payload.get("entity", "").lower()
-    action = payload.get("action", "").lower()
+    entity_name = str(payload.get("entity", "")).lower().strip()
+    raw_action = str(payload.get("action", "")).lower().strip()
     data = payload.get("data")
     filters = payload.get("filters", {})
 
@@ -64,6 +69,18 @@ async def handle_db_write_event(payload: Dict[str, Any]):
     if not model:
         logger.error(f"Unknown entity: '{entity_name}'")
         return
+
+    # ۳. نرمال‌سازی اکشن برای پشتیبانی از حالت‌هایی مثل CREATE_USER
+    if "bulk" in raw_action:
+        action = "bulk_create"
+    elif "create" in raw_action:
+        action = "create"
+    elif "update" in raw_action:
+        action = "update"
+    elif "delete" in raw_action:
+        action = "delete"
+    else:
+        action = raw_action
 
     async with AsyncSessionLocal() as session:
         try:
@@ -90,7 +107,11 @@ async def handle_db_write_event(payload: Dict[str, Any]):
                     logger.info(f"Bulk created {len(instances)} items for {entity_name}.")
 
             elif action == "update":
-                item_id = filters.get("id") or (data.get("id") if isinstance(data, dict) else None)
+                # ۴. بهبود استخراج شناسه از id یا user_id
+                item_id = filters.get("id") or filters.get("user_id")
+                if not item_id and isinstance(data, dict):
+                    item_id = data.get("id") or data.get("user_id")
+
                 if not item_id:
                     logger.warning(f"Update operation requires an ID for {entity_name}.")
                     return
@@ -112,7 +133,11 @@ async def handle_db_write_event(payload: Dict[str, Any]):
                 logger.info(f"Updated {entity_name} with id={item_id}.")
 
             elif action == "delete":
-                item_id = filters.get("id")
+                # ۴. بهبود استخراج شناسه
+                item_id = filters.get("id") or filters.get("user_id")
+                if not item_id and isinstance(data, dict):
+                    item_id = data.get("id") or data.get("user_id")
+
                 if not item_id:
                     logger.warning(f"Delete operation requires an ID for {entity_name}.")
                     return
@@ -123,7 +148,7 @@ async def handle_db_write_event(payload: Dict[str, Any]):
                 logger.info(f"Deleted {entity_name} with id={item_id}.")
 
             else:
-                logger.warning(f"Unsupported action '{action}' on entity '{entity_name}'")
+                logger.warning(f"Unsupported action '{action}' (raw: '{raw_action}') on entity '{entity_name}'")
 
         except Exception as e:
             await session.rollback()
