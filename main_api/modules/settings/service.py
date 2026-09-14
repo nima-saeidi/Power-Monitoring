@@ -5,7 +5,7 @@ from .models import SystemSetting
 from .schemas import SettingUpdate, SettingResponse
 
 # جایگزینی ایمپورت قدیمی با ساختار جدید بروکر پیام
-from main_api.common.message_broker import MessageBroker
+from main_api.core.broker import RabbitMQPublisher
 
 # متغیر سراسری (Global) برای کش کردن تنظیمات در RAM
 _settings_cache: SystemSetting | None = None
@@ -37,7 +37,7 @@ class SettingService:
     async def update_settings(
             db: AsyncSession,
             data: SettingUpdate,
-            broker: MessageBroker  # تغییر نوع ورودی به MessageBroker جدید
+            broker: RabbitMQPublisher  # تغییر نوع ورودی به MessageBroker جدید
     ) -> SystemSetting:
         """
         بروزرسانی تنظیمات سیستم، اعمال فوری در کش و انتشار رویداد در صف.

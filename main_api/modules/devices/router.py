@@ -9,7 +9,7 @@ from fastapi import Body
 
 from main_api.core.database import get_db
 # 1. اضافه کردن ایمپورت مربوط به MessageBroker (مسیر را در صورت نیاز اصلاح کنید)
-from main_api.common.message_broker import MessageBroker
+from main_api.core.broker import RabbitMQPublisher
 
 from main_api.modules.devices.repository import DeviceRepository
 from main_api.modules.devices.service import DeviceService
@@ -43,7 +43,7 @@ async def get_message_broker():
 # 3. به‌روزرسانی سرویس برای دریافت Broker و پاس دادن آن به DeviceService
 def get_device_service(
     db: AsyncSession = Depends(get_db),
-    broker: MessageBroker = Depends(get_message_broker) # اضافه شدن Broker
+    broker: RabbitMQPublisher = Depends(get_message_broker) # اضافه شدن Broker
 ) -> DeviceService:
     repo = DeviceRepository(db)
     return DeviceService(repo=repo, broker=broker) # تزریق Broker به سرویس

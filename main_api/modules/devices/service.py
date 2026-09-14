@@ -6,7 +6,7 @@ import pandas as pd
 from fastapi import HTTPException, status
 
 # Import a reference to the broker - adjust the path if needed
-from main_api.common.message_broker import MessageBroker
+from main_api.core.broker import RabbitMQPublisher
 from main_api.modules.devices.repository import DeviceRepository
 from main_api.modules.devices.schemas import (
     CampusWithSubsectionsCreate, CommandRequest, FeederCreate, FeederUpdate,
@@ -17,7 +17,7 @@ from main_api.modules.devices.schemas import (
 
 class DeviceService:
 
-    def __init__(self, repo: DeviceRepository, broker: MessageBroker):
+    def __init__(self, repo: DeviceRepository, broker: RabbitMQPublisher):
         """
         DeviceService now requires a MessageBroker instance for publishing events.
         """
