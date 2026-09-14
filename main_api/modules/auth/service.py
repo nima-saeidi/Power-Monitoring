@@ -26,210 +26,29 @@ from main_api.modules.auth.schemas import (
     VerifyCodeRequest
 )
 from main_api.modules.settings.service import SettingService
-
-# فرض بر این است که RabbitMQPublisher را ایمپورت کرده‌اید
-from main_api.core.rabbitmq import RabbitMQPublisher
+from main_api.core.broker import RabbitMQPublisher
 
 
 class AuthService:
-    # تزریق وابستگی Publisher به کلاس اضافه شد
-    def __init__(self, repository: UserRepository, publisher: RabbitMQPublisher):
+    def __init__(self, repository: UserRepository, publisher: RabbitMQPublisher, db: AsyncSession):
         self.repo = repository
         self.publisher = publisher
-
-        # نام روتینگ کی برای صف‌های دیتابیس رابطه‌ای (کاربران)
+        self.db = db
         self.db_routing_key = "db.users.write"
 
-    # ==========================================
-    # متدهای نوشتنی (Event-Driven)
-    # ==========================================
-
-    async def register_admin(self, data: AdminRegisterRequest):
-        existing_user = await self.repo.get_by_email(data.email)
-        if existing_user:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="این ایمیل قبلاً در سامانه ثبت شده است."
-            )
-
-        if data.phone_number:
-            existing_phone = await self.repo.get_by_phone_number(data.phone_number)
-            if existing_phone:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="این شماره تلفن قبلاً ثبت شده است."
-                )
-
-        hashed_pwd = hash_password(data.password)
-
-        # ساخت پیلود برای RabbitMQ
-        event_payload = {
-            "action": "CREATE_USER",
-            "data": {
-                "name": data.name,
-                "email": data.email,
-                "phone_number": data.phone_number,
-                "hashed_password": hashed_pwd,
-                "role": "admin",
-                "is_active": True
-            }
-        }
-        await self.publisher.publish_event(self.db_routing_key, event_payload)
-
-        # برگرداندن وضعیت Accepted (چون هنوز آیدی کاربر در دیتابیس ساخته نشده است)
-        return {"status": "accepted", "message": "درخواست ثبت ادمین در صف پردازش قرار گرفت."}
-
-    async def create_user(self, data: UserCreate):
-        existing = await self.repo.get_by_email(data.email)
-        if existing:
-            raise HTTPException(status_code=400, detail="این ایمیل قبلاً ثبت شده است.")
-
-        if data.phone_number:
-            existing_phone = await self.repo.get_by_phone_number(data.phone_number)
-            if existing_phone:
-                raise HTTPException(status_code=400, detail="این شماره تلفن قبلاً ثبت شده است.")
-
-        hashed_pwd = hash_password(data.password)
-
-        event_payload = {
-            "action": "CREATE_USER",
-            "data": {
-                "name": data.name,
-                "email": data.email,
-                "phone_number": data.phone_number,
-                "hashed_password": hashed_pwd,
-                "role": data.role,
-                "is_active": data.is_active
-            }
-        }
-        await self.publisher.publish_event(self.db_routing_key, event_payload)
-        return {"status": "accepted", "message": "درخواست ایجاد کاربر در صف پردازش قرار گرفت."}
-
-    async def update_user(self, user_id: int, data: UserUpdate):
-        user = await self.repo.get_by_id(user_id)
-        if not user:
-            raise HTTPException(status_code=404, detail="کاربر یافت نشد.")
-
-        if data.email and data.email != user.email:
-            existing = await self.repo.get_by_email(data.email)
-            if existing:
-                raise HTTPException(status_code=400, detail="این ایمیل توسط شخص دیگری ثبت شده است.")
-
-        if data.phone_number and data.phone_number != user.phone_number:
-            existing_phone = await self.repo.get_by_phone_number(data.phone_number)
-            if existing_phone:
-                raise HTTPException(status_code=400, detail="این شماره تلفن توسط شخص دیگری ثبت شده است.")
-
-        update_data = {}
-        if data.name: update_data["name"] = data.name
-        if data.email: update_data["email"] = data.email
-        if data.phone_number: update_data["phone_number"] = data.phone_number
-        if data.role: update_data["role"] = data.role
-        if data.is_active is not None: update_data["is_active"] = data.is_active
-        if data.password: update_data["hashed_password"] = hash_password(data.password)
-
-        if update_data:
-            event_payload = {
-                "action": "UPDATE_USER",
-                "user_id": user_id,
-                "data": update_data
-            }
-            await self.publisher.publish_event(self.db_routing_key, event_payload)
-
-        return {"status": "accepted", "message": "درخواست بروزرسانی کاربر در صف قرار گرفت."}
-
-    async def update_profile(self, user_id: int, data: UserProfileUpdate):
-        user = await self.repo.get_by_id(user_id)
-        if not user:
-            raise HTTPException(status_code=404, detail="کاربر یافت نشد.")
-
-        if data.phone_number and data.phone_number != user.phone_number:
-            existing_phone = await self.repo.get_by_phone_number(data.phone_number)
-            if existing_phone:
-                raise HTTPException(status_code=400, detail="این شماره تلفن قبلاً در سیستم ثبت شده است.")
-
-        update_data = {}
-        if data.name is not None: update_data["name"] = data.name
-        if data.phone_number is not None: update_data["phone_number"] = data.phone_number
-
-        if update_data:
-            event_payload = {
-                "action": "UPDATE_USER",
-                "user_id": user_id,
-                "data": update_data
-            }
-            await self.publisher.publish_event(self.db_routing_key, event_payload)
-
-        return {"status": "accepted", "message": "درخواست بروزرسانی پروفایل در صف قرار گرفت."}
-
-    async def change_password(self, user_id: int, data: ChangePasswordRequest):
-        user = await self.repo.get_by_id(user_id)
-        if not user:
-            raise HTTPException(status_code=404, detail="کاربر یافت نشد.")
-
-        if not verify_password(data.old_password, user.hashed_password):
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="رمز عبور فعلی اشتباه است.")
-
-        if verify_password(data.new_password, user.hashed_password):
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,
-                                detail="رمز عبور جدید نمی‌تواند با رمز عبور فعلی یکسان باشد.")
-
-        event_payload = {
-            "action": "UPDATE_USER",
-            "user_id": user_id,
-            "data": {"hashed_password": hash_password(data.new_password)}
-        }
-        await self.publisher.publish_event(self.db_routing_key, event_payload)
-
-        return {"status": "accepted", "message": "درخواست تغییر رمز عبور در صف قرار گرفت."}
-
-    async def reset_password(self, data: ResetPasswordRequest):
-        try:
-            payload = jwt.decode(
-                data.reset_token,
-                settings.SECRET_KEY,
-                algorithms=[settings.ALGORITHM]
-            )
-            email: str = payload.get("sub")
-            token_type: str = payload.get("type")
-
-            if not email or token_type != "password_reset":
-                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="توکن نامعتبر است.")
-        except JWTError:
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,
-                                detail="توکن بازنشانی رمز عبور منقضی شده یا نامعتبر است.")
-
-        user = await self.repo.get_by_email(email)
-        if not user:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="کاربر یافت نشد.")
-
-        event_payload = {
-            "action": "UPDATE_USER",
-            "user_id": user.id,
-            "data": {"hashed_password": hash_password(data.new_password)}
-        }
-        await self.publisher.publish_event(self.db_routing_key, event_payload)
-
-        return {"status": "accepted", "message": "درخواست بازنشانی رمز عبور در صف قرار گرفت."}
-
-    async def delete_user(self, user_id: int):
-        user = await self.repo.get_by_id(user_id)
-        if not user:
-            raise HTTPException(status_code=404, detail="کاربر یافت نشد.")
-
-        event_payload = {
-            "action": "DELETE_USER",
-            "user_id": user_id
-        }
-        await self.publisher.publish_event(self.db_routing_key, event_payload)
-
-        return {"status": "accepted", "message": "درخواست حذف کاربر در صف قرار گرفت."}
+    async def _publish(self, payload: dict):
+        """ارسال رویدادهای تغییر وضعیت کاربر به صَف RabbitMQ"""
+        await self.publisher.publish(
+            exchange="system_events",
+            routing_key=self.db_routing_key,
+            payload=payload
+        )
 
     # ==========================================
-    # متدهای خواندنی (بدون تغییر در منطق)
+    # متدهای خواندنی و لاگین (Direct DB + Cache)
     # ==========================================
 
-    async def login(self, data: LoginRequest, db: AsyncSession) -> TokenResponse:
+    async def login(self, data: LoginRequest) -> TokenResponse:
         user = await self.repo.get_by_email(data.email)
         if not user:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="کاربری با این ایمیل یافت نشد.")
@@ -240,7 +59,8 @@ class AuthService:
         if not user.is_active:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="حساب کاربری غیرفعال است.")
 
-        db_settings = await SettingService.get_or_create_settings(db)
+        # دریافت زمان انقضا از کش/دیتابیس تنظیمات
+        db_settings = await SettingService.get_or_create_settings(self.db)
 
         now = datetime.now(timezone.utc).replace(microsecond=0)
         expires_delta = timedelta(minutes=db_settings.access_token_expire_minutes)
@@ -272,7 +92,7 @@ class AuthService:
     async def forgot_password(self, data: ForgotPasswordRequest, background_tasks: BackgroundTasks):
         user = await self.repo.get_by_email(data.email)
         if not user:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="کاربری با این ایمیل یافت نشد.")
+            return {"message": "اگر ایمیل در سیستم موجود باشد، کد تأیید ارسال خواهد شد."}
 
         code = str(random.randint(100000, 999999))
         expire = datetime.now(timezone.utc) + timedelta(minutes=5)
@@ -313,3 +133,127 @@ class AuthService:
         )
 
         return {"message": "کد تایید شد.", "reset_token": reset_token}
+
+    # ==========================================
+    # متدهای نوشتنی (Event-Driven)
+    # ==========================================
+
+    async def register_admin(self, data: AdminRegisterRequest):
+        if await self.repo.get_by_email(data.email):
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="این ایمیل قبلاً ثبت شده است.")
+        if data.phone_number and await self.repo.get_by_phone_number(data.phone_number):
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="این شماره تلفن قبلاً ثبت شده است.")
+
+        await self._publish({
+            "action": "CREATE_USER",
+            "data": {
+                "name": data.name,
+                "email": data.email,
+                "phone_number": data.phone_number,
+                "hashed_password": hash_password(data.password),
+                "role": "admin",
+                "is_active": True
+            }
+        })
+        return {"status": "accepted", "message": "درخواست ثبت ادمین در صف پردازش قرار گرفت."}
+
+    async def create_user(self, data: UserCreate):
+        if await self.repo.get_by_email(data.email):
+            raise HTTPException(status_code=400, detail="این ایمیل قبلاً ثبت شده است.")
+        if data.phone_number and await self.repo.get_by_phone_number(data.phone_number):
+            raise HTTPException(status_code=400, detail="این شماره تلفن قبلاً ثبت شده است.")
+
+        await self._publish({
+            "action": "CREATE_USER",
+            "data": {
+                "name": data.name,
+                "email": data.email,
+                "phone_number": data.phone_number,
+                "hashed_password": hash_password(data.password),
+                "role": data.role,
+                "is_active": data.is_active,
+                "sms_notification_enabled": data.sms_notification_enabled
+            }
+        })
+        return {"status": "accepted", "message": "درخواست ایجاد کاربر در صف پردازش قرار گرفت."}
+
+    async def update_user(self, user_id: int, data: UserUpdate):
+        user = await self.repo.get_by_id(user_id)
+        if not user:
+            raise HTTPException(status_code=404, detail="کاربر یافت نشد.")
+
+        update_data = data.model_dump(exclude_unset=True)
+        if "password" in update_data:
+            update_data["hashed_password"] = hash_password(update_data.pop("password"))
+
+        if update_data:
+            await self._publish({
+                "action": "UPDATE_USER",
+                "user_id": user_id,
+                "data": update_data
+            })
+        return {"status": "accepted", "message": "درخواست بروزرسانی کاربر در صف قرار گرفت."}
+
+    async def update_profile(self, user_id: int, data: UserProfileUpdate):
+        user = await self.repo.get_by_id(user_id)
+        if not user:
+            raise HTTPException(status_code=404, detail="کاربر یافت نشد.")
+
+        if data.phone_number and data.phone_number != user.phone_number:
+            existing_phone = await self.repo.get_by_phone_number(data.phone_number)
+            if existing_phone:
+                raise HTTPException(status_code=400, detail="این شماره تلفن قبلاً ثبت شده است.")
+
+        update_data = data.model_dump(exclude_unset=True)
+        if update_data:
+            await self._publish({
+                "action": "UPDATE_USER",
+                "user_id": user_id,
+                "data": update_data
+            })
+        return {"status": "accepted", "message": "درخواست بروزرسانی پروفایل در صف قرار گرفت."}
+
+    async def change_password(self, user_id: int, data: ChangePasswordRequest):
+        user = await self.repo.get_by_id(user_id)
+        if not user:
+            raise HTTPException(status_code=404, detail="کاربر یافت نشد.")
+
+        if not verify_password(data.old_password, user.hashed_password):
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="رمز عبور فعلی اشتباه است.")
+
+        if verify_password(data.new_password, user.hashed_password):
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="رمز عبور جدید نمی‌تواند با قبلی یکسان باشد.")
+
+        await self._publish({
+            "action": "UPDATE_USER",
+            "user_id": user_id,
+            "data": {"hashed_password": hash_password(data.new_password)}
+        })
+        return {"status": "accepted", "message": "درخواست تغییر رمز عبور در صف قرار گرفت."}
+
+    async def reset_password(self, data: ResetPasswordRequest):
+        try:
+            payload = jwt.decode(data.reset_token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+            email: str = payload.get("sub")
+            if not email or payload.get("type") != "password_reset":
+                raise JWTError
+        except JWTError:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="توکن منقضی شده یا نامعتبر است.")
+
+        user = await self.repo.get_by_email(email)
+        if not user:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="کاربر یافت نشد.")
+
+        await self._publish({
+            "action": "UPDATE_USER",
+            "user_id": user.id,
+            "data": {"hashed_password": hash_password(data.new_password)}
+        })
+        return {"status": "accepted", "message": "درخواست بازنشانی رمز عبور در صف قرار گرفت."}
+
+    async def delete_user(self, user_id: int):
+        if not await self.repo.get_by_id(user_id):
+            raise HTTPException(status_code=404, detail="کاربر یافت نشد.")
+
+        await self._publish({"action": "DELETE_USER", "user_id": user_id})
+        return {"status": "accepted", "message": "درخواست حذف کاربر در صف قرار گرفت."}

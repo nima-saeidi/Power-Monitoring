@@ -4,6 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from .models import SystemSetting
 
+
 class SettingRepository:
     @staticmethod
     async def get_settings(db: AsyncSession) -> SystemSetting | None:
@@ -12,16 +13,22 @@ class SettingRepository:
 
     @staticmethod
     async def create_default_settings(db: AsyncSession) -> SystemSetting:
-        # مقادیر پیش‌فرض جدید به همراه فیلدهای قبلی اضافه شدند
+        # مقادیر پیش‌فرض دقیقاً منطبق بر مدل تنظیم شده‌اند
         settings = SystemSetting(
-            critical_threshold=0.7,
-            warning_threshold=0.4,
+            critical_threshold=90.0,
+            warning_threshold=75.0,
             access_token_expire_minutes=1440,
-            session_timeout_minutes=30,      # پیش‌فرض: 30 دقیقه
+            max_login_attempts=5,
+            lockout_duration_minutes=30,
+            session_timeout_minutes=120,
             polling_interval=5,
             max_telemetry_failures=3,
-            max_login_attempts=5,            # پیش‌فرض: 5 تلاش ناموفق
-            data_retention_days=90           # پیش‌فرض: 90 روز نگهداری لاگ‌ها و داده‌ها
+            modbus_timeout=3,
+            modbus_retry_count=3,
+            notification_retry_attempts=3,
+            notification_cooldown_seconds=300,
+            report_generation_timeout=300,
+            max_export_records=10000
         )
         db.add(settings)
         await db.commit()

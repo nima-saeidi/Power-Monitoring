@@ -181,6 +181,7 @@ async def http_exception_handler(request: Request, exc: StarletteHTTPException):
             "message": exc.detail,
             "error_code": f"HTTP_{exc.status_code}"
         },
+        headers=getattr(exc, "headers", None)  # اضافه شدن حفظ هدرها
     )
 
 

@@ -2,7 +2,8 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 from .repository import SettingRepository
 from .models import SystemSetting
-from .schemas import SettingUpdate
+from .schemas import SettingUpdate, SettingResponse
+from main_api.core.broker import RabbitMQPublisher
 
 # متغیر سراسری (Global) برای کش کردن تنظیمات در RAM
 _settings_cache: SystemSetting | None = None
@@ -31,10 +32,13 @@ class SettingService:
         return settings
 
     @staticmethod
-    async def update_settings(db: AsyncSession, data: SettingUpdate) -> SystemSetting:
+    async def update_settings(
+            db: AsyncSession,
+            data: SettingUpdate,
+            publisher: RabbitMQPublisher
+    ) -> SystemSetting:
         """
-        بروزرسانی تنظیمات سیستم و اعمال فوری در کش.
-        فقط فیلدهایی که ارسال شده‌اند آپدیت می‌شوند.
+        بروزرسانی تنظیمات سیستم، اعمال فوری در کش و انتشار رویداد در صف.
         """
         global _settings_cache
 
@@ -49,5 +53,19 @@ class SettingService:
 
         # بروزرسانی بلادرنگ سیستم با جایگزین کردن کش
         _settings_cache = updated_settings
+
+        # ---------------------------------------------------------
+        # ارسال رویداد آپدیت تنظیمات به RabbitMQ برای سایر سرویس‌ها
+        # ---------------------------------------------------------
+        # تبدیل مدل دیتابیس به دیکشنری تمیز با استفاده از Pydantic
+        settings_dict = SettingResponse.model_validate(updated_settings).model_dump(mode="json")
+
+        await publisher.publish_event(
+            routing_key="settings.updated",
+            message={
+                "event": "SETTINGS_UPDATED",
+                "data": settings_dict
+            }
+        )
 
         return updated_settings
