@@ -33,7 +33,7 @@ links_router = APIRouter(prefix="/links", tags=["Links (اتصالات شبکه)
 async def get_message_broker():
     # فرض بر این است که کلاسی به این شکل دارید.
     # اگر در پروژه شما Broker از جای دیگری تامین می‌شود، آن را اینجا قرار دهید.
-    broker = MessageBroker()
+    broker = RabbitMQPublisher()
     await broker.connect() # اگر نیاز به اتصال صریح دارد
     try:
         yield broker
