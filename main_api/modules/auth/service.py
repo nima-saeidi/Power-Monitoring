@@ -38,10 +38,10 @@ class AuthService:
 
     async def _publish(self, payload: dict):
         """ارسال رویدادهای تغییر وضعیت کاربر به صَف RabbitMQ"""
-        await self.publisher.publish(
-            exchange="system_events",
+        # اصلاح شد: فراخوانی متد publish_event از RabbitMQPublisher با پارامترهای صحیح (routing_key و message)
+        await self.publisher.publish_event(
             routing_key=self.db_routing_key,
-            payload=payload
+            message=payload
         )
 
     # ==========================================
