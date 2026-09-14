@@ -3,6 +3,7 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import relationship
 from datetime import datetime
 import enum
+from sqlalchemy import Column, Integer, String, Boolean, DateTime, Enum as SQLEnum
 
 # ⚠️ بسیار مهم: Base را باید از فایل database.py همین سرویس (postgres_storage_service) ایمپورت کنید
 # به هیچ وجه نباید از main_api چیزی ایمپورت شود.
