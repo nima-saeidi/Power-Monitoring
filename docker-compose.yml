@@ -214,3 +214,18 @@ services:
         condition: service_started
     networks:
       - power_net
+
+  # 12. Notification Service (RabbitMQ Consumer / Email & SMS Sender)
+  notification:
+    build:
+      context: ./notification_service
+      dockerfile: Dockerfile
+    container_name: power_monitoring_notification
+    restart: unless-stopped
+    command: python main.py
+    env_file: .env
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - power_net

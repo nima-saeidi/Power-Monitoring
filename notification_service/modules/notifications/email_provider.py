@@ -1,15 +1,20 @@
 import logging
 from email.message import EmailMessage
+from typing import List
 import aiosmtplib
 from core.config import settings
+from modules.notifications.base import BaseNotificationProvider
 
 logger = logging.getLogger("EmailProvider")
 
-class EmailProvider:
-    @staticmethod
-    async def send_email(to_emails: list[str], subject: str, body: str) -> bool:
-        if not to_emails or not settings.SMTP_USER:
-            logger.warning("No recipient or SMTP not configured.")
+class EmailProvider(BaseNotificationProvider):
+    async def send(self, to_emails: List[str], subject: str, body: str) -> bool:
+        if not to_emails:
+            logger.warning("No recipient email addresses provided.")
+            return False
+
+        if not settings.SMTP_USER or not settings.SMTP_PASSWORD:
+            logger.warning("SMTP credentials are not configured in settings. Skipping email send.")
             return False
 
         message = EmailMessage()
@@ -26,9 +31,10 @@ class EmailProvider:
                 username=settings.SMTP_USER,
                 password=settings.SMTP_PASSWORD,
                 start_tls=settings.SMTP_USE_TLS,
+                timeout=15.0
             )
-            logger.info(f"Email sent successfully to {to_emails}")
+            logger.info(f"✅ Email successfully sent to {to_emails}")
             return True
         except Exception as e:
-            logger.error(f"Failed to send email: {e}")
+            logger.error(f"❌ Failed to send email to {to_emails}: {e}")
             return False

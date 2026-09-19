@@ -1,7 +1,11 @@
+import logging
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import computed_field
 
 class Settings(BaseSettings):
+    # Logging Configuration
+    LOG_LEVEL: str = "INFO"
+
     # RabbitMQ Settings
     RABBITMQ_HOST: str = "rabbitmq"
     RABBITMQ_PORT: int = 5672
@@ -22,10 +26,21 @@ class Settings(BaseSettings):
     SMTP_FROM_EMAIL: str = "noreply@powermonitoring.com"
     SMTP_USE_TLS: bool = True
 
-    # SMS Settings (مثلاً کاوه‌نگار، فراز اس‌ام‌اس یا هر پنل دلخواه)
+    # SMS Settings
+    SMS_API_URL: str = "https://api.sms-provider.com/v1/send"
     SMS_API_KEY: str = ""
     SMS_LINE_NUMBER: str = ""
 
-    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore"
+    )
 
 settings = Settings()
+
+# کانفیگ سراسری لاگر
+logging.basicConfig(
+    level=getattr(logging, settings.LOG_LEVEL.upper(), logging.INFO),
+    format="%(asctime)s | %(levelname)-8s | %(name)s : %(message)s"
+)

@@ -1,36 +1,43 @@
 from typing import List, Optional, Dict, Any
 from datetime import datetime, timedelta
 from sqlalchemy.ext.asyncio import AsyncSession
+from fastapi import BackgroundTasks  # اضافه شده برای اجرای غیرهمگام تسک‌ها
 
 from main_api.modules.notifications.repository import NotificationRepository
 from main_api.modules.notifications.models import (
     NotificationType,
     NotificationPriority,
-
-    NotificationPreference  # این مورد اضافه شد
+    NotificationPreference
 )
-
 from main_api.core.logging import api_logger
 from main_api.modules.notifications.schemas import (
     NotificationCreateRequest,
     NotificationBulkCreateRequest,
     NotificationResponse,
-
 )
+
+# ایمپورت‌های مربوط به RabbitMQ (مسیرها را در صورت نیاز با ساختار پروژه خود تطبیق دهید)
+try:
+    from main_api.core.rabbitmq_publisher import send_notification as send_rabbitmq_notification
+    from main_api.schemas.notification import NotificationPayload
+except ImportError:
+    # در صورتی که ساختار فایل‌ها متفاوت است، این بخش را مطابق پروژه خود اصلاح کنید
+    pass
+
 
 class NotificationService:
     """سرویس مدیریت نوتیفیکیشن‌ها"""
-    
+
     @staticmethod
     async def send_notification(
-        db: AsyncSession,
-        request: NotificationCreateRequest
+            db: AsyncSession,
+            request: NotificationCreateRequest
     ):
-        """ارسال نوتیفیکیشن به یک کاربر"""
-        
+        """ارسال نوتیفیکیشن به یک کاربر (فقط دیتابیس)"""
+
         # بررسی تنظیمات کاربر
         preferences = await NotificationRepository.get_preferences(db, request.user_id)
-        
+
         # بررسی فیلترهای کاربر
         if not NotificationService._should_send(preferences, request.type, request.priority):
             api_logger.info(
@@ -38,7 +45,7 @@ class NotificationService:
                 f"user={request.user_id}, type={request.type}, priority={request.priority}"
             )
             return None
-        
+
         # ایجاد نوتیفیکیشن
         notification = await NotificationRepository.create(
             db=db,
@@ -53,27 +60,27 @@ class NotificationService:
             action_url=request.action_url,
             expires_at=request.expires_at
         )
-        
+
         return notification
-    
+
     @staticmethod
     async def send_bulk_notification(
-        db: AsyncSession,
-        request: NotificationBulkCreateRequest
+            db: AsyncSession,
+            request: NotificationBulkCreateRequest
     ) -> Dict[str, Any]:
-        """ارسال نوتیفیکیشن به چند کاربر"""
-        
+        """ارسال نوتیفیکیشن به چند کاربر (فقط دیتابیس)"""
+
         sent_count = 0
         blocked_count = 0
-        
+
         for user_id in request.user_ids:
             # بررسی تنظیمات هر کاربر
             preferences = await NotificationRepository.get_preferences(db, user_id)
-            
+
             if not NotificationService._should_send(preferences, request.type, request.priority):
                 blocked_count += 1
                 continue
-            
+
             # ایجاد نوتیفیکیشن
             await NotificationRepository.create(
                 db=db,
@@ -89,31 +96,31 @@ class NotificationService:
                 expires_at=request.expires_at
             )
             sent_count += 1
-        
+
         api_logger.info(
             f"Bulk notification sent: {sent_count} sent, {blocked_count} blocked"
         )
-        
+
         return {
             "sent": sent_count,
             "blocked": blocked_count,
             "total": len(request.user_ids)
         }
-    
+
     @staticmethod
     async def send_system_alert(
-        db: AsyncSession,
-        user_id: int,
-        title: str,
-        message: str,
-        source_type: str,
-        source_id: int,
-        priority: NotificationPriority = NotificationPriority.HIGH,
-        action_url: Optional[str] = None,
-        metadata: Optional[Dict[str, Any]] = None
+            db: AsyncSession,
+            user_id: int,
+            title: str,
+            message: str,
+            source_type: str,
+            source_id: int,
+            priority: NotificationPriority = NotificationPriority.HIGH,
+            action_url: Optional[str] = None,
+            metadata: Optional[Dict[str, Any]] = None
     ):
         """ارسال هشدار سیستمی (برای مانیتورینگ پست‌ها)"""
-        
+
         request = NotificationCreateRequest(
             user_id=user_id,
             title=title,
@@ -125,26 +132,28 @@ class NotificationService:
             action_url=action_url,
             metadata=metadata
         )
-        
+
         return await NotificationService.send_notification(db, request)
-    
+
     @staticmethod
     async def notify_power_outage(
-        db: AsyncSession,
-        user_ids: List[int],
-        post_name: str,
-        post_id: int,
-        feeder_name: Optional[str] = None
+            db: AsyncSession,
+            user_ids: List[int],
+            post_name: str,
+            post_id: int,
+            background_tasks: BackgroundTasks,  # اضافه شد
+            feeder_name: Optional[str] = None
     ):
-        """نوتیفیکیشن قطعی برق"""
-        
+        """نوتیفیکیشن قطعی برق (دیتابیس + پیامک/ایمیل)"""
+
         if feeder_name:
             title = f"قطعی برق - {post_name} / {feeder_name}"
             message = f"فیدر {feeder_name} در پست {post_name} قطع شده است."
         else:
             title = f"قطعی برق - {post_name}"
             message = f"پست {post_name} دچار قطعی برق شده است."
-        
+
+        # ۱. ذخیره در دیتابیس (In-App)
         request = NotificationBulkCreateRequest(
             user_ids=user_ids,
             title=title,
@@ -160,28 +169,40 @@ class NotificationService:
                 "event_type": "power_outage"
             }
         )
-        
-        return await NotificationService.send_bulk_notification(db, request)
-    
+        await NotificationService.send_bulk_notification(db, request)
+
+        # ۲. ارسال به RabbitMQ برای پیامک/ایمیل (خارج از برنامه)
+        # در حالت واقعی، شماره‌ها را از دیتابیس بر اساس user_ids استخراج می‌کنید
+        payload = NotificationPayload(
+            provider="sms",
+            recipient="managers_group",  # مقدار تستی یا شماره تلفن مدیر
+            message=message
+        )
+        background_tasks.add_task(send_rabbitmq_notification, payload)
+
+        return {"status": "Database alert saved and External Notification queued"}
+
     @staticmethod
     async def notify_threshold_exceeded(
-        db: AsyncSession,
-        user_ids: List[int],
-        post_name: str,
-        post_id: int,
-        parameter_name: str,
-        current_value: float,
-        threshold: float,
-        unit: str = ""
+            db: AsyncSession,
+            user_ids: List[int],
+            post_name: str,
+            post_id: int,
+            parameter_name: str,
+            current_value: float,
+            threshold: float,
+            background_tasks: BackgroundTasks,  # اضافه شد
+            unit: str = ""
     ):
-        """نوتیفیکیشن عبور از آستانه"""
-        
+        """نوتیفیکیشن عبور از آستانه (دیتابیس + پیامک/ایمیل)"""
+
         title = f"هشدار ⚠️: {parameter_name} غیرمجاز"
         message = (
             f"در پست {post_name}، مقدار {parameter_name} به {current_value}{unit} "
             f"رسیده است که از حد آستانه ({threshold}{unit}) فراتر رفته است."
         )
-        
+
+        # ۱. ذخیره در دیتابیس (In-App)
         request = NotificationBulkCreateRequest(
             user_ids=user_ids,
             title=title,
@@ -199,17 +220,26 @@ class NotificationService:
                 "event_type": "threshold_exceeded"
             }
         )
-        
-        return await NotificationService.send_bulk_notification(db, request)
+        await NotificationService.send_bulk_notification(db, request)
+
+        # ۲. ارسال به RabbitMQ برای پیامک/ایمیل
+        payload = NotificationPayload(
+            provider="sms",
+            recipient="09123456789",  # این شماره باید با سیستم کاربران شما مپ شود
+            message=message
+        )
+        background_tasks.add_task(send_rabbitmq_notification, payload)
+
+        return {"status": "Database alert saved and SMS queued"}
 
     @staticmethod
     def _should_send(
-        pref: NotificationPreference,
-        n_type: NotificationType,
-        priority: NotificationPriority
+            pref: NotificationPreference,
+            n_type: NotificationType,
+            priority: NotificationPriority
     ) -> bool:
         """بررسی اینکه آیا نوتیفیکیشن باید ارسال شود یا خیر (بر اساس تنظیمات کاربر)"""
-        
+
         # بررسی فعال بودن نوع نوتیفیکیشن
         type_mapping = {
             NotificationType.INFO: pref.enable_info,
@@ -218,10 +248,10 @@ class NotificationService:
             NotificationType.SUCCESS: pref.enable_success,
             NotificationType.ALERT: pref.enable_alert
         }
-        
+
         if not type_mapping.get(n_type, True):
             return False
-            
+
         # بررسی اولویت
         priority_levels = {
             NotificationPriority.LOW: 0,
@@ -229,8 +259,8 @@ class NotificationService:
             NotificationPriority.HIGH: 2,
             NotificationPriority.CRITICAL: 3
         }
-        
+
         if priority_levels.get(priority, 0) < priority_levels.get(pref.min_priority, 0):
             return False
-            
+
         return True

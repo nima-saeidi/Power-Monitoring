@@ -16,7 +16,8 @@ from main_api.modules.notifications.repository import NotificationRepository
 
 # ایمپورت منیجرهای وب‌سوکت که در فایل‌های قبلی ساختیم
 # from websockets.managers import notification_manager
-
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Depends
+from .websocket import notifier_manager
 router = APIRouter(prefix="/notifications", tags=["Notifications"])
 
 
@@ -135,21 +136,21 @@ async def update_preferences(
 #                          مسیرهای وب‌سوکت
 # =====================================================================
 
-# @router.websocket("/ws/{user_id}")
-# async def websocket_notifications(websocket: WebSocket, user_id: int):
-#     """
-#     وب‌سوکت اختصاصی کاربر برای دریافت زنده نوتیفیکیشن‌ها و هشدارها
-#     مسیر اتصال: ws://domain/notifications/ws/{user_id}
-#     """
-#     await notification_manager.connect(websocket, user_id)
-#     try:
-#         while True:
-#             # کلاینت معمولا شنونده است، اما برای باز ماندن اتصال منتظر می‌مانیم
-#             data = await websocket.receive_text()
+@router.websocket("/ws/{user_id}")
+async def websocket_notifications(websocket: WebSocket, user_id: int):
+    """
+    وب‌سوکت اختصاصی کاربر برای دریافت زنده نوتیفیکیشن‌ها و هشدارها
+    مسیر اتصال: ws://domain/notifications/ws/{user_id}
+    """
+    await notification_manager.connect(websocket, user_id)
+    try:
+        while True:
+            # کلاینت معمولا شنونده است، اما برای باز ماندن اتصال منتظر می‌مانیم
+            data = await websocket.receive_text()
             
-#             # در صورت نیاز برای هندل کردن وضعیت زنده ماندن اتصال مرورگر (Keep-Alive)
-#             if data == "ping":
-#                 await websocket.send_text("pong")
+            # در صورت نیاز برای هندل کردن وضعیت زنده ماندن اتصال مرورگر (Keep-Alive)
+            if data == "ping":
+                await websocket.send_text("pong")
                 
-#     except WebSocketDisconnect:
-#         notification_manager.disconnect(websocket, user_id)
+    except WebSocketDisconnect:
+        notification_manager.disconnect(websocket, user_id)
