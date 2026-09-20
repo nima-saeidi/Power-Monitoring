@@ -87,7 +87,7 @@ services:
     restart: unless-stopped
     environment:
       - "OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx512m"
-      - "bootstrap.memory_lock=true"
+      - "bootstrap.memory_lock=false"
       - "discovery.type=single-node"
       - "action.auto_create_index=false"
       - "plugins.security.disabled=true"
@@ -100,6 +100,11 @@ services:
         hard: 65536
     volumes:
       - opensearch_data:/usr/share/opensearch/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -s http://localhost:9200 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
     networks:
       - power_net
 
@@ -118,8 +123,10 @@ services:
     volumes:
       - graylog_data:/usr/share/graylog/data
     depends_on:
-      - mongo
-      - opensearch
+      mongo:
+        condition: service_started
+      opensearch:
+        condition: service_healthy
     networks:
       - power_net
 
