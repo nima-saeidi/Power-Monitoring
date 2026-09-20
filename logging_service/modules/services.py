@@ -3,7 +3,7 @@ from typing import Optional
 from sqlalchemy import select, func, or_
 from core.database import AsyncSessionLocal
 from modules.models import AuditLog
-from modules.schemas import LogFilterRequest, LogListResponse, LogItem
+from modules.schemas import LogFilterRequest, LogListResponse, LogItem, LogCreate
 
 logger = logging.getLogger(__name__)
 
@@ -11,21 +11,16 @@ logger = logging.getLogger(__name__)
 class LoggingService:
 
     @staticmethod
-    async def save_log(log_data: dict) -> AuditLog:
-        """ذخیره‌سازی پیام دریافتی از صف RabbitMQ در دیتابیس PostgreSQL"""
+    async def save_log(log_data: LogCreate) -> AuditLog:
+        """ذخیره‌سازی پیام دریافتی و اعتبارسنجی شده از صف RabbitMQ در دیتابیس PostgreSQL"""
         async with AsyncSessionLocal() as session:
             try:
-                # استخراج فیلدهای اصلی و تفکیک details
-                service_name = log_data.get("service_name", "main_api")
-                action = log_data.get("action", "UNKNOWN")
-                user_id = log_data.get("user_id")
-                details = log_data.get("details", log_data)
-
+                # استفاده مستقیم از فیلدهای مدل Pydantic
                 new_log = AuditLog(
-                    service_name=service_name,
-                    action=action,
-                    user_id=user_id,
-                    details=details
+                    service_name=log_data.service_name,
+                    action=log_data.action,
+                    user_id=log_data.user_id,
+                    details=log_data.details
                 )
                 session.add(new_log)
                 await session.commit()
