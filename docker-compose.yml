@@ -71,7 +71,7 @@ services:
       - power_net
 
   # 4. MongoDB Service
-  mongodb:
+  mongo:
     image: mongo:4.4
     container_name: power_monitoring_mongo
     restart: unless-stopped
@@ -116,7 +116,7 @@ services:
     volumes:
       - graylog_data:/usr/share/graylog/data
     depends_on:
-      - mongodb
+      - mongo
       - opensearch
     networks:
       - power_net
