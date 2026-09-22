@@ -22,6 +22,10 @@ class TelemetryResponse(TelemetryBase):
         from_attributes = True
 
 # --- ساختار اطلاعات ارسالی به شِدولر/ورکر تلمتری ---
+# مقادیر پیش‌فرض scan_interval/max_failures/modbus_timeout/modbus_retry_count در
+# TelemetryRepository.get_active_feeders() از تنظیمات سیستم (system_settings) پر
+# می‌شوند؛ در صورت وجود override اختصاصی در metadata_info هر فیدر، آن مقدار
+# اولویت دارد.
 class ActiveFeederConfig(BaseModel):
     feeder_id: int
     post_id: int
@@ -30,6 +34,9 @@ class ActiveFeederConfig(BaseModel):
     port: int = 502
     slave_id: int = 1
     scan_interval: int = 5
+    max_failures: int = 3
+    modbus_timeout: int = 3
+    modbus_retry_count: int = 3
     is_active: bool = True
 
     class Config:

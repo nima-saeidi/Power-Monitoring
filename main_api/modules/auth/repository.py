@@ -1,3 +1,5 @@
+from typing import Optional
+from datetime import datetime
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from main_api.modules.auth.models import User
@@ -25,3 +27,21 @@ class UserRepository:
     async def get_all(self):
         result = await self.db.execute(select(User))
         return result.scalars().all()
+
+    async def update_login_state(
+        self, user: User, failed_attempts: int, locked_until: Optional[datetime]
+    ) -> User:
+        """
+        بروزرسانی مستقیم و همزمان (synchronous) وضعیت تلاش‌های ناموفق ورود/قفل حساب.
+
+        برخلاف بقیه‌ی نوشتن‌های ماژول auth که رویدادمحور هستند (از طریق RabbitMQ
+        به postgres_storage_service ارسال می‌شوند و eventually-consistent اند)،
+        این فیلد عمداً مستقیم نوشته می‌شود: قفل شدن حساب یک کنترل امنیتی است که
+        باید فوراً و بدون تاخیر صف پیام اعمال شود، وگرنه چند تلاش سریع پشت‌سرهم
+        می‌توانند از محدودیت max_login_attempts عبور کنند.
+        """
+        user.failed_login_attempts = failed_attempts
+        user.locked_until = locked_until
+        await self.db.commit()
+        await self.db.refresh(user)
+        return user

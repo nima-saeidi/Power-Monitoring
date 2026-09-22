@@ -26,6 +26,11 @@ class User(Base):
     # فیلد جدید برای فعال/غیرفعال بودن نوتیفیکیشن پیامکی
     sms_notification_enabled = Column(Boolean, default=False)
 
+    # وضعیت قفل حساب بر اساس تنظیمات max_login_attempts / lockout_duration_minutes
+    # (تنظیمات سیستم -> main_api/modules/settings)
+    failed_login_attempts = Column(Integer, default=0, nullable=False)
+    locked_until = Column(DateTime(timezone=True), nullable=True)
+
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     notifications = relationship("Notification", back_populates="user", cascade="all, delete-orphan")

@@ -28,7 +28,7 @@ router = APIRouter(prefix="/audit-logs", tags=["Audit Logs"])
 async def get_audit_logs(
         user_id: Optional[int] = Query(None, description="فیلتر بر اساس کاربر"),
         action: Optional[str] = Query(None, description="فیلتر بر اساس نوع عملیات"),
-        resource_type: Optional[str] = Query(None, description="فیلتر بر اساس نوع منبع"),
+        service_name: Optional[str] = Query(None, description="فیلتر بر اساس نام سرویس (main_api, notification_service, ...)"),
         severity: Optional[str] = Query(None, pattern="^(?i)(debug|info|warning|error|critical)$"),
         success: Optional[bool] = Query(None, description="فیلتر بر اساس موفقیت"),
         start_date: Optional[datetime] = Query(None, description="تاریخ شروع"),
@@ -39,9 +39,18 @@ async def get_audit_logs(
         current_user: User = Depends(require_tech_or_admin)
 ):
     return await service.get_logs(
-        user_id, action, resource_type, severity, success,
+        user_id, action, service_name, severity, success,
         start_date, end_date, page, page_size
     )
+
+
+@router.get("/meta/filters")
+async def get_audit_log_filters(
+        service: AuditLogService = Depends(get_audit_log_service),
+        current_user: User = Depends(require_tech_or_admin)
+):
+    """لیست مقادیر یکتای سرویس‌ها و اکشن‌ها برای ساخت کشوی فیلتر در پنل ادمین"""
+    return await service.get_filter_options()
 
 
 @router.get("/search", response_model=AuditLogListResponse)

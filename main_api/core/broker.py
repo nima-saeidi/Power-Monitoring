@@ -2,7 +2,6 @@ import json
 import logging
 from typing import Any, Dict, Optional
 import aio_pika
-from datetime import datetime, timezone
 from main_api.core.config import settings
 
 logger = logging.getLogger(__name__)
@@ -95,17 +94,28 @@ async def send_log_to_rabbitmq(
     extra_data: Optional[Dict[str, Any]] = None,
     **kwargs
 ):
-    """ارسال لاگ‌های سیستمی به RabbitMQ از طریق رویداد"""
+    """
+    ارسال لاگ‌های سیستمی (رویدادهای عمومی، خطاها و ...) به سرویس لاگ.
+
+    توجه: این تابع دیگر مستقیماً به Topic Exchange پیام نمی‌فرستد (چون هیچ
+    کانسومری روی routing_key قدیمی 'logs.audit' گوش نمی‌داد و لاگ‌ها گم
+    می‌شدند). به‌جای آن از همان مسیر واحد و تست‌شده‌ی صف 'logs_queue' که
+    توسط logging_service مصرف می‌شود استفاده می‌کند.
+    """
+    # ایمپورت تأخیری برای جلوگیری از Circular Import بین core.broker و audit_logs.services
+    from main_api.modules.audit_logs.services import send_audit_log
+
     payload_extra = extra_data or {}
     if kwargs:
         payload_extra.update(kwargs)
 
-    log_payload = {
-        "service_name": service,
-        "level": level.upper(),
-        "message": message,
-        "extra_data": payload_extra,
-        "timestamp": datetime.now(timezone.utc).isoformat()
-    }
-    # ارسال لاگ‌ها با routing_key مشخص برای پردازش در سرویس لاگ
-    await message_broker.publish_event(routing_key="logs.audit", message=log_payload)
+    action = payload_extra.pop("action", "SYSTEM_EVENT")
+
+    await send_audit_log(
+        action=action,
+        success=level.upper() not in ("ERROR", "CRITICAL"),
+        severity=level.upper(),
+        service_name=service,
+        description=message,
+        **payload_extra
+    )

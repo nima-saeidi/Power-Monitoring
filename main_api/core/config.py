@@ -18,6 +18,7 @@ class Settings(BaseSettings):
     SMTP_PASSWORD: str = ""  # در فایل .env پر شود
     FRONTEND_URL: str = "http://localhost:3000"  # آدرس فرانت‌اند برای لینک بازیابی
     RABBITMQ_URL: str = "amqp://guest:guest@rabbitmq:5672/"
+    LOGGING_SERVICE_URL: str = "http://logging:8002"
     model_config = SettingsConfigDict(
         env_file=os.path.join(BASE_DIR, ".env"),
         env_file_encoding="utf-8",

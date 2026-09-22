@@ -13,7 +13,7 @@ except ImportError:
     from main_api.core.broker import RabbitMQPublisher
 
 # ایمپورت سیستم لاگینگ متمرکز
-from main_api.modules.audit_logs.services import send_audit_log
+from main_api.modules.audit_logs.services import send_audit_log, schedule_audit_log
 
 from main_api.modules.devices.repository import DeviceRepository
 from main_api.modules.devices.schemas import (
@@ -73,7 +73,7 @@ class DeviceService:
     # =========================================================
     # LOCATION SERVICES
     # =========================================================
-    async def create_location(self, data: LocationCreate, background_tasks: BackgroundTasks,
+    async def create_location(self, data: LocationCreate, background_tasks: Optional[BackgroundTasks] = None,
                               username: Optional[str] = None):
         # بررسی وجود والد در صورت ارسال parent_id
         if data.parent_id:
@@ -95,14 +95,14 @@ class DeviceService:
         await self._publish("location", "create", data=full_new_location)
 
         # لاگ موفقیت‌آمیز
-        background_tasks.add_task(
-            send_audit_log, action="CREATE_LOCATION", username=username, success=True, severity="INFO",
+        schedule_audit_log(
+            background_tasks, action="CREATE_LOCATION", username=username, success=True, severity="INFO",
             description=f"مکان جدید '{getattr(data, 'name', 'نامشخص')}' ایجاد شد."
         )
 
         return full_new_location
 
-    async def update_location(self, location_id: int, data: LocationUpdate, background_tasks: BackgroundTasks,
+    async def update_location(self, location_id: int, data: LocationUpdate, background_tasks: Optional[BackgroundTasks] = None,
                               username: Optional[str] = None):
         existing_location = await self.repo.get_location_by_id(location_id)
         if not existing_location:
@@ -147,14 +147,14 @@ class DeviceService:
         update_data = data.model_dump(exclude_unset=True)
         await self._publish("location", "update", data=update_data, filters={"id": location_id})
 
-        background_tasks.add_task(
-            send_audit_log, action="UPDATE_LOCATION", username=username, success=True, severity="INFO",
+        schedule_audit_log(
+            background_tasks, action="UPDATE_LOCATION", username=username, success=True, severity="INFO",
             description=f"مکان با شناسه {location_id} با موفقیت بروزرسانی شد."
         )
 
         return updated_location
 
-    async def delete_location(self, location_id: int, background_tasks: BackgroundTasks,
+    async def delete_location(self, location_id: int, background_tasks: Optional[BackgroundTasks] = None,
                               username: Optional[str] = None):
         is_deleted = await self.repo.delete_location(location_id)
         if not is_deleted:
@@ -166,8 +166,8 @@ class DeviceService:
 
         await self._publish("location", "delete", data={}, filters={"id": location_id})
 
-        background_tasks.add_task(
-            send_audit_log, action="DELETE_LOCATION", username=username, success=True, severity="WARNING",
+        schedule_audit_log(
+            background_tasks, action="DELETE_LOCATION", username=username, success=True, severity="WARNING",
             description=f"مکان با شناسه {location_id} حذف شد."
         )
 
@@ -188,17 +188,17 @@ class DeviceService:
     # =========================================================
     # POST SERVICES
     # =========================================================
-    async def create_post(self, data: PostCreate, background_tasks: BackgroundTasks, username: Optional[str] = None):
+    async def create_post(self, data: PostCreate, background_tasks: Optional[BackgroundTasks] = None, username: Optional[str] = None):
         new_post = await self.repo.create_post(data)
         await self._publish("post", "create", data=new_post)
 
-        background_tasks.add_task(
-            send_audit_log, action="CREATE_POST", username=username, success=True, severity="INFO",
+        schedule_audit_log(
+            background_tasks, action="CREATE_POST", username=username, success=True, severity="INFO",
             description=f"پست جدید '{getattr(data, 'name', 'نامشخص')}' ایجاد شد."
         )
         return new_post
 
-    async def update_post(self, post_id: int, data: PostUpdate, background_tasks: BackgroundTasks,
+    async def update_post(self, post_id: int, data: PostUpdate, background_tasks: Optional[BackgroundTasks] = None,
                           username: Optional[str] = None):
         post = await self.repo.get_post_by_id(post_id)
         if not post:
@@ -212,13 +212,13 @@ class DeviceService:
         update_data = data.model_dump(exclude_unset=True)
         await self._publish("post", "update", data=update_data, filters={"id": post_id})
 
-        background_tasks.add_task(
-            send_audit_log, action="UPDATE_POST", username=username, success=True, severity="INFO",
+        schedule_audit_log(
+            background_tasks, action="UPDATE_POST", username=username, success=True, severity="INFO",
             description=f"پست با شناسه {post_id} بروزرسانی شد."
         )
         return updated_post
 
-    async def delete_post(self, post_id: int, background_tasks: BackgroundTasks, username: Optional[str] = None):
+    async def delete_post(self, post_id: int, background_tasks: Optional[BackgroundTasks] = None, username: Optional[str] = None):
         post = await self.repo.get_post_by_id(post_id)
         if not post:
             asyncio.create_task(send_audit_log(
@@ -230,8 +230,8 @@ class DeviceService:
         await self.repo.delete_post(post)
         await self._publish("post", "delete", data={}, filters={"id": post_id})
 
-        background_tasks.add_task(
-            send_audit_log, action="DELETE_POST", username=username, success=True, severity="WARNING",
+        schedule_audit_log(
+            background_tasks, action="DELETE_POST", username=username, success=True, severity="WARNING",
             description=f"پست با شناسه {post_id} حذف شد."
         )
         return {"message": "Post deleted successfully."}
@@ -249,7 +249,7 @@ class DeviceService:
     # FEEDER SERVICES
     # =========================================================
     async def create_feeders(self, data_input: Union[List[FeederCreate], FeederCreate],
-                             background_tasks: BackgroundTasks, username: Optional[str] = None):
+                             background_tasks: Optional[BackgroundTasks] = None, username: Optional[str] = None):
         if not isinstance(data_input, list):
             data_list = [data_input]
         else:
@@ -261,14 +261,14 @@ class DeviceService:
             await self._publish("feeder", "create", data=new_feeder)
             created_feeders.append(new_feeder)
 
-        background_tasks.add_task(
-            send_audit_log, action="CREATE_FEEDERS", username=username, success=True, severity="INFO",
+        schedule_audit_log(
+            background_tasks, action="CREATE_FEEDERS", username=username, success=True, severity="INFO",
             description=f"تعداد {len(data_list)} فیدر جدید با موفقیت ایجاد شد."
         )
 
         return created_feeders[0] if not isinstance(data_input, list) else created_feeders
 
-    async def update_feeder(self, feeder_id: int, data: FeederUpdate, background_tasks: BackgroundTasks,
+    async def update_feeder(self, feeder_id: int, data: FeederUpdate, background_tasks: Optional[BackgroundTasks] = None,
                             username: Optional[str] = None):
         feeder = await self.repo.get_feeder_by_id(feeder_id)
         if not feeder:
@@ -282,13 +282,13 @@ class DeviceService:
         update_data = data.model_dump(exclude_unset=True)
         await self._publish("feeder", "update", data=update_data, filters={"id": feeder_id})
 
-        background_tasks.add_task(
-            send_audit_log, action="UPDATE_FEEDER", username=username, success=True, severity="INFO",
+        schedule_audit_log(
+            background_tasks, action="UPDATE_FEEDER", username=username, success=True, severity="INFO",
             description=f"فیدر با شناسه {feeder_id} بروزرسانی شد."
         )
         return updated_feeder
 
-    async def delete_feeder(self, feeder_id: int, background_tasks: BackgroundTasks, username: Optional[str] = None):
+    async def delete_feeder(self, feeder_id: int, background_tasks: Optional[BackgroundTasks] = None, username: Optional[str] = None):
         feeder = await self.repo.get_feeder_by_id(feeder_id)
         if not feeder:
             asyncio.create_task(send_audit_log(
@@ -300,8 +300,8 @@ class DeviceService:
         await self.repo.delete_feeder(feeder)
         await self._publish("feeder", "delete", data={}, filters={"id": feeder_id})
 
-        background_tasks.add_task(
-            send_audit_log, action="DELETE_FEEDER", username=username, success=True, severity="WARNING",
+        schedule_audit_log(
+            background_tasks, action="DELETE_FEEDER", username=username, success=True, severity="WARNING",
             description=f"فیدر با شناسه {feeder_id} حذف شد."
         )
         return {"message": "Feeder deleted successfully."}
@@ -318,17 +318,17 @@ class DeviceService:
     # =========================================================
     # LINK SERVICES
     # =========================================================
-    async def create_link(self, data: LinkCreate, background_tasks: BackgroundTasks, username: Optional[str] = None):
+    async def create_link(self, data: LinkCreate, background_tasks: Optional[BackgroundTasks] = None, username: Optional[str] = None):
         new_link = await self.repo.create_link(data)
         await self._publish("link", "create", data=new_link)
 
-        background_tasks.add_task(
-            send_audit_log, action="CREATE_LINK", username=username, success=True, severity="INFO",
+        schedule_audit_log(
+            background_tasks, action="CREATE_LINK", username=username, success=True, severity="INFO",
             description=f"لینک ارتباطی جدید از نوع '{getattr(data, 'type', 'نامشخص')}' ایجاد شد."
         )
         return new_link
 
-    async def update_link(self, link_id: int, data: LinkUpdate, background_tasks: BackgroundTasks,
+    async def update_link(self, link_id: int, data: LinkUpdate, background_tasks: Optional[BackgroundTasks] = None,
                           username: Optional[str] = None):
         link = await self.repo.get_link_by_id(link_id)
         if not link:
@@ -342,13 +342,13 @@ class DeviceService:
         update_data = data.model_dump(exclude_unset=True)
         await self._publish("link", "update", data=update_data, filters={"id": link_id})
 
-        background_tasks.add_task(
-            send_audit_log, action="UPDATE_LINK", username=username, success=True, severity="INFO",
+        schedule_audit_log(
+            background_tasks, action="UPDATE_LINK", username=username, success=True, severity="INFO",
             description=f"لینک ارتباطی با شناسه {link_id} بروزرسانی شد."
         )
         return updated_link
 
-    async def delete_link(self, link_id: int, background_tasks: BackgroundTasks, username: Optional[str] = None):
+    async def delete_link(self, link_id: int, background_tasks: Optional[BackgroundTasks] = None, username: Optional[str] = None):
         link = await self.repo.get_link_by_id(link_id)
         if not link:
             asyncio.create_task(send_audit_log(
@@ -360,8 +360,8 @@ class DeviceService:
         await self.repo.delete_link(link)
         await self._publish("link", "delete", data={}, filters={"id": link_id})
 
-        background_tasks.add_task(
-            send_audit_log, action="DELETE_LINK", username=username, success=True, severity="WARNING",
+        schedule_audit_log(
+            background_tasks, action="DELETE_LINK", username=username, success=True, severity="WARNING",
             description=f"لینک ارتباطی با شناسه {link_id} حذف شد."
         )
         return {"message": "Link deleted successfully."}
@@ -378,7 +378,7 @@ class DeviceService:
     # =========================================================
     # CAMPUS / BULK SERVICES
     # =========================================================
-    async def create_campus_with_subsections(self, data: CampusWithSubsectionsCreate, background_tasks: BackgroundTasks,
+    async def create_campus_with_subsections(self, data: CampusWithSubsectionsCreate, background_tasks: Optional[BackgroundTasks] = None,
                                              username: Optional[str] = None):
         try:
             new_campus = await self.repo.create_campus_with_subsections(data)
@@ -404,7 +404,7 @@ class DeviceService:
     # =========================================================
     # COMMAND SERVICES (IoT Actions)
     # =========================================================
-    async def execute_command(self, data: CommandRequest, background_tasks: BackgroundTasks,
+    async def execute_command(self, data: CommandRequest, background_tasks: Optional[BackgroundTasks] = None,
                               username: Optional[str] = None):
         try:
             # ارسال فرمان اجرایی به دیوایس‌های لبه (Edge Devices) از طریق رابیت‌ام‌کیو
@@ -428,7 +428,7 @@ class DeviceService:
     # =========================================================
     # EXPORT SERVICES (Pandas integration for Reporting)
     # =========================================================
-    async def export_devices_to_excel(self, background_tasks: BackgroundTasks, username: Optional[str] = None):
+    async def export_devices_to_excel(self, background_tasks: Optional[BackgroundTasks] = None, username: Optional[str] = None):
         try:
             # دریافت داده‌ها برای تهیه گزارش (به‌عنوان نمونه)
             locations = await self.repo.get_all_locations(skip=0, limit=10000)
@@ -438,8 +438,8 @@ class DeviceService:
                          locations]
             df = pd.DataFrame(data_list)
 
-            background_tasks.add_task(
-                send_audit_log, action="EXPORT_DEVICES_EXCEL", username=username, success=True, severity="INFO",
+            schedule_audit_log(
+                background_tasks, action="EXPORT_DEVICES_EXCEL", username=username, success=True, severity="INFO",
                 description="خروجی اکسل دستگاه‌ها و مکان‌ها با موفقیت ایجاد شد."
             )
 

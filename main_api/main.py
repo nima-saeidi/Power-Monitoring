@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import uvicorn
 from contextlib import asynccontextmanager
@@ -35,6 +36,7 @@ from main_api.modules.devices.router import (
 from main_api.modules.settings.router import router as settings_router
 from main_api.modules.notifications.router import router as notifications_router
 from main_api.modules.telemetry.router import router as telemetry_router
+from main_api.modules.audit_logs.router import router as audit_logs_router
 
 # پیکربندی اولیه لاگر
 setup_logging(service_name="main_api")
@@ -174,6 +176,23 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
 # ۲. مدیریت خطاهای استاندارد HTTP
 @app.exception_handler(StarletteHTTPException)
 async def http_exception_handler(request: Request, exc: StarletteHTTPException):
+    # ثبت درخواست‌های ناموفق (احراز هویت، دسترسی، ۴۰۴، ۵xx و ...) در سیستم لاگ
+    if exc.status_code >= 400:
+        severity = "ERROR" if exc.status_code >= 500 else (
+            "WARNING" if exc.status_code in (401, 403, 429) else "INFO"
+        )
+        client_ip = request.client.host if request.client else None
+        asyncio.create_task(send_log_to_rabbitmq(
+            level=severity,
+            message=f"HTTP {exc.status_code} on {request.method} {request.url.path}: {exc.detail}",
+            service="main_api",
+            action="REQUEST_FAILED",
+            ip_address=client_ip,
+            path=request.url.path,
+            method=request.method,
+            status_code=exc.status_code,
+        ))
+
     return JSONResponse(
         status_code=exc.status_code,
         content={
@@ -304,6 +323,9 @@ app.include_router(telemetry_router)
 # نوتیفیکیشن‌ها و تنظیمات سامانه
 app.include_router(notifications_router)
 app.include_router(settings_router)
+
+# لاگ‌های حسابرسی (پنل ادمین) - پروکسی روی logging_service
+app.include_router(audit_logs_router)
 
 if __name__ == "__main__":
     uvicorn.run("main_api.main:app", host="0.0.0.0", port=8000, reload=True)

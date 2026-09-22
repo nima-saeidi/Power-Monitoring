@@ -27,6 +27,10 @@ class LogFilterRequest(BaseModel):
     action: Optional[str] = Field(default=None, description="Filter by action")
     user_id: Optional[int] = Field(default=None, description="Filter by user ID")
     search: Optional[str] = Field(default=None, description="Search keyword in action/service")
+    severity: Optional[str] = Field(default=None, description="Filter by details.severity (INFO/WARNING/ERROR/CRITICAL)")
+    success: Optional[bool] = Field(default=None, description="Filter by details.success")
+    start_date: Optional[datetime] = Field(default=None, description="Filter logs created at/after this time")
+    end_date: Optional[datetime] = Field(default=None, description="Filter logs created at/before this time")
     limit: int = Field(default=50, ge=1, le=1000)
     offset: int = Field(default=0, ge=0)
 
@@ -34,3 +38,12 @@ class LogFilterRequest(BaseModel):
 class LogListResponse(BaseModel):
     total: int
     items: List[LogItem]
+
+
+class LogFilterOptionsResponse(BaseModel):
+    services: List[str]
+    actions: List[str]
+
+
+class LogPurgeResponse(BaseModel):
+    deleted_count: int

@@ -3,6 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi import BackgroundTasks
 
 from main_api.core.database import get_db
+from main_api.core.broker import get_rabbitmq_publisher, RabbitMQPublisher
 from main_api.modules.auth.repository import UserRepository
 from main_api.modules.auth.service import AuthService
 from main_api.modules.auth.dependencies import (
@@ -20,9 +21,12 @@ from main_api.modules.auth.schemas import (
 
 user_router = APIRouter(prefix="/users", tags=["User Management"])
 
-def get_auth_service(db: AsyncSession = Depends(get_db)) -> AuthService:
+def get_auth_service(
+    db: AsyncSession = Depends(get_db),
+    publisher: RabbitMQPublisher = Depends(get_rabbitmq_publisher),
+) -> AuthService:
     repo = UserRepository(db)
-    return AuthService(repo)
+    return AuthService(repository=repo, publisher=publisher, db=db)
 
 # ==========================================
 # User Management Routes
@@ -60,7 +64,7 @@ async def create_user(
     service: AuthService = Depends(get_auth_service),
     current_admin = Depends(require_admin)  # فقط ادمین
 ):
-    return await service.create_user(data)
+    return await service.create_user(data, current_user=current_admin)
 
 @user_router.put("/{user_id}", response_model=UserResponse, summary="Update User (Admin Only)")
 async def update_user(
@@ -69,7 +73,7 @@ async def update_user(
     service: AuthService = Depends(get_auth_service),
     current_admin = Depends(require_admin)  # فقط ادمین
 ):
-    return await service.update_user(user_id, data)
+    return await service.update_user(user_id, data, current_user=current_admin)
 
 @user_router.delete("/{user_id}", status_code=status.HTTP_200_OK, summary="Delete User (Admin Only)")
 async def delete_user(
@@ -77,7 +81,7 @@ async def delete_user(
     service: AuthService = Depends(get_auth_service),
     current_admin = Depends(require_admin)  # فقط ادمین
 ):
-    return await service.delete_user(user_id)
+    return await service.delete_user(user_id, current_user=current_admin)
 
 @user_router.get("/roles/list", summary="List All Available Roles (All Users)")
 async def get_roles(

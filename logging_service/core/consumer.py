@@ -43,7 +43,8 @@ async def process_audit_message(message: aio_pika.IncomingMessage):
 
             # ۲. ارسال به Graylog
             if GelfUdpHandler:
-                level_str = str(data.get("level", "INFO")).upper()
+                details = valid_log.details or {}
+                level_str = str(details.get("severity", "INFO")).upper()
                 level_map = {
                     "DEBUG": logging.DEBUG,
                     "INFO": logging.INFO,
@@ -58,11 +59,13 @@ async def process_audit_message(message: aio_pika.IncomingMessage):
                     "_service_name": valid_log.service_name,
                     "_audit_action": valid_log.action,
                     "_user_id": valid_log.user_id,
-                    "_extra_data": str(valid_log.details)
+                    "_success": details.get("success"),
+                    "_username": details.get("username"),
+                    "_extra_data": str(details)
                 }
 
                 # ارسال پیام به گری‌لاگ
-                msg_text = data.get("message", f"Audit Log: {valid_log.action}")
+                msg_text = details.get("description") or f"Audit Log: {valid_log.action}"
                 graylog_logger.log(log_level, msg_text, extra=extra_fields)
 
         except json.JSONDecodeError as jde:

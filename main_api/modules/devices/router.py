@@ -57,14 +57,14 @@ def get_device_service(
 async def create_campus_with_subsections(data: CampusWithSubsectionsCreate,
                                          service: DeviceService = Depends(get_device_service),
                                          current_user=Depends(require_tech_or_admin)):
-    return await service.create_campus_with_subsections(data)
+    return await service.create_campus_with_subsections(data, username=current_user.email)
 
 
 @locations_router.post("", response_model=LocationResponse, status_code=status.HTTP_201_CREATED,
                        summary="Create New Location")
 async def create_location(data: LocationCreate, service: DeviceService = Depends(get_device_service),
                           current_user=Depends(require_tech_or_admin)):
-    return await service.create_location(data)
+    return await service.create_location(data, username=current_user.email)
 
 
 @locations_router.get("/roots", response_model=List[LocationResponse], summary="Get Root Locations")
@@ -104,13 +104,13 @@ async def get_location(location_id: int, service: DeviceService = Depends(get_de
 @locations_router.put("/{location_id}", response_model=LocationResponse, summary="Update Location")
 async def update_location(location_id: int, data: LocationUpdate, service: DeviceService = Depends(get_device_service),
                           current_user=Depends(require_tech_or_admin)):
-    return await service.update_location(location_id, data)
+    return await service.update_location(location_id, data, username=current_user.email)
 
 
 @locations_router.delete("/{location_id}", status_code=status.HTTP_204_NO_CONTENT, summary="Delete Location")
 async def delete_location(location_id: int, service: DeviceService = Depends(get_device_service),
                           current_user=Depends(require_tech_or_admin)):
-    await service.delete_location(location_id)
+    await service.delete_location(location_id, username=current_user.email)
     return
 
 
@@ -127,7 +127,7 @@ async def get_posts_by_location(location_id: int, service: DeviceService = Depen
 @posts_router.post("", response_model=PostResponse, status_code=status.HTTP_201_CREATED, summary="Create New Post")
 async def create_post(data: PostCreate, service: DeviceService = Depends(get_device_service),
                       current_user=Depends(require_tech_or_admin)):
-    return await service.create_post(data)
+    return await service.create_post(data, username=current_user.email)
 
 
 @posts_router.get("", response_model=List[PostResponse], summary="Get All Posts")
@@ -145,13 +145,13 @@ async def get_post(post_id: int, service: DeviceService = Depends(get_device_ser
 @posts_router.put("/{post_id}", response_model=PostResponse, summary="Update Post")
 async def update_post(post_id: int, data: PostUpdate, service: DeviceService = Depends(get_device_service),
                       current_user=Depends(require_tech_or_admin)):
-    return await service.update_post(post_id, data)
+    return await service.update_post(post_id, data, username=current_user.email)
 
 
 @posts_router.delete("/{post_id}", status_code=status.HTTP_204_NO_CONTENT, summary="Delete Post")
 async def delete_post(post_id: int, service: DeviceService = Depends(get_device_service),
                       current_user=Depends(require_tech_or_admin)):
-    await service.delete_post(post_id)
+    await service.delete_post(post_id, username=current_user.email)
     return
 
 
@@ -201,7 +201,7 @@ async def create_feeder(
     service: DeviceService = Depends(get_device_service),
     current_user = Depends(require_tech_or_admin)
 ):
-    return await service.create_feeders(data)
+    return await service.create_feeders(data, username=current_user.email)
 
 
 @feeders_router.get("", response_model=List[FeederResponse], summary="Get All Feeders")
@@ -219,13 +219,13 @@ async def get_feeder(feeder_id: int, service: DeviceService = Depends(get_device
 @feeders_router.put("/{feeder_id}", response_model=FeederResponse, summary="Update Feeder")
 async def update_feeder(feeder_id: int, data: FeederUpdate, service: DeviceService = Depends(get_device_service),
                         current_user=Depends(require_tech_or_admin)):
-    return await service.update_feeder(feeder_id, data)
+    return await service.update_feeder(feeder_id, data, username=current_user.email)
 
 
 @feeders_router.delete("/{feeder_id}", status_code=status.HTTP_204_NO_CONTENT, summary="Delete Feeder")
 async def delete_feeder(feeder_id: int, service: DeviceService = Depends(get_device_service),
                         current_user=Depends(require_tech_or_admin)):
-    await service.delete_feeder(feeder_id)
+    await service.delete_feeder(feeder_id, username=current_user.email)
     return
 
 
@@ -267,7 +267,7 @@ async def send_command_to_feeder(feeder_id: int, request: CommandRequest, db: As
 @links_router.post("", response_model=LinkResponse, status_code=status.HTTP_201_CREATED, summary="Create New Link")
 async def create_link(data: LinkCreate, service: DeviceService = Depends(get_device_service),
                       current_user=Depends(require_tech_or_admin)):
-    return await service.create_link(data)
+    return await service.create_link(data, username=current_user.email)
 
 
 @links_router.get("", response_model=List[LinkResponse], summary="Get All Links")
@@ -285,11 +285,11 @@ async def get_link(link_id: int, service: DeviceService = Depends(get_device_ser
 @links_router.put("/{link_id}", response_model=LinkResponse, summary="Update Link")
 async def update_link(link_id: int, data: LinkUpdate, service: DeviceService = Depends(get_device_service),
                       current_user=Depends(require_tech_or_admin)):
-    return await service.update_link(link_id, data)
+    return await service.update_link(link_id, data, username=current_user.email)
 
 
 @links_router.delete("/{link_id}", status_code=status.HTTP_204_NO_CONTENT, summary="Delete Link")
 async def delete_link(link_id: int, service: DeviceService = Depends(get_device_service),
                       current_user=Depends(require_tech_or_admin)):
-    await service.delete_link(link_id)
+    await service.delete_link(link_id, username=current_user.email)
     return

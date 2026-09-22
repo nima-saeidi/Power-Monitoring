@@ -48,6 +48,8 @@ class UserResponse(BaseModel):
     role: RoleEnum | str
     is_active: bool
     sms_notification_enabled: bool | None = False  # در پایتون ۳.۱۰ به بالا
+    failed_login_attempts: int = 0
+    locked_until: Optional[datetime] = None
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)

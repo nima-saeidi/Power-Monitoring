@@ -110,11 +110,16 @@ class TelemetryScheduler:
         await self._publish_event(routing_key="telemetry.alert.device_offline", payload=alert_payload)
 
     async def poll_device(
-            self, feeder_id: int, device_ip: str, port: int, modbus_address: int, polling_interval: int, registers: dict
+            self, feeder_id: int, device_ip: str, port: int, modbus_address: int, polling_interval: int, registers: dict,
+            max_failures: int = 3, modbus_timeout: int = 3, modbus_retry_count: int = 3,
     ):
-        """پایش مداوم و ناهمگام یک فیدر با هندل کردن کامل خطاها"""
-        reader = ModbusReader(host=device_ip, port=port)
-        max_failures = getattr(settings, "MAX_TELEMETRY_FAILURES", 3)
+        """
+        پایش مداوم و ناهمگام یک فیدر با هندل کردن کامل خطاها.
+        max_failures/modbus_timeout/modbus_retry_count از تنظیمات سراسری سیستم
+        main_api (system_settings) از طریق /telemetry/active-feeders دریافت
+        می‌شوند و دیگر مقدار ثابت محلی این سرویس نیستند.
+        """
+        reader = ModbusReader(host=device_ip, port=port, timeout=modbus_timeout, retries=modbus_retry_count)
         current_fails = 0
 
         try:
@@ -195,6 +200,12 @@ class TelemetryScheduler:
                     )
                     interval = feeder.get("scan_interval") or default_interval
 
+                    # مقادیر تنظیمات سراسری سیستم (system_settings در main_api) که از طریق
+                    # /telemetry/active-feeders برای هر فیدر ارسال می‌شوند
+                    max_failures = feeder.get("max_failures", 3)
+                    modbus_timeout = feeder.get("modbus_timeout", 3)
+                    modbus_retry_count = feeder.get("modbus_retry_count", 3)
+
                     if not (feeder_id and ip):
                         continue
 
@@ -213,10 +224,13 @@ class TelemetryScheduler:
                         "port": port,
                         "modbus_addr": modbus_addr,
                         "interval": interval,
+                        "max_failures": max_failures,
+                        "modbus_timeout": modbus_timeout,
+                        "modbus_retry_count": modbus_retry_count,
                         "registers": registers
                     }
 
-                    # ۱. ری‌استارت تسک در صورت تغییر کانفیگ
+                    # ۱. ری‌استارت تسک در صورت تغییر کانفیگ (شامل تغییر تنظیمات سیستم)
                     if feeder_id in self._tasks:
                         if self._task_configs.get(feeder_id) != config_fingerprint:
                             logger.info(f"🔄 Config changed for Feeder ID {feeder_id}. Restarting task...")
@@ -226,13 +240,19 @@ class TelemetryScheduler:
                     # ۲. شروع تسک جدید یا بازنشانی‌شده
                     if feeder_id not in self._tasks or self._tasks[feeder_id].done():
                         task = asyncio.create_task(
-                            self.poll_device(feeder_id, ip, port, modbus_addr, interval, registers)
+                            self.poll_device(
+                                feeder_id, ip, port, modbus_addr, interval, registers,
+                                max_failures=max_failures, modbus_timeout=modbus_timeout,
+                                modbus_retry_count=modbus_retry_count,
+                            )
                         )
                         self._tasks[feeder_id] = task
                         self._task_configs[feeder_id] = config_fingerprint
                         logger.info(
                             f"➕ Started monitor for Feeder ID {feeder_id} at {ip}:{port} "
-                            f"(Slave ID: {modbus_addr}) every {interval}s."
+                            f"(Slave ID: {modbus_addr}) every {interval}s "
+                            f"[max_failures={max_failures}, modbus_timeout={modbus_timeout}s, "
+                            f"modbus_retry_count={modbus_retry_count}]."
                         )
 
                 # ۳. حذف فیدرهای غیرفعال شده
