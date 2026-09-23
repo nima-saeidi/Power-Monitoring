@@ -88,7 +88,7 @@ services:
     container_name: power_opensearch
     restart: unless-stopped
     environment:
-      - "OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx512m"
+      - "OPENSEARCH_JAVA_OPTS=-Xms1g -Xmx1g"
       - "bootstrap.memory_lock=false"
       - "discovery.type=single-node"
       - "action.auto_create_index=false"
@@ -104,10 +104,10 @@ services:
       - opensearch_data:/usr/share/opensearch/data
     healthcheck:
       test: ["CMD-SHELL", "curl -s -f http://localhost:9200 || exit 1"]
-      interval: 30s
+      interval: 20s
       timeout: 10s
       retries: 15
-      start_period: 120s
+      start_period: 60s
     networks:
       - power_net
 
@@ -119,6 +119,8 @@ services:
     env_file: .env
     environment:
       - GRAYLOG_ELASTICSEARCH_HOSTS=http://opensearch:9200
+      - GRAYLOG_HTTP_BIND_ADDRESS=0.0.0.0:9000
+      - GRAYLOG_SERVER_JAVA_OPTS=-Xms1g -Xmx1g -XX:+UseG1GC
     ports:
       - "9000:9000"
       - "12201:12201/udp"
