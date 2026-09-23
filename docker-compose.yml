@@ -120,7 +120,7 @@ services:
     environment:
       - GRAYLOG_ELASTICSEARCH_HOSTS=http://opensearch:9200
       - GRAYLOG_HTTP_BIND_ADDRESS=0.0.0.0:9000
-      - GRAYLOG_SERVER_JAVA_OPTS: "-Xms1g -Xmx1g"
+      - "GRAYLOG_SERVER_JAVA_OPTS=-Xms1g -Xmx1g"
     ports:
       - "9000:9000"
       - "12201:12201/udp"
