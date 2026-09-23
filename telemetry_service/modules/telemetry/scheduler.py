@@ -109,18 +109,58 @@ class TelemetryScheduler:
         }
         await self._publish_event(routing_key="telemetry.alert.device_offline", payload=alert_payload)
 
+    async def report_feeder_status(
+            self, feeder_id: int, is_online: bool, consecutive_failures: int, status_changed: bool
+    ):
+        """
+        گزارش وضعیت اتصال فیدر (آنلاین/آفلاین) به main_api جهت ذخیره در دیتابیس
+        (فیلدهای is_online/consecutive_failures/last_success روی جدول feeders) و
+        در صورت تغییر واقعی وضعیت، ثبت لاگ در سیستم لاگینگ مرکزی از طریق main_api.
+        """
+        main_api_url = getattr(settings, "MAIN_API_URL", "http://main_api:8000").rstrip("/")
+        url = f"{main_api_url}/telemetry/feeder-status"
+        payload = {
+            "feeder_id": feeder_id,
+            "is_online": is_online,
+            "consecutive_failures": consecutive_failures,
+            "status_changed": status_changed,
+        }
+        if is_online:
+            payload["last_success"] = datetime.now(timezone.utc).isoformat()
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.post(url, json=payload, timeout=10.0)
+                if response.status_code >= 400:
+                    logger.error(
+                        f"Failed to report status for Feeder ID {feeder_id}: "
+                        f"HTTP {response.status_code} | {response.text}"
+                    )
+        except Exception as e:
+            logger.error(f"Cannot report feeder status to main_api at {url}: {e}")
+
     async def poll_device(
             self, feeder_id: int, device_ip: str, port: int, modbus_address: int, polling_interval: int, registers: dict,
             max_failures: int = 3, modbus_timeout: int = 3, modbus_retry_count: int = 3,
+            offline_retry_interval: int = 300, initial_is_online: bool = True,
     ):
         """
         پایش مداوم و ناهمگام یک فیدر با هندل کردن کامل خطاها.
-        max_failures/modbus_timeout/modbus_retry_count از تنظیمات سراسری سیستم
-        main_api (system_settings) از طریق /telemetry/active-feeders دریافت
-        می‌شوند و دیگر مقدار ثابت محلی این سرویس نیستند.
+        max_failures/modbus_timeout/modbus_retry_count/offline_retry_interval از
+        تنظیمات سراسری سیستم main_api (system_settings) از طریق
+        /telemetry/active-feeders دریافت می‌شوند و دیگر مقدار ثابت محلی این
+        سرویس نیستند.
+
+        منطق آنلاین/آفلاین: پس از رسیدن خطاهای متوالی به max_failures، فیدر
+        «آفلاین» علامت‌گذاری می‌شود (is_online=False روی main_api) و پایش با
+        فاصله‌ی کندتر offline_retry_interval ادامه می‌یابد تا در صورت بازگشت
+        دستگاه، بلافاصله دوباره «آنلاین» علامت‌گذاری شود. توجه: این وضعیت کاملاً
+        از is_active (کلید دستی ادمین برای فعال/غیرفعال‌سازی پایش) مستقل است،
+        پس هیچ‌گاه پایش این فیدر به‌طور کامل متوقف نمی‌شود.
         """
         reader = ModbusReader(host=device_ip, port=port, timeout=modbus_timeout, retries=modbus_retry_count)
         current_fails = 0
+        # فرض بر این است که فیدر با وضعیت فعلی ذخیره‌شده در main_api شروع به کار می‌کند
+        is_online = initial_is_online
 
         try:
             while self.is_running:
@@ -142,9 +182,21 @@ class TelemetryScheduler:
                     if not has_error and read_values:
                         current_fails = 0
                         await self.handle_success(feeder_id, read_values)
+
+                        if not is_online:
+                            # بازگشت فیدر پس از دوره‌ی آفلاین بودن
+                            is_online = True
+                            await self.report_feeder_status(feeder_id, True, 0, status_changed=True)
                     else:
                         current_fails += 1
                         await self.handle_failure(feeder_id, current_fails, "Failed to read one or more registers.")
+
+                        if current_fails >= max_failures and is_online:
+                            is_online = False
+                            await self.report_feeder_status(feeder_id, False, current_fails, status_changed=True)
+                        elif not is_online:
+                            # فیدر از قبل آفلاین بود؛ فقط شمارنده را بدون ثبت لاگ تکراری به‌روز کن
+                            await self.report_feeder_status(feeder_id, False, current_fails, status_changed=False)
 
                 except asyncio.CancelledError:
                     raise
@@ -152,9 +204,16 @@ class TelemetryScheduler:
                     current_fails += 1
                     await self.handle_failure(feeder_id, current_fails, f"Modbus Read Error: {str(e)}")
 
-                # در صورت خطای متوالی، فاصله زمانی جهت جلوگیری از Spam افزایش می‌یابد
-                if current_fails >= max_failures:
-                    await asyncio.sleep(60)
+                    if current_fails >= max_failures and is_online:
+                        is_online = False
+                        await self.report_feeder_status(feeder_id, False, current_fails, status_changed=True)
+                    elif not is_online:
+                        await self.report_feeder_status(feeder_id, False, current_fails, status_changed=False)
+
+                # پس از آفلاین شدن، فاصله‌ی تست بعدی به‌جای polling_interval معمولی،
+                # از تنظیمات قابل‌تغییر توسط ادمین (پیش‌فرض ۵ دقیقه) استفاده می‌کند
+                if not is_online:
+                    await asyncio.sleep(offline_retry_interval)
                 else:
                     await asyncio.sleep(polling_interval)
         except asyncio.CancelledError:
@@ -205,6 +264,8 @@ class TelemetryScheduler:
                     max_failures = feeder.get("max_failures", 3)
                     modbus_timeout = feeder.get("modbus_timeout", 3)
                     modbus_retry_count = feeder.get("modbus_retry_count", 3)
+                    offline_retry_interval = feeder.get("offline_retry_interval", 300)
+                    initial_is_online = feeder.get("is_online", True)
 
                     if not (feeder_id and ip):
                         continue
@@ -227,6 +288,7 @@ class TelemetryScheduler:
                         "max_failures": max_failures,
                         "modbus_timeout": modbus_timeout,
                         "modbus_retry_count": modbus_retry_count,
+                        "offline_retry_interval": offline_retry_interval,
                         "registers": registers
                     }
 
@@ -244,6 +306,8 @@ class TelemetryScheduler:
                                 feeder_id, ip, port, modbus_addr, interval, registers,
                                 max_failures=max_failures, modbus_timeout=modbus_timeout,
                                 modbus_retry_count=modbus_retry_count,
+                                offline_retry_interval=offline_retry_interval,
+                                initial_is_online=initial_is_online,
                             )
                         )
                         self._tasks[feeder_id] = task
@@ -252,7 +316,8 @@ class TelemetryScheduler:
                             f"➕ Started monitor for Feeder ID {feeder_id} at {ip}:{port} "
                             f"(Slave ID: {modbus_addr}) every {interval}s "
                             f"[max_failures={max_failures}, modbus_timeout={modbus_timeout}s, "
-                            f"modbus_retry_count={modbus_retry_count}]."
+                            f"modbus_retry_count={modbus_retry_count}, "
+                            f"offline_retry_interval={offline_retry_interval}s]."
                         )
 
                 # ۳. حذف فیدرهای غیرفعال شده

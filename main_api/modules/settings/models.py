@@ -24,6 +24,10 @@ class SystemSetting(Base):
     max_telemetry_failures = Column(Integer, default=3, nullable=False, comment="حداکثر خطای مجاز تله‌متری")
     modbus_timeout = Column(Integer, default=3, nullable=False, comment="Timeout Modbus (ثانیه)")
     modbus_retry_count = Column(Integer, default=3, nullable=False, comment="تعداد تلاش مجدد Modbus")
+    feeder_offline_retry_interval = Column(
+        Integer, default=300, nullable=False,
+        comment="فاصله تست مجدد فیدری که آفلاین تشخیص داده شده (ثانیه) — پیش‌فرض ۵ دقیقه"
+    )
 
     # تنظیمات نوتیفیکیشن
     notification_retry_attempts = Column(Integer, default=3, nullable=False, comment="تعداد تلاش مجدد نوتیفیکیشن")

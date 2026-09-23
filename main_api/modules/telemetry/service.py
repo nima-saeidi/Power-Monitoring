@@ -6,7 +6,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from main_api.core.config import settings
 from main_api.modules.telemetry.repository import TelemetryRepository
-from main_api.modules.telemetry.schemas import TelemetryCreate, TelemetryResponse, ActiveFeederConfig
+from main_api.modules.telemetry.schemas import (
+    TelemetryCreate, TelemetryResponse, ActiveFeederConfig, FeederStatusUpdate,
+)
 from main_api.modules.telemetry.ws_manager import ws_manager
 
 # ایمپورت سیستم Audit Logging
@@ -40,6 +42,45 @@ class TelemetryService:
                 description=f"خطا در دریافت لیست فیدرهای فعال از دیتابیس جهت Polling: {str(e)}"
             ))
             raise
+
+    # ==========================================
+    # ۱ب. دریافت گزارش وضعیت اتصال فیدر از telemetry_service (آنلاین/آفلاین)
+    # ==========================================
+    async def report_feeder_status(self, data: FeederStatusUpdate) -> None:
+        if not self.repo:
+            raise ValueError("AsyncSession is required for database operations.")
+
+        feeder = await self.repo.update_feeder_status(
+            feeder_id=data.feeder_id,
+            is_online=data.is_online,
+            consecutive_failures=data.consecutive_failures,
+            last_success=data.last_success,
+        )
+        if not feeder:
+            return
+
+        # فقط در لحظه‌ی واقعی تغییر وضعیت (نه هر Polling) لاگ ثبت می‌شود تا
+        # سیستم لاگینگ با پیام‌های تکراری پر نشود.
+        if data.status_changed:
+            action = "FEEDER_ONLINE" if data.is_online else "FEEDER_OFFLINE"
+            description = (
+                f"فیدر «{feeder.name}» (ID={feeder.id}) دوباره پاسخگو شد و آنلاین علامت‌گذاری شد."
+                if data.is_online else
+                f"فیدر «{feeder.name}» (ID={feeder.id}) پس از {data.consecutive_failures} بار عدم پاسخ، "
+                f"آفلاین علامت‌گذاری شد."
+            )
+            asyncio.create_task(send_audit_log(
+                action=action,
+                username="System",
+                service_name="telemetry_service",
+                success=data.is_online,
+                severity="INFO" if data.is_online else "WARNING",
+                description=description,
+                feeder_id=feeder.id,
+                feeder_name=feeder.name,
+                post_id=feeder.post_id,
+                consecutive_failures=data.consecutive_failures,
+            ))
 
     # ==========================================
     # ۲. متد ذخیره دیتابیس محلی و برادکست وب‌سوکت

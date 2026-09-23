@@ -4,7 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from main_api.core.database import get_db
 from main_api.modules.telemetry.service import TelemetryService
-from main_api.modules.telemetry.schemas import ActiveFeederConfig
+from main_api.modules.telemetry.schemas import ActiveFeederConfig, FeederStatusUpdate
 from main_api.modules.telemetry.ws_manager import ws_manager
 
 # ایمپورت دپندنسی‌های احراز هویت
@@ -18,6 +18,18 @@ router = APIRouter(prefix="/telemetry", tags=["Telemetry"])
 async def get_active_feeders(db: AsyncSession = Depends(get_db)):
     service = TelemetryService(db)
     return await service.get_active_feeders()
+
+
+# --- اندپوینت داخلی: گزارش نتیجه Polling هر فیدر توسط telemetry_service ---
+# مانند /active-feeders این اندپوینت هم بین دو میکروسرویس داخلی (پشت شبکه docker)
+# فراخوانی می‌شود، نه از فرانت‌اند، پس بدون احراز هویت باقی می‌ماند.
+@router.post("/feeder-status", status_code=204)
+async def report_feeder_status(
+    data: FeederStatusUpdate,
+    db: AsyncSession = Depends(get_db),
+):
+    service = TelemetryService(db)
+    await service.report_feeder_status(data)
 
 # --- WebSocket Endpoint (برای نمودارهای زنده فرانت‌اند) ---
 @router.websocket("/ws")

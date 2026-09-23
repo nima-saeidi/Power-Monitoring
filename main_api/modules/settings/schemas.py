@@ -20,6 +20,9 @@ class SettingUpdate(BaseModel):
     max_telemetry_failures: Optional[int] = Field(None, ge=1, description="حداکثر خطای مجاز تله‌متری")
     modbus_timeout: Optional[int] = Field(None, gt=0, description="Timeout Modbus (ثانیه)")
     modbus_retry_count: Optional[int] = Field(None, ge=0, description="تعداد تلاش مجدد Modbus")
+    feeder_offline_retry_interval: Optional[int] = Field(
+        None, gt=0, description="فاصله تست مجدد فیدر آفلاین (ثانیه)"
+    )
 
     # تنظیمات نوتیفیکیشن
     notification_retry_attempts: Optional[int] = Field(None, ge=0, description="تعداد تلاش مجدد نوتیفیکیشن")
@@ -45,6 +48,7 @@ class SettingResponse(BaseModel):
     max_telemetry_failures: int
     modbus_timeout: int
     modbus_retry_count: int
+    feeder_offline_retry_interval: int
 
     notification_retry_attempts: int
     notification_cooldown_seconds: int

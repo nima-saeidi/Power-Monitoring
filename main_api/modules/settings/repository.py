@@ -25,6 +25,7 @@ class SettingRepository:
             max_telemetry_failures=3,
             modbus_timeout=3,
             modbus_retry_count=3,
+            feeder_offline_retry_interval=300,
             notification_retry_attempts=3,
             notification_cooldown_seconds=300,
             report_generation_timeout=300,

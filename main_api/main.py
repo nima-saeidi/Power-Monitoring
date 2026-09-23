@@ -36,7 +36,11 @@ from main_api.modules.devices.router import (
 from main_api.modules.settings.router import router as settings_router
 from main_api.modules.notifications.router import router as notifications_router
 from main_api.modules.telemetry.router import router as telemetry_router
-from main_api.modules.audit_logs.router import router as audit_logs_router
+from main_api.modules.audit_logs.router import (
+    router as audit_logs_router,
+    command_router as command_logs_router,
+    test_log_router as test_logs_router,
+)
 
 # پیکربندی اولیه لاگر
 setup_logging(service_name="main_api")
@@ -326,6 +330,8 @@ app.include_router(settings_router)
 
 # لاگ‌های حسابرسی (پنل ادمین) - پروکسی روی logging_service
 app.include_router(audit_logs_router)
+app.include_router(command_logs_router)
+app.include_router(test_logs_router)
 
 if __name__ == "__main__":
     uvicorn.run("main_api.main:app", host="0.0.0.0", port=8000, reload=True)

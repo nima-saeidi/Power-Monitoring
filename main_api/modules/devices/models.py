@@ -129,7 +129,14 @@ class Feeder(Base):
     metadata_info = Column("metadata", JSONB, nullable=True)
 
     # --- وضعیت و مانیتورینگ ---
+    # is_active: کلید دستی ادمین برای فعال/غیرفعال کردن پایش این فیدر (کنترل می‌کند
+    # که آیا اصلاً در لیست /telemetry/active-feeders قرار بگیرد و پایش شود یا نه).
     is_active = Column(Boolean, default=True)
+    # is_online: وضعیت واقعی ارتباط (نتیجه آخرین Polling) که به‌صورت خودکار توسط
+    # telemetry_service بر اساس موفقیت/شکست پی‌درپی به‌روزرسانی می‌شود. این فیلد از
+    # is_active کاملاً مستقل است تا حتی وقتی یک فیدر آفلاین تشخیص داده می‌شود،
+    # پایش آن متوقف نشود و امکان تشخیص خودکار بازگشت آن (recovery) باقی بماند.
+    is_online = Column(Boolean, default=True)
     consecutive_failures = Column(Integer, default=0)
     last_success = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)

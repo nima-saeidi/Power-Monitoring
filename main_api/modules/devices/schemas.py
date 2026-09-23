@@ -1,4 +1,5 @@
 from typing import Optional, List, Dict, Any
+from datetime import datetime
 from pydantic import BaseModel, ConfigDict, Field
 from pydantic.types import UUID4
 
@@ -73,7 +74,9 @@ class FeederBase(BaseModel):
     power_factor_register: Optional[int] = None
     metadata_info: Optional[Dict[str, Any]] = None
     is_active: bool = True
+    is_online: bool = True
     consecutive_failures: int = 0
+    last_success: Optional[datetime] = None
 
 
 class FeederCreate(FeederBase):

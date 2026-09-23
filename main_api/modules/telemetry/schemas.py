@@ -37,7 +37,22 @@ class ActiveFeederConfig(BaseModel):
     max_failures: int = 3
     modbus_timeout: int = 3
     modbus_retry_count: int = 3
+    # فاصله تست مجدد فیدری که آفلاین تشخیص داده شده (ثانیه) - از system_settings خوانده می‌شود
+    offline_retry_interval: int = 300
     is_active: bool = True
+    is_online: bool = True
 
     class Config:
         from_attributes = True
+
+
+# --- گزارش وضعیت اتصال فیدر از telemetry_service به main_api ---
+class FeederStatusUpdate(BaseModel):
+    feeder_id: int
+    is_online: bool
+    consecutive_failures: int = 0
+    # فقط وقتی is_online=True معنا دارد؛ زمان آخرین پاسخ موفق فیدر
+    last_success: Optional[datetime] = None
+    # فقط وقتی وضعیت واقعاً تغییر کرده (آنلاین<->آفلاین) True است، برای جلوگیری از
+    # ثبت لاگ برای هر Polling، فقط تغییرات وضعیت لاگ می‌شوند
+    status_changed: bool = False

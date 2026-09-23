@@ -1,4 +1,5 @@
-from typing import List
+from typing import List, Optional
+from datetime import datetime
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
@@ -33,6 +34,7 @@ class TelemetryRepository:
             "max_failures": system_settings.max_telemetry_failures,
             "modbus_timeout": system_settings.modbus_timeout,
             "modbus_retry_count": system_settings.modbus_retry_count,
+            "offline_retry_interval": system_settings.feeder_offline_retry_interval,
         }
         overrides = feeder.metadata_info if isinstance(feeder.metadata_info, dict) else {}
         for key in config:
@@ -72,11 +74,38 @@ class TelemetryRepository:
                     port=port,
                     slave_id=slave_id,
                     is_active=f.is_active,
+                    is_online=f.is_online,
                     **runtime_config,
                 )
             )
 
         return active_feeders_list
+
+    async def update_feeder_status(
+            self,
+            feeder_id: int,
+            is_online: bool,
+            consecutive_failures: int,
+            last_success: Optional[datetime] = None,
+    ) -> Optional[Feeder]:
+        """
+        ذخیره نتیجه آخرین Polling یک فیدر (توسط telemetry_service گزارش می‌شود).
+        این متد فقط وضعیت اتصال (is_online/consecutive_failures/last_success) را
+        تغییر می‌دهد و کاری به is_active (کلید دستی ادمین) ندارد.
+        """
+        result = await self.session.execute(select(Feeder).where(Feeder.id == feeder_id))
+        feeder = result.scalar_one_or_none()
+        if not feeder:
+            return None
+
+        feeder.is_online = is_online
+        feeder.consecutive_failures = consecutive_failures
+        if last_success is not None:
+            feeder.last_success = last_success
+
+        await self.session.commit()
+        await self.session.refresh(feeder)
+        return feeder
 
     async def create_record(self, data: TelemetryCreate) -> TimeseriesData:
         """

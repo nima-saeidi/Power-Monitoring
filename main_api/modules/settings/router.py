@@ -29,6 +29,9 @@ async def update_system_settings(
     data: SettingUpdate,
     db: AsyncSession = Depends(get_db),
     # ✅ پرانتزهای تابع get_rabbitmq_publisher برداشته شد:
-    broker: RabbitMQPublisher = Depends(get_rabbitmq_publisher)
+    broker: RabbitMQPublisher = Depends(get_rabbitmq_publisher),
+    current_user=Depends(require_admin)  # فقط ادمین مجاز به تغییر تنظیمات سیستم است
 ):
-    return await SettingService.update_settings(db=db, data=data, broker=broker)
+    return await SettingService.update_settings(
+        db=db, data=data, broker=broker, username=current_user.email
+    )
