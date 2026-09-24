@@ -13,7 +13,7 @@ volumes:
   graylog_data:
 
 services:
-  # 1. Database Service (TimescaleDB)
+  # 1. Database Service (TimescaleDB / PostgreSQL)
   db:
     image: timescale/timescaledb:latest-pg15
     container_name: power_monitoring_db
@@ -43,11 +43,13 @@ services:
       - "15672:15672"
     volumes:
       - rabbitmq_data:/var/lib/rabbitmq
+      - ./rabbitmq/rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf:ro
     healthcheck:
-      test: ["CMD", "rabbitmq-diagnostics", "check_running"]
+      test: ["CMD-SHELL", "rabbitmq-diagnostics -q ping"]
       interval: 10s
-      timeout: 5s
+      timeout: 10s
       retries: 5
+      start_period: 30s
     networks:
       - power_net
 
@@ -71,7 +73,7 @@ services:
       - power_net
 
   # 4. MongoDB Service
-  mongodb:
+  mongo:
     image: mongo:4.4
     container_name: power_monitoring_mongo
     restart: unless-stopped
@@ -86,8 +88,8 @@ services:
     container_name: power_opensearch
     restart: unless-stopped
     environment:
-      - "OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx512m"
-      - "bootstrap.memory_lock=true"
+      - "OPENSEARCH_JAVA_OPTS=-Xms1g -Xmx1g"
+      - "bootstrap.memory_lock=false"
       - "discovery.type=single-node"
       - "action.auto_create_index=false"
       - "plugins.security.disabled=true"
@@ -100,6 +102,12 @@ services:
         hard: 65536
     volumes:
       - opensearch_data:/usr/share/opensearch/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -s -f http://localhost:9200 || exit 1"]
+      interval: 20s
+      timeout: 10s
+      retries: 15
+      start_period: 60s
     networks:
       - power_net
 
@@ -109,6 +117,10 @@ services:
     container_name: power_monitoring_graylog
     restart: unless-stopped
     env_file: .env
+    environment:
+      - GRAYLOG_ELASTICSEARCH_HOSTS=http://opensearch:9200
+      - GRAYLOG_HTTP_BIND_ADDRESS=0.0.0.0:9000
+      - "GRAYLOG_SERVER_JAVA_OPTS=-Xms512m -Xmx512m"
     ports:
       - "9000:9000"
       - "12201:12201/udp"
@@ -116,8 +128,26 @@ services:
     volumes:
       - graylog_data:/usr/share/graylog/data
     depends_on:
-      - mongodb
-      - opensearch
+      mongo:
+        condition: service_started
+      opensearch:
+        condition: service_healthy
+    networks:
+      - power_net
+
+  # 6b. Graylog GELF Input Provisioning (creates the GELF UDP input on port 12201
+  # automatically on first startup; idempotent, safe to run on every `up`)
+  graylog-init:
+    image: curlimages/curl:8.10.1
+    container_name: power_monitoring_graylog_init
+    restart: "no"
+    env_file: .env
+    entrypoint: ["sh", "/setup_input.sh"]
+    volumes:
+      - ./graylog/setup_input.sh:/setup_input.sh:ro
+    depends_on:
+      graylog:
+        condition: service_started
     networks:
       - power_net
 
@@ -144,7 +174,41 @@ services:
     networks:
       - power_net
 
-  # 8. Logging Service
+  # 8. Postgres Storage Service (RabbitMQ Consumer / DB Writer)
+  postgres_storage:
+    build:
+      context: ./postgres_storage_service
+      dockerfile: Dockerfile
+    container_name: power_monitoring_postgres_storage
+    restart: unless-stopped
+    command: python main.py
+    env_file: .env
+    depends_on:
+      db:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - power_net
+
+  # 9. Timeseries Storage Service (RabbitMQ Consumer / InfluxDB Writer)
+  timeseries_storage:
+    build:
+      context: ./timeseries_storage_service
+      dockerfile: Dockerfile
+    container_name: power_monitoring_timeseries_storage
+    restart: unless-stopped
+    command: python main.py
+    env_file: .env
+    depends_on:
+      influxdb:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - power_net
+
+  # 10. Logging Service
   logging:
     build:
       context: ./logging_service
@@ -156,6 +220,8 @@ services:
       - "8002:8002"
     env_file: .env
     depends_on:
+      db:
+        condition: service_healthy
       rabbitmq:
         condition: service_healthy
       graylog:
@@ -163,7 +229,7 @@ services:
     networks:
       - power_net
 
-  # 9. Telemetry Service
+  # 11. Telemetry Service (Poller -> RabbitMQ Publisher)
   telemetry:
     build:
       context: ./telemetry_service
@@ -174,15 +240,24 @@ services:
       - "8001:8001"
     env_file: .env
     depends_on:
-      db:
-        condition: service_healthy
       rabbitmq:
         condition: service_healthy
-      influxdb:
-        condition: service_healthy
-      graylog:
-        condition: service_started
       api:
         condition: service_started
+    networks:
+      - power_net
+
+  # 12. Notification Service (RabbitMQ Consumer / Email & SMS Sender)
+  notification:
+    build:
+      context: ./notification_service
+      dockerfile: Dockerfile
+    container_name: power_monitoring_notification
+    restart: unless-stopped
+    command: python main.py
+    env_file: .env
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
     networks:
       - power_net

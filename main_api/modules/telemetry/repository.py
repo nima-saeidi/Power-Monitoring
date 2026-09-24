@@ -1,22 +1,51 @@
-from typing import List
+from typing import List, Optional
 from datetime import datetime, timezone
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 # مدل‌های سیستم
-from main_api.modules.devices.models import Feeder, Post, TimeseriesData
+from main_api.modules.feeders.models import Feeder, TimeseriesData
 from main_api.modules.telemetry.schemas import TelemetryCreate, ActiveFeederConfig
+from main_api.modules.settings.service import SettingService
+from main_api.modules.settings.models import SystemSetting
 
 
 class TelemetryRepository:
     def __init__(self, session: AsyncSession):
         self.session = session
 
+    @staticmethod
+    def _resolve_ip_and_port(feeder: Feeder) -> tuple[str, int]:
+        """تعیین IP/Port نهایی فیدر: اولویت با مقدار خود فیدر، سپس Fallback به پست متصل."""
+        ip = feeder.ip_address or (feeder.post.ip_address if feeder.post else None) or "127.0.0.1"
+        port = feeder.port or (feeder.post.port if feeder.post else None) or 502
+        return ip, port
+
+    @staticmethod
+    def _resolve_runtime_config(feeder: Feeder, system_settings: SystemSetting) -> dict:
+        """
+        تعیین مقادیر polling/modbus هر فیدر: پیش‌فرض از تنظیمات سراسری سیستم
+        (system_settings) خوانده می‌شود؛ اگر خود فیدر در metadata_info مقدار
+        اختصاصی داشته باشد، همان مقدار اختصاصی اولویت می‌گیرد.
+        """
+        config = {
+            "scan_interval": system_settings.polling_interval,
+            "max_failures": system_settings.max_telemetry_failures,
+            "modbus_timeout": system_settings.modbus_timeout,
+            "modbus_retry_count": system_settings.modbus_retry_count,
+            "offline_retry_interval": system_settings.feeder_offline_retry_interval,
+        }
+        overrides = feeder.metadata_info if isinstance(feeder.metadata_info, dict) else {}
+        for key in config:
+            if key in overrides and overrides[key] is not None:
+                config[key] = overrides[key]
+        return config
+
     async def get_active_feeders(self) -> List[ActiveFeederConfig]:
         """
-        واکشی لیست تمام فیدرهای فعال از دیتابیس.
-        در صورتی که IP یا Port فیدر خالی باشد، به صورت Fallback از مشخصات Post متصل استفاده می‌شود.
+        واکشی لیست تمام فیدرهای فعال از دیتابیس به همراه پیکربندی polling/modbus
+        که از تنظیمات سراسری سیستم (system_settings) اعمال می‌شود.
         """
         query = (
             select(Feeder)
@@ -27,22 +56,14 @@ class TelemetryRepository:
         result = await self.session.execute(query)
         feeders = result.scalars().all()
 
+        system_settings = await SettingService.get_or_create_settings(self.session)
+
         active_feeders_list: List[ActiveFeederConfig] = []
 
         for f in feeders:
-            # تعیین IP: اولویت با IP فیدر، در صورت نبود از IP پست متناظر استفاده می‌شود
-            ip = f.ip_address or (f.post.ip_address if f.post else None) or "127.0.0.1"
-
-            # تعیین پورت: اولویت با پورت فیدر، سپس پورت پست، در نهایت پیش‌فرض 502
-            port = f.port or (f.post.port if f.post else None) or 502
-
-            # تعیین Modbus Unit ID (Slave ID)
+            ip, port = self._resolve_ip_and_port(f)
             slave_id = f.modbus_address if f.modbus_address is not None else 1
-
-            # استخراج فاصله زمانی اسکن (scan_interval) در صورت وجود در metadata_info
-            scan_interval = 5
-            if f.metadata_info and isinstance(f.metadata_info, dict):
-                scan_interval = f.metadata_info.get("scan_interval", 5)
+            runtime_config = self._resolve_runtime_config(f, system_settings)
 
             active_feeders_list.append(
                 ActiveFeederConfig(
@@ -52,12 +73,39 @@ class TelemetryRepository:
                     ip_address=ip,
                     port=port,
                     slave_id=slave_id,
-                    scan_interval=scan_interval,
-                    is_active=f.is_active
+                    is_active=f.is_active,
+                    is_online=f.is_online,
+                    **runtime_config,
                 )
             )
 
         return active_feeders_list
+
+    async def update_feeder_status(
+            self,
+            feeder_id: int,
+            is_online: bool,
+            consecutive_failures: int,
+            last_success: Optional[datetime] = None,
+    ) -> Optional[Feeder]:
+        """
+        ذخیره نتیجه آخرین Polling یک فیدر (توسط telemetry_service گزارش می‌شود).
+        این متد فقط وضعیت اتصال (is_online/consecutive_failures/last_success) را
+        تغییر می‌دهد و کاری به is_active (کلید دستی ادمین) ندارد.
+        """
+        result = await self.session.execute(select(Feeder).where(Feeder.id == feeder_id))
+        feeder = result.scalar_one_or_none()
+        if not feeder:
+            return None
+
+        feeder.is_online = is_online
+        feeder.consecutive_failures = consecutive_failures
+        if last_success is not None:
+            feeder.last_success = last_success
+
+        await self.session.commit()
+        await self.session.refresh(feeder)
+        return feeder
 
     async def create_record(self, data: TelemetryCreate) -> TimeseriesData:
         """

@@ -5,8 +5,8 @@ import jwt
 from jwt.exceptions import PyJWTError, ExpiredSignatureError
 from main_api.core.database import get_db
 from main_api.core.config import settings
-from main_api.modules.auth.repository import UserRepository
-from main_api.modules.auth.models import RoleEnum
+from main_api.modules.users.repository import UserRepository
+from main_api.modules.users.models import RoleEnum
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
 

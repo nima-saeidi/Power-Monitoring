@@ -1,0 +1,180 @@
+from sqlalchemy import Column, Integer, String, Boolean, ForeignKey, Float, Text, DateTime, Index
+from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.orm import relationship
+from datetime import datetime
+import enum
+from sqlalchemy import Column, Integer, String, Boolean, DateTime, Enum as SQLEnum
+from sqlalchemy.sql import func
+
+# ⚠️ بسیار مهم: Base را باید از فایل database.py همین سرویس (postgres_storage_service) ایمپورت کنید
+# به هیچ وجه نباید از main_api چیزی ایمپورت شود.
+from core.database import Base
+
+
+
+class RoleEnum(str, enum.Enum):
+    ADMIN = "admin"
+    TECHNICAL_OPERATOR = "technical_operator"
+    USER = "user"
+
+
+class User(Base):
+    __tablename__ = "users"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(100), nullable=False)
+    email = Column(String(150), unique=True, index=True, nullable=False)
+    phone_number = Column(String(15), unique=True, index=True, nullable=True)
+    hashed_password = Column(String(255), nullable=False)
+    role = Column(SQLEnum(RoleEnum), default=RoleEnum.USER, nullable=False)
+    is_active = Column(Boolean, default=True)
+
+    # فیلد جدید برای فعال/غیرفعال بودن نوتیفیکیشن پیامکی
+    sms_notification_enabled = Column(Boolean, default=False)
+
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class Location(Base):
+    __tablename__ = "locations"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(100), index=True, nullable=False)
+    location_type = Column(String(50), nullable=True)
+    description = Column(Text, nullable=True)
+    address = Column(String(255), nullable=True)
+
+    parent_id = Column(Integer, ForeignKey("locations.id", ondelete="CASCADE"), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    children = relationship("Location", back_populates="parent", lazy="selectin", cascade="all, delete-orphan")
+    parent = relationship("Location", back_populates="children", remote_side="[Location.id]", lazy="selectin")
+    posts = relationship("Post", back_populates="location")
+
+
+class Post(Base):
+    __tablename__ = "posts"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(100), index=True, nullable=False)
+
+    supply_source = Column(String(150), nullable=True)
+    location_id = Column(Integer, ForeignKey("locations.id", ondelete="SET NULL"), nullable=True)
+    transformer_specs = Column(String(200), nullable=True)
+    ip_address = Column(String(45), nullable=True)
+    port = Column(Integer, default=502)
+
+    latitude = Column(Float, nullable=True)
+    longitude = Column(Float, nullable=True)
+
+    metadata_info = Column("metadata", JSONB, nullable=True)
+
+    # فیلدهایی که این سرویس (کانسومر) معمولاً آپدیت می‌کند:
+    is_active = Column(Boolean, default=True)
+    last_seen = Column(DateTime, nullable=True)
+    consecutive_failures = Column(Integer, default=0)
+
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    location = relationship("Location", back_populates="posts")
+    feeders = relationship("Feeder", back_populates="post", cascade="all, delete-orphan")
+    outgoing_links = relationship("Link", foreign_keys="[Link.from_post_id]", back_populates="from_post")
+    incoming_links = relationship("Link", foreign_keys="[Link.to_post_id]", back_populates="to_post")
+
+
+class Feeder(Base):
+    __tablename__ = "feeders"
+
+    id = Column(Integer, primary_key=True, index=True)
+    post_id = Column(Integer, ForeignKey("posts.id", ondelete="CASCADE"), nullable=False)
+    name = Column(String(100), nullable=False)
+
+    feeder_type = Column(String(50), nullable=True)
+    max_current = Column(Float, nullable=True)
+    ip_address = Column(String(50), nullable=True)
+    port = Column(Integer, nullable=True)
+    modbus_address = Column(Integer, nullable=True)
+
+    active_power_register = Column(Integer, nullable=True)
+    reactive_power_register = Column(Integer, nullable=True)
+    voltage_register = Column(Integer, nullable=True)
+    current_register = Column(Integer, nullable=True)
+    power_factor_register = Column(Integer, nullable=True)
+
+    metadata_info = Column("metadata", JSONB, nullable=True)
+
+    # فیلدهایی که این سرویس (کانسومر) معمولاً آپدیت می‌کند:
+    is_active = Column(Boolean, default=True)
+    consecutive_failures = Column(Integer, default=0)
+    last_success = Column(DateTime, nullable=True)
+
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    post = relationship("Post", back_populates="feeders")
+
+    __table_args__ = (
+        Index('idx_feeder_post', 'post_id'),
+    )
+
+
+class Link(Base):
+    __tablename__ = "links"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(100), index=True, nullable=True)
+
+    from_post_id = Column(Integer, ForeignKey("posts.id", ondelete="CASCADE"), nullable=False)
+    to_post_id = Column(Integer, ForeignKey("posts.id", ondelete="CASCADE"), nullable=False)
+
+    cable_type = Column(String(50), nullable=True)
+    cross_section = Column(Float, nullable=True)
+    allowed_current = Column(Float, nullable=True)
+    length = Column(Float, nullable=True)
+
+    metadata_info = Column("metadata", JSONB, nullable=True)
+
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    from_post = relationship("Post", foreign_keys=[from_post_id], back_populates="outgoing_links")
+    to_post = relationship("Post", foreign_keys=[to_post_id], back_populates="incoming_links")
+
+class SystemSetting(Base):
+    __tablename__ = "system_settings"
+
+    id = Column(Integer, primary_key=True, index=True)
+
+    # مقادیر آستانه (جایگزین آلفا و بتا)
+    critical_threshold = Column(Float, default=90.0, nullable=False, comment="آستانه بحرانی (Critical Threshold)")
+    warning_threshold = Column(Float, default=75.0, nullable=False, comment="آستانه هشدار (Warning Threshold)")
+
+    # تنظیمات احراز هویت
+    access_token_expire_minutes = Column(Integer, default=1440, nullable=False,
+                                         comment="مدت اعتبار Access Token (دقیقه)")
+    max_login_attempts = Column(Integer, default=5, nullable=False, comment="حداکثر تلاش ناموفق ورود")
+    lockout_duration_minutes = Column(Integer, default=30, nullable=False, comment="مدت قفل شدن حساب (دقیقه)")
+    session_timeout_minutes = Column(Integer, default=120, nullable=False, comment="Timeout نشست (دقیقه)")
+
+    # تنظیمات Modbus و تله‌متری
+    polling_interval = Column(Integer, default=5, nullable=False, comment="فاصله Polling (ثانیه)")
+    max_telemetry_failures = Column(Integer, default=3, nullable=False, comment="حداکثر خطای مجاز تله‌متری")
+    modbus_timeout = Column(Integer, default=3, nullable=False, comment="Timeout Modbus (ثانیه)")
+    modbus_retry_count = Column(Integer, default=3, nullable=False, comment="تعداد تلاش مجدد Modbus")
+
+    # تنظیمات نوتیفیکیشن
+    notification_retry_attempts = Column(Integer, default=3, nullable=False, comment="تعداد تلاش مجدد نوتیفیکیشن")
+    notification_cooldown_seconds = Column(Integer, default=300, nullable=False,
+                                           comment="فاصله زمانی ارسال مجدد نوتیفیکیشن مشابه (ثانیه)")
+
+    # تنظیمات گزارش‌گیری
+    report_generation_timeout = Column(Integer, default=300, nullable=False, comment="Timeout تولید گزارش (ثانیه)")
+    max_export_records = Column(Integer, default=10000, nullable=False, comment="حداکثر رکورد در Export")
+
+    # متادیتا
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+

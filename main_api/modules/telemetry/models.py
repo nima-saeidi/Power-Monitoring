@@ -7,7 +7,7 @@ from main_api.core.database import Base
 # 🔴 قدم اول (بسیار مهم):
 # برای رفع خطای پیدا نشدن جدول، باید مدل فیدر را در اینجا ایمپورت کنید تا دیتابیس آن را بشناسد.
 # (مسیر ایمپورت زیر را بر اساس پوشه‌بندی پروژه خودتان از کامنت خارج و اصلاح کنید):
-from main_api.modules.devices.models import Feeder
+from main_api.modules.feeders.models import Feeder
 
 
 class TimeseriesData(Base):

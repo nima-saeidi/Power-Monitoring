@@ -1,8 +1,17 @@
-# main_api/modules/settings/service.py
+import asyncio
+from typing import Optional
+from fastapi import BackgroundTasks
 from sqlalchemy.ext.asyncio import AsyncSession
+
 from .repository import SettingRepository
 from .models import SystemSetting
-from .schemas import SettingUpdate
+from .schemas import SettingUpdate, SettingResponse
+
+# جایگزینی ایمپورت قدیمی با ساختار جدید بروکر پیام
+from main_api.core.broker import RabbitMQPublisher
+
+# ایمپورت سیستم Audit Logging
+from main_api.modules.audit_logs.services import send_audit_log
 
 # متغیر سراسری (Global) برای کش کردن تنظیمات در RAM
 _settings_cache: SystemSetting | None = None
@@ -26,15 +35,30 @@ class SettingService:
         if not settings:
             settings = await SettingRepository.create_default_settings(db)
 
+            # ثبت لاگ حسابرسی برای تولید تنظیمات اولیه سیستم (اجرای در پس‌زمینه)
+            asyncio.create_task(send_audit_log(
+                action="INITIALIZE_SYSTEM_SETTINGS",
+                username="System",
+                success=True,
+                severity="INFO",
+                description="تنظیمات پیش‌فرض سیستم برای اولین بار مقداردهی و در دیتابیس ایجاد شد."
+            ))
+
         # ۳. کش را برای درخواست‌های بعدی آپدیت کن
         _settings_cache = settings
         return settings
 
     @staticmethod
-    async def update_settings(db: AsyncSession, data: SettingUpdate) -> SystemSetting:
+    async def update_settings(
+            db: AsyncSession,
+            data: SettingUpdate,
+            broker: RabbitMQPublisher,
+            background_tasks: Optional[BackgroundTasks] = None,
+            username: Optional[str] = "System"
+    ) -> SystemSetting:
         """
-        بروزرسانی تنظیمات سیستم و اعمال فوری در کش.
-        فقط فیلدهایی که ارسال شده‌اند آپدیت می‌شوند.
+        بروزرسانی تنظیمات سیستم، اعمال فوری در کش و انتشار رویداد در صف.
+        همراه با ثبت لاگ حسابرسی تغییرات.
         """
         global _settings_cache
 
@@ -49,5 +73,37 @@ class SettingService:
 
         # بروزرسانی بلادرنگ سیستم با جایگزین کردن کش
         _settings_cache = updated_settings
+
+        # ---------------------------------------------------------
+        # ثبت لاگ حسابرسی تغییر تنظیمات
+        # ---------------------------------------------------------
+        if update_data:
+            changed_fields = ", ".join(update_data.keys())
+            log_coroutine = send_audit_log(
+                action="UPDATE_SYSTEM_SETTINGS",
+                username=username,
+                success=True,
+                severity="WARNING",  # تغییر تنظیمات یک رویداد حساس محسوب می‌شود
+                description=f"تنظیمات سیستم ویرایش شد. فیلدهای تغییر یافته: {changed_fields}"
+            )
+            if background_tasks:
+                background_tasks.add_task(lambda: asyncio.create_task(log_coroutine))
+            else:
+                asyncio.create_task(log_coroutine)
+
+        # ---------------------------------------------------------
+        # ارسال رویداد آپدیت تنظیمات به RabbitMQ برای سایر سرویس‌ها
+        # ---------------------------------------------------------
+        # تبدیل مدل دیتابیس به دیکشنری تمیز با استفاده از Pydantic
+        settings_dict = SettingResponse.model_validate(updated_settings).model_dump(mode="json")
+
+        # استفاده از متد بروکر جدید برای ارسال پیام (نام متد را در صورت تفاوت در MessageBroker اصلاح کنید)
+        await broker.publish_event(
+            routing_key="settings.updated",
+            message={
+                "event": "SETTINGS_UPDATED",
+                "data": settings_dict
+            }
+        )
 
         return updated_settings

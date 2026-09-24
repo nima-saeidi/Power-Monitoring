@@ -1,8 +1,9 @@
-import enum
+# main_api/modules/users/models.py
 from sqlalchemy import Column, Integer, String, Boolean, DateTime, Enum as SQLEnum
 from sqlalchemy.sql import func
 from main_api.core.database import Base
 from sqlalchemy.orm import relationship
+import enum
 
 
 class RoleEnum(str, enum.Enum):
@@ -17,12 +18,15 @@ class User(Base):
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String(100), nullable=False)
     email = Column(String(150), unique=True, index=True, nullable=False)
-
     phone_number = Column(String(15), unique=True, index=True, nullable=True)
-
     hashed_password = Column(String(255), nullable=False)
     role = Column(SQLEnum(RoleEnum), default=RoleEnum.USER, nullable=False)
     is_active = Column(Boolean, default=True)
+    sms_notification_enabled = Column(Boolean, default=False)
+
+    failed_login_attempts = Column(Integer, default=0, nullable=False)
+    locked_until = Column(DateTime(timezone=True), nullable=True)
+
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     notifications = relationship("Notification", back_populates="user", cascade="all, delete-orphan")

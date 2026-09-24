@@ -14,22 +14,19 @@ class AuditLogBase(BaseModel):
 
 
 class AuditLogResponse(BaseModel):
+    """
+    خروجی هر رکورد لاگ. این مدل مستقیماً معادل ساختار LogItem سرویس لاگ
+    (logging_service) است چون منبع واقعی این داده‌ها دیگر جدول محلی
+    main_api نیست، بلکه دیتابیس مستقل logging_service است که از طریق
+    RabbitMQ پر می‌شود. فیلدهای کمکی (username, ip_address, severity, ...)
+    داخل details قرار دارند.
+    """
     id: int
-    user_id: Optional[int]
-    username: Optional[str]
-    user_role: Optional[str]
-    ip_address: Optional[str]
-    user_agent: Optional[str]
+    service_name: Optional[str] = None
     action: str
-    resource_type: Optional[str]
-    resource_id: Optional[str]
-    description: Optional[str]
-    changes: Optional[Dict[str, Any]]
-    meta_data: Optional[Dict[str, Any]]  # اصلاح نام مطابق با مدل دیتابیس
-    success: bool
-    error_message: Optional[str]
-    severity: str
-    timestamp: datetime
+    user_id: Optional[int] = None
+    details: Optional[Dict[str, Any]] = None
+    created_at: datetime
 
     class Config:
         from_attributes = True
@@ -45,7 +42,6 @@ class AuditLogListResponse(BaseModel):
 
 class UserActivityResponse(BaseModel):
     user_id: int
-    username: str
     total_actions: int
     successful_actions: int
     failed_actions: int

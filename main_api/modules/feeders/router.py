@@ -1,0 +1,141 @@
+import httpx
+from fastapi import APIRouter, Depends, status, Query, UploadFile, File, HTTPException, Body
+from fastapi.responses import StreamingResponse
+from sqlalchemy.ext.asyncio import AsyncSession
+from typing import List, Optional, Dict, Union
+import pandas as pd
+from io import BytesIO
+
+from main_api.core.database import get_db
+from main_api.core.broker import RabbitMQPublisher
+
+from main_api.modules.feeders.repository import FeederRepository
+from main_api.modules.feeders.service import FeederService
+from main_api.modules.feeders.schemas import FeederCreate, FeederUpdate, FeederResponse, CommandRequest
+from main_api.modules.auth.dependencies import require_any_user, require_tech_or_admin
+
+
+feeders_router = APIRouter(prefix="/feeders", tags=["Feeders (فیدرها و تجهیزات)"])
+
+
+async def get_message_broker():
+    broker = RabbitMQPublisher()
+    await broker.connect()
+    try:
+        yield broker
+    finally:
+        pass
+
+
+def get_feeder_service(
+    db: AsyncSession = Depends(get_db),
+    broker: RabbitMQPublisher = Depends(get_message_broker)
+) -> FeederService:
+    repo = FeederRepository(db)
+    return FeederService(repo=repo, broker=broker)
+
+
+# =============================================================================
+# Endpoints: Feeders
+# =============================================================================
+@feeders_router.get("/download-template", summary="Download Excel Template for Hierarchy Import")
+async def download_feeder_excel_template(current_user=Depends(require_any_user)):
+    template_data = {
+        'campus_name': ['پردیس اصلی'], 'unit_name': ['دانشکده برق'], 'post_name': ['پست شماره ۱'],
+        'ip_address': ['192.168.1.10'],
+        'port': [502], 'supply_source': ['پست توزیع مرکزی'], 'transformer_specs': ['20kV/400V 800kVA'],
+        'latitude': [38.068], 'longitude': [46.329],
+        'feeder_name': ['Feeder Output No. 1'], 'feeder_type': ['Producer'], 'max_current': [630.0],
+        'cable_type': ['Copper 3x120'],
+        'modbus_address': [1], 'description': ['توضیحات تستی ۱']
+    }
+    df = pd.DataFrame(template_data)
+    output = BytesIO()
+    df.to_excel(output, index=False, engine='openpyxl')
+    output.seek(0)
+    return StreamingResponse(output, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                             headers={"Content-Disposition": "attachment; filename=hierarchy_template.xlsx"})
+
+
+@feeders_router.post("/import-excel", summary="Bulk Import Feeders from Excel")
+async def import_feeders_from_excel(file: UploadFile = File(...), service: FeederService = Depends(get_feeder_service),
+                                    current_user=Depends(require_tech_or_admin)):
+    if not file.filename.endswith(('.xlsx', '.xls')):
+        raise HTTPException(status_code=400, detail="File format must be Excel (.xlsx or .xls)")
+    try:
+        contents = await file.read()
+        df = pd.read_excel(BytesIO(contents))
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Error reading the Excel file: {str(e)}")
+    return await service.import_feeders_from_excel(df)
+
+
+@feeders_router.post(
+    "",
+    response_model=Union[List[FeederResponse], FeederResponse],
+    status_code=status.HTTP_201_CREATED,
+    summary="ایجاد فیدر جدید (تکی یا گروهی)"
+)
+async def create_feeder(
+    data: Union[List[FeederCreate], FeederCreate] = Body(...),
+    service: FeederService = Depends(get_feeder_service),
+    current_user = Depends(require_tech_or_admin)
+):
+    return await service.create_feeders(data, username=current_user.email)
+
+
+@feeders_router.get("", response_model=List[FeederResponse], summary="Get All Feeders")
+async def get_feeders(post_id: Optional[int] = Query(None), skip: int = Query(0, ge=0), limit: int = Query(100, ge=1),
+                      service: FeederService = Depends(get_feeder_service), current_user=Depends(require_any_user)):
+    return await service.get_feeders(post_id=post_id, skip=skip, limit=limit)
+
+
+@feeders_router.get("/{feeder_id}", response_model=FeederResponse, summary="Get Specific Feeder")
+async def get_feeder(feeder_id: int, service: FeederService = Depends(get_feeder_service),
+                     current_user=Depends(require_any_user)):
+    return await service.get_feeder(feeder_id)
+
+
+@feeders_router.put("/{feeder_id}", response_model=FeederResponse, summary="Update Feeder")
+async def update_feeder(feeder_id: int, data: FeederUpdate, service: FeederService = Depends(get_feeder_service),
+                        current_user=Depends(require_tech_or_admin)):
+    return await service.update_feeder(feeder_id, data, username=current_user.email)
+
+
+@feeders_router.delete("/{feeder_id}", status_code=status.HTTP_204_NO_CONTENT, summary="Delete Feeder")
+async def delete_feeder(feeder_id: int, service: FeederService = Depends(get_feeder_service),
+                        current_user=Depends(require_tech_or_admin)):
+    await service.delete_feeder(feeder_id, username=current_user.email)
+    return
+
+
+@feeders_router.post("/{feeder_id}/command", response_model=Dict, summary="Send a write command to a feeder")
+async def send_command_to_feeder(feeder_id: int, request: CommandRequest, db: AsyncSession = Depends(get_db),
+                                 current_user=Depends(require_tech_or_admin)):
+    repo = FeederRepository(db)
+    feeder = await repo.get_feeder_by_id(feeder_id)
+    if not feeder:
+        raise HTTPException(status_code=404, detail="Feeder not found")
+    if not feeder.post or not feeder.post.ip_address:
+        raise HTTPException(status_code=400, detail="پست مربوط به این فیدر فاقد آدرس IP است.")
+
+    TELEMETRY_SERVICE_URL = "http://telemetry_worker:8001/api/modbus/write"
+    payload = {
+        "ip_address": feeder.post.ip_address,
+        "port": feeder.post.port or 502,
+        "unit_id": feeder.post.unit_id or 1,
+        "register_address": request.register_address,
+        "value": request.value
+    }
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.post(TELEMETRY_SERVICE_URL, json=payload, timeout=10.0)
+
+        response.raise_for_status()
+        return response.json()
+
+    except httpx.HTTPStatusError as e:
+        detail = e.response.json().get("detail", "Failed to execute command on hardware")
+        raise HTTPException(status_code=e.response.status_code, detail=detail)
+    except httpx.RequestError as e:
+        raise HTTPException(status_code=503, detail=f"Telemetry Service is unreachable: {str(e)}")

@@ -3,26 +3,40 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi import BackgroundTasks
 
 from main_api.core.database import get_db
-from main_api.modules.auth.repository import UserRepository
+from main_api.core.broker import get_rabbitmq_publisher, RabbitMQPublisher
+from main_api.modules.users.repository import UserRepository
+from main_api.modules.users.service import UserService
 from main_api.modules.auth.service import AuthService
 from main_api.modules.auth.dependencies import (
     require_admin,
     require_any_user
 )
-from main_api.modules.auth.models import RoleEnum
-from main_api.modules.auth.schemas import (
+from main_api.modules.users.models import RoleEnum
+from main_api.modules.users.schemas import (
     UserResponse,
     UserCreate,
     UserUpdate,
+)
+from main_api.modules.auth.schemas import (
     ChangePasswordRequest, ForgotPasswordRequest, ResetPasswordRequest, VerifyCodeRequest, ForgotPasswordResponse,
     VerifyCodeResponse
 )
 
 user_router = APIRouter(prefix="/users", tags=["User Management"])
 
-def get_auth_service(db: AsyncSession = Depends(get_db)) -> AuthService:
+def get_user_service(
+    db: AsyncSession = Depends(get_db),
+    publisher: RabbitMQPublisher = Depends(get_rabbitmq_publisher),
+) -> UserService:
     repo = UserRepository(db)
-    return AuthService(repo)
+    return UserService(repository=repo, publisher=publisher, db=db)
+
+def get_auth_service(
+    db: AsyncSession = Depends(get_db),
+    publisher: RabbitMQPublisher = Depends(get_rabbitmq_publisher),
+) -> AuthService:
+    repo = UserRepository(db)
+    return AuthService(repository=repo, publisher=publisher, db=db)
 
 # ==========================================
 # User Management Routes
@@ -30,7 +44,7 @@ def get_auth_service(db: AsyncSession = Depends(get_db)) -> AuthService:
 
 @user_router.get("", response_model=list[UserResponse], summary="List All Users (All Users)")
 async def get_all_users(
-    service: AuthService = Depends(get_auth_service),
+    service: UserService = Depends(get_user_service),
     current_user = Depends(require_any_user)  # ادمین، اپراتور فنی و کاربر عادی
 ):
     return await service.get_all_users()
@@ -49,7 +63,7 @@ async def change_password(
 @user_router.get("/{user_id}", response_model=UserResponse, summary="Get Single User Info (All Users)")
 async def get_user(
     user_id: int,
-    service: AuthService = Depends(get_auth_service),
+    service: UserService = Depends(get_user_service),
     current_user = Depends(require_any_user)  # ادمین، اپراتور فنی و کاربر عادی
 ):
     return await service.get_user_by_id(user_id)
@@ -57,27 +71,27 @@ async def get_user(
 @user_router.post("", response_model=UserResponse, status_code=status.HTTP_201_CREATED, summary="Create User (Admin Only)")
 async def create_user(
     data: UserCreate,
-    service: AuthService = Depends(get_auth_service),
+    service: UserService = Depends(get_user_service),
     current_admin = Depends(require_admin)  # فقط ادمین
 ):
-    return await service.create_user(data)
+    return await service.create_user(data, current_user=current_admin)
 
 @user_router.put("/{user_id}", response_model=UserResponse, summary="Update User (Admin Only)")
 async def update_user(
     user_id: int,
     data: UserUpdate,
-    service: AuthService = Depends(get_auth_service),
+    service: UserService = Depends(get_user_service),
     current_admin = Depends(require_admin)  # فقط ادمین
 ):
-    return await service.update_user(user_id, data)
+    return await service.update_user(user_id, data, current_user=current_admin)
 
 @user_router.delete("/{user_id}", status_code=status.HTTP_200_OK, summary="Delete User (Admin Only)")
 async def delete_user(
     user_id: int,
-    service: AuthService = Depends(get_auth_service),
+    service: UserService = Depends(get_user_service),
     current_admin = Depends(require_admin)  # فقط ادمین
 ):
-    return await service.delete_user(user_id)
+    return await service.delete_user(user_id, current_user=current_admin)
 
 @user_router.get("/roles/list", summary="List All Available Roles (All Users)")
 async def get_roles(
