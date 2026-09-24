@@ -3,17 +3,12 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-# مدل‌ها و اسکیماها
-from main_api.modules.devices.models import Post, Feeder, Location, Link
-from main_api.modules.devices.schemas import (
-    PostCreate, PostUpdate,
-    FeederCreate, FeederUpdate,
-    LocationCreate, LocationUpdate,
-    LinkCreate, LinkUpdate
-)
+from main_api.modules.locations.models import Location
+from main_api.modules.locations.schemas import LocationCreate, LocationUpdate
+from main_api.modules.posts.models import Post
 
 
-class DeviceRepository:
+class LocationRepository:
 
     def __init__(self, db: AsyncSession):
         self.db = db
@@ -200,45 +195,6 @@ class DeviceRepository:
 
         return False
 
-    # ================= Post CRUD =================
-    async def create_post(self, data: PostCreate) -> Post:
-        post = Post(**data.model_dump())
-        self.db.add(post)
-        await self.db.commit()
-        await self.db.refresh(post)
-        return await self.get_post_by_id(post.id)
-
-    async def get_all_posts(self, skip: int = 0, limit: int = 100) -> List[Post]:
-        query = select(Post).options(
-            selectinload(Post.feeders),
-            selectinload(Post.location)
-       ).offset(skip).limit(limit)
-
-        result = await self.db.execute(query)
-        return list(result.scalars().all())
-
-    async def get_post_by_id(self, post_id: int) -> Optional[Post]:
-        query = select(Post).options(
-            selectinload(Post.feeders),
-            selectinload(Post.location)
-        ).where(Post.id == post_id)
-
-        result = await self.db.execute(query)
-        return result.scalar_one_or_none()
-
-    async def update_post(self, post: Post, data: PostUpdate) -> Post:
-        update_data = data.model_dump(exclude_unset=True)
-        for key, value in update_data.items():
-            setattr(post, key, value)
-        await self.db.commit()
-        await self.db.refresh(post)
-        return await self.get_post_by_id(post.id)
-
-    async def delete_post(self, post: Post) -> None:
-        await self.db.delete(post)
-        await self.db.commit()
-
-
     async def get_posts_by_location(self, location_id: int):
         stmt = (
             select(Post)
@@ -250,93 +206,3 @@ class DeviceRepository:
         )
         result = await self.db.execute(stmt)
         return result.scalars().all()
-
-    # ================= Feeder CRUD =================
-    async def create_feeder(self, data: FeederCreate) -> Feeder:
-        feeder = Feeder(**data.model_dump())
-        self.db.add(feeder)
-        await self.db.commit()
-        await self.db.refresh(feeder)
-        return feeder
-
-    async def get_all_feeders(self, post_id: Optional[int] = None, skip: int = 0, limit: int = 100) -> List[Feeder]:
-        query = select(Feeder).options(
-            selectinload(Feeder.post)
-        )
-        if post_id:
-            query = query.where(Feeder.post_id == post_id)
-        query = query.offset(skip).limit(limit)
-        result = await self.db.execute(query)
-        return list(result.scalars().all())
-
-    async def get_feeder_by_id(self, feeder_id: int) -> Optional[Feeder]:
-        query = select(Feeder).options(
-            selectinload(Feeder.post)
-        ).where(Feeder.id == feeder_id)
-        result = await self.db.execute(query)
-        return result.scalar_one_or_none()
-
-    async def update_feeder(self, feeder: Feeder, data: FeederUpdate) -> Feeder:
-        update_data = data.model_dump(exclude_unset=True)
-        for key, value in update_data.items():
-            setattr(feeder, key, value)
-        await self.db.commit()
-        await self.db.refresh(feeder)
-        return feeder
-
-    async def delete_feeder(self, feeder: Feeder) -> None:
-        await self.db.delete(feeder)
-        await self.db.commit()
-
-    # ================= Link CRUD =================
-    # ================= Link CRUD =================
-    async def create_link(self, data: LinkCreate) -> Link:
-        link = Link(**data.model_dump())
-        self.db.add(link)
-        await self.db.commit()
-        await self.db.refresh(link)
-        # تغییر مهم: لینک را همراه با تمام جزئیات پست‌ها واکشی و برمی‌گردانیم
-        return await self.get_link_by_id(link.id)
-
-    async def get_all_links(self, skip: int = 0, limit: int = 100):
-        query = select(Link).options(
-            # بارگذاری پست مبدأ به همراه فیدرها و مکان آن
-            selectinload(Link.from_post).selectinload(Post.feeders),
-            selectinload(Link.from_post).selectinload(Post.location),
-
-            # بارگذاری پست مقصد به همراه فیدرها و مکان آن
-            selectinload(Link.to_post).selectinload(Post.feeders),
-            selectinload(Link.to_post).selectinload(Post.location)
-        ).offset(skip).limit(limit)
-
-        result = await self.db.execute(query)
-        return list(result.scalars().all())
-
-    async def get_link_by_id(self, link_id: int) -> Optional[Link]:
-        query = select(Link).options(
-            # بارگذاری زنجیره‌ای فیلدهای تو در تو
-            selectinload(Link.from_post).selectinload(Post.feeders),
-            selectinload(Link.from_post).selectinload(Post.location),
-
-            selectinload(Link.to_post).selectinload(Post.feeders),
-            selectinload(Link.to_post).selectinload(Post.location)
-        ).where(Link.id == link_id)
-
-        result = await self.db.execute(query)
-        return result.scalar_one_or_none()
-
-    async def update_link(self, link: Link, data: LinkUpdate) -> Link:
-        update_data = data.model_dump(exclude_unset=True)
-        for key, value in update_data.items():
-            setattr(link, key, value)
-        await self.db.commit()
-        await self.db.refresh(link)
-        # تغییر مهم: بعد از آپدیت، مجدداً با جزئیات کامل برمی‌گردانیم
-        return await self.get_link_by_id(link.id)
-
-    async def delete_link(self, link: Link) -> None:
-        """
-        حذف یک لینک از دیتابیس
-        """
-        await self.db.delete(link)
-        await self.db.commit()

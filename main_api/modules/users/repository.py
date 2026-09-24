@@ -2,7 +2,7 @@ from typing import Optional
 from datetime import datetime
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from main_api.modules.auth.models import User
+from main_api.modules.users.models import User
 
 class UserRepository:
     def __init__(self, db: AsyncSession):
@@ -27,6 +27,19 @@ class UserRepository:
     async def get_all(self):
         result = await self.db.execute(select(User))
         return result.scalars().all()
+
+    async def get_notification_enabled_emails(self) -> list[str]:
+        """
+        لیست ایمیل کاربران فعالی که ادمین برایشان ارسال نوتیفیکیشن را فعال کرده
+        است (sms_notification_enabled=True). برای هشدارهایی مثل قطعی فیدر استفاده می‌شود.
+        """
+        result = await self.db.execute(
+            select(User.email).where(
+                User.sms_notification_enabled == True,  # noqa: E712
+                User.is_active == True,  # noqa: E712
+            )
+        )
+        return [row[0] for row in result.all()]
 
     async def update_login_state(
         self, user: User, failed_attempts: int, locked_until: Optional[datetime]

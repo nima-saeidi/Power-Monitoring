@@ -16,8 +16,11 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..',
 from main_api.core.database import Base
 
 # ایمپورت دقیق تمام مدل‌ها بر اساس ساختار پوشه‌های شما
-from main_api.modules.auth.models import User
-from main_api.modules.devices.models import Post,Feeder,Location,Link
+from main_api.modules.users.models import User
+from main_api.modules.locations.models import Location
+from main_api.modules.posts.models import Post
+from main_api.modules.feeders.models import Feeder
+from main_api.modules.links.models import Link
 from  main_api.modules.settings.models import SystemSetting
 from  main_api.modules.telemetry.models import TimeseriesData
 config = context.config

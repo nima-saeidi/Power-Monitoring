@@ -1,6 +1,6 @@
 import logging
 from email.message import EmailMessage
-from typing import List
+from typing import List, Optional
 import aiosmtplib
 from core.config import settings
 from modules.notifications.base import BaseNotificationProvider
@@ -8,7 +8,7 @@ from modules.notifications.base import BaseNotificationProvider
 logger = logging.getLogger("EmailProvider")
 
 class EmailProvider(BaseNotificationProvider):
-    async def send(self, to_emails: List[str], subject: str, body: str) -> bool:
+    async def send(self, to_emails: List[str], subject: str, body: str, html_body: Optional[str] = None) -> bool:
         if not to_emails:
             logger.warning("No recipient email addresses provided.")
             return False
@@ -22,6 +22,8 @@ class EmailProvider(BaseNotificationProvider):
         message["To"] = ", ".join(to_emails)
         message["Subject"] = subject
         message.set_content(body)
+        if html_body:
+            message.add_alternative(html_body, subtype="html")
 
         try:
             await aiosmtplib.send(

@@ -5,11 +5,14 @@ from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from main_api.core.config import settings
+from main_api.core.broker import send_notification_to_queue
+from main_api.core.email_templates import build_feeder_offline_email_html
 from main_api.modules.telemetry.repository import TelemetryRepository
 from main_api.modules.telemetry.schemas import (
     TelemetryCreate, TelemetryResponse, ActiveFeederConfig, FeederStatusUpdate,
 )
 from main_api.modules.telemetry.ws_manager import ws_manager
+from main_api.modules.users.repository import UserRepository
 
 # ایمپورت سیستم Audit Logging
 from main_api.modules.audit_logs.services import send_audit_log
@@ -82,6 +85,44 @@ class TelemetryService:
                 consecutive_failures=data.consecutive_failures,
             ))
 
+            # فقط در لحظه‌ی واقعی قطعی فیدر (نه هر بار Polling)، به کاربرانی که
+            # ادمین برایشان ارسال نوتیفیکیشن را فعال کرده، ایمیل هشدار ارسال می‌شود.
+            # ارسال واقعی ایمیل توسط notification_service (از طریق صف notification_events)
+            # انجام می‌شود؛ main_api فقط رویداد را منتشر می‌کند.
+            if not data.is_online:
+                # await می‌شود (نه create_task) چون از همان AsyncSession درخواست جاری
+                # برای خواندن کاربران استفاده می‌کند و AsyncSession امن برای همزمانی نیست.
+                await self._notify_feeder_offline(feeder, data.consecutive_failures)
+
+    async def _notify_feeder_offline(self, feeder, consecutive_failures: int) -> None:
+        try:
+            user_repo = UserRepository(self.session)
+            emails = await user_repo.get_notification_enabled_emails()
+            if not emails:
+                return
+
+            await send_notification_to_queue(
+                title=f"قطعی فیدر: {feeder.name}",
+                message=(
+                    f"فیدر «{feeder.name}» (شناسه {feeder.id}) پس از {consecutive_failures} بار عدم پاسخ‌دهی، "
+                    "آفلاین علامت‌گذاری شد."
+                ),
+                html_message=build_feeder_offline_email_html(feeder.name, feeder.id, consecutive_failures),
+                channel="email",
+                email_addresses=emails,
+                priority="high",
+                metadata={"event_type": "feeder_offline", "feeder_id": feeder.id, "post_id": feeder.post_id},
+            )
+        except Exception as e:
+            asyncio.create_task(send_audit_log(
+                action="FEEDER_OFFLINE_NOTIFICATION_FAILED",
+                username="System",
+                success=False,
+                severity="ERROR",
+                description=f"ارسال هشدار قطعی فیدر «{feeder.name}» به صف نوتیفیکیشن با خطا مواجه شد: {str(e)}",
+                feeder_id=feeder.id,
+            ))
+
     # ==========================================
     # ۲. متد ذخیره دیتابیس محلی و برادکست وب‌سوکت
     # ==========================================
@@ -151,8 +192,14 @@ class TelemetryService:
             feeder_id: str,
             start: str = "-1h",
             stop: str = "now()",
-            window: str = "1m"
+            window: str = "1m",
+            timeout: float = 10.0
     ) -> List[Dict[str, Any]]:
+        """
+        نکته کارایی: برای گزارش‌های بزرگ (بازه‌های زمانی طولانی/window ریز) کوئری
+        InfluxDB می‌تواند بیش از timeout پیش‌فرض طول بکشد. صداکننده‌های گزارش‌گیری
+        (export) باید timeout بزرگ‌تری پاس بدهند تا با خطای انقضای اتصال شکست نخورند.
+        """
         url = f"{settings.TELEMETRY_SERVICE_URL.rstrip('/')}/telemetry/history/{feeder_id}"
         params = {
             "start": start,
@@ -160,7 +207,7 @@ class TelemetryService:
             "window": window
         }
 
-        async with httpx.AsyncClient(timeout=10.0) as client:
+        async with httpx.AsyncClient(timeout=timeout) as client:
             try:
                 response = await client.get(url, params=params)
                 if response.status_code == status.HTTP_200_OK:

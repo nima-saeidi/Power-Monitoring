@@ -70,8 +70,40 @@ async def process_audit_message(message: aio_pika.IncomingMessage):
 
         except json.JSONDecodeError as jde:
             logger.error(f"Failed to decode message JSON: {jde}")
+            raise  # تا nack شود و به DLQ برود (به‌جای گم شدن بی‌صدا)
         except Exception as e:
             logger.error(f"Error processing audit message: {e}", exc_info=True)
+            raise  # تا message.process() آن را nack کند و به logs_queue.dlq برود
+
+
+async def _declare_logs_queue_with_dlq(connection, channel):
+    """
+    Declare صف logs_queue با x-dead-letter-exchange. توجه: producerهایی که به
+    این صف پیام می‌فرستند (main_api، notification_service) هم باید همین
+    آرگومان را با همین نام‌گذاری (f"logs_queue.dlx") declare کنند، وگرنه
+    RabbitMQ خطای PRECONDITION_FAILED می‌دهد. اگر صف از قبل با آرگومان متفاوت
+    وجود داشته باشد، بدون DLQ fallback می‌کنیم تا سرویس بالا بیاید.
+    """
+    queue_name = "logs_queue"
+    dlx_name = f"{queue_name}.dlx"
+    dlq_name = f"{queue_name}.dlq"
+    try:
+        dlx_exchange = await channel.declare_exchange(dlx_name, aio_pika.ExchangeType.FANOUT, durable=True)
+        dlq = await channel.declare_queue(dlq_name, durable=True)
+        await dlq.bind(dlx_exchange)
+        queue = await channel.declare_queue(
+            queue_name, durable=True, arguments={"x-dead-letter-exchange": dlx_name}
+        )
+        return queue, channel
+    except aio_pika.exceptions.ChannelClosed:
+        logger.warning(
+            f"Queue '{queue_name}' already exists with incompatible arguments. "
+            "Falling back WITHOUT dead-letter support; delete the queue manually once to enable DLQ."
+        )
+        fresh_channel = await connection.channel()
+        await fresh_channel.set_qos(prefetch_count=10)
+        queue = await fresh_channel.declare_queue(queue_name, durable=True)
+        return queue, fresh_channel
 
 
 async def start_consumer():
@@ -81,7 +113,7 @@ async def start_consumer():
         channel = await connection.channel()
         await channel.set_qos(prefetch_count=10)
 
-        queue = await channel.declare_queue("logs_queue", durable=True)
+        queue, channel = await _declare_logs_queue_with_dlq(connection, channel)
         await queue.consume(process_audit_message)
 
         logger.info("RabbitMQ Consumer started successfully. Listening to 'logs_queue'...")

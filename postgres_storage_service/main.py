@@ -27,7 +27,9 @@ logger = logging.getLogger("postgres_storage_worker")
 
 async def process_message(message: aio_pika.IncomingMessage) -> None:
     """پردازش هر پیام دریافتی از صف RabbitMQ"""
-    # با requeue=False اگر پردازش با خطا مواجه شود، پیام در صف قفل نمی‌شود (یا به DLQ می‌رود)
+    # با requeue=False، پیامی که پردازشش استثنا بدهد nack می‌شود؛ چون صف با
+    # آرگومان x-dead-letter-exchange declare شده، این پیام گم نمی‌شود بلکه به
+    # صف db.settings.write.dlq منتقل می‌شود تا بعداً بررسی/reprocess شود.
     async with message.process(requeue=False, ignore_processed=True):
         try:
             payload = json.loads(message.body.decode("utf-8"))
@@ -40,11 +42,42 @@ async def process_message(message: aio_pika.IncomingMessage) -> None:
             logger.info(f"Successfully processed event: {payload.get('event_type', 'N/A')}")
 
         except json.JSONDecodeError:
-            logger.error("Failed to decode message JSON. Dropping invalid message.")
+            logger.error("Failed to decode message JSON. Sending to DLQ.")
+            raise
         except Exception as e:
             logger.exception(f"Unhandled error processing message: {e}")
-            # در صورتی که می‌خواهید پیام‌های خطادار دوباره وارد صف شوند (برای خطاهای موقت شبکه):
-            # await message.reject(requeue=True)
+            # raise می‌شود تا message.process() آن را nack کند و به DLQ برود
+            # (به‌جای بلعیدن خطا که باعث می‌شد پیام برای همیشه گم شود)
+            raise
+
+
+async def _declare_main_queue_with_dlq(connection, channel, queue_name: str):
+    """
+    Declare صف اصلی با آرگومان x-dead-letter-exchange. اگر این صف از قبل (قبل
+    از این تغییر) با آرگومان‌های متفاوت روی RabbitMQ وجود داشته باشد، AMQP
+    خطای PRECONDITION_FAILED می‌دهد که کانال جاری را می‌بندد؛ در این حالت با
+    یک کانال تازه، صف را بدون DLQ declare می‌کنیم تا سرویس بالا بیاید (فقط
+    بدون محافظت DLQ، تا زمانی که صف قدیمی یک‌بار به‌صورت دستی حذف شود).
+    """
+    dlx_name = f"{queue_name}.dlx"
+    dlq_name = f"{queue_name}.dlq"
+    try:
+        dlx_exchange = await channel.declare_exchange(dlx_name, aio_pika.ExchangeType.FANOUT, durable=True)
+        dlq = await channel.declare_queue(dlq_name, durable=True)
+        await dlq.bind(dlx_exchange)
+        queue = await channel.declare_queue(
+            queue_name, durable=True, arguments={"x-dead-letter-exchange": dlx_name}
+        )
+        return queue, channel
+    except aio_pika.exceptions.ChannelClosed:
+        logger.warning(
+            f"Queue '{queue_name}' already exists with incompatible arguments. "
+            "Falling back WITHOUT dead-letter support; delete the queue manually once to enable DLQ."
+        )
+        fresh_channel = await connection.channel()
+        await fresh_channel.set_qos(prefetch_count=10)
+        queue = await fresh_channel.declare_queue(queue_name, durable=True)
+        return queue, fresh_channel
 
 
 async def run_worker() -> None:
@@ -64,8 +97,10 @@ async def run_worker() -> None:
                 # محدود کردن تعداد پیام‌های همزمان برای جلوگیری از سرریز حافظه
                 await channel.set_qos(prefetch_count=10)
 
-                # تعریف صف با قابلیت دوام (Durable)
-                queue = await channel.declare_queue("db.settings.write", durable=True)
+                # تعریف صف با قابلیت دوام (Durable) + Dead-Letter-Exchange تا
+                # پیام‌هایی که پردازششان با خطا مواجه می‌شود (به‌جای گم شدن
+                # کامل) به صف db.settings.write.dlq منتقل و قابل بررسی شوند.
+                queue, channel = await _declare_main_queue_with_dlq(connection, channel, "db.settings.write")
 
                 # تعریف Exchange از نوع Topic
                 exchange = await channel.declare_exchange(

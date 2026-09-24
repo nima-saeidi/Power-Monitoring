@@ -1,7 +1,5 @@
-import json
 import logging
 import asyncio
-import aio_pika
 import httpx
 from typing import Optional, Dict, Any
 from datetime import datetime, timedelta
@@ -10,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi import HTTPException, status, BackgroundTasks
 
 from main_api.core.config import settings
+from main_api.core.broker import message_broker
 from main_api.modules.audit_logs.repository import (
     CommandLogRepository,
     DeviceTestLogRepository
@@ -43,31 +42,24 @@ async def publish_log_to_rabbitmq(
         details: Dict[str, Any],
         user_id: Optional[int] = None,
 ):
-    """انتشار مستقیم یک پیام لاگ (با ساختار منطبق بر LogCreate) به صف logs_queue"""
-    try:
-        connection = await aio_pika.connect_robust(settings.RABBITMQ_URL)
-        async with connection:
-            channel = await connection.channel()
-            # اطمینان از وجود صف (Durable برای از دست نرفتن لاگ‌ها هنگام ریستارت شدن RabbitMQ)
-            await channel.declare_queue(LOGS_QUEUE_NAME, durable=True)
+    """
+    انتشار مستقیم یک پیام لاگ (با ساختار منطبق بر LogCreate) به صف logs_queue.
 
-            message_body = {
-                "service_name": service_name,
-                "action": action,
-                "user_id": user_id,
-                "details": details,
-            }
+    از کانکشن پایدار سراسری (message_broker) استفاده می‌شود، نه یک کانکشن AMQP
+    جدید به‌ازای هر لاگ. هر عملیات API (لاگین، هر CRUD، هر خطا) یک لاگ ارسال
+    می‌کند؛ باز/بسته کردن کانکشن AMQP به‌ازای هر کدام زیر بار سنگین یا با چند
+    replica از main_api هزینه‌ی محسوسی به هر درخواست تحمیل می‌کرد.
+    """
+    message_body = {
+        "service_name": service_name,
+        "action": action,
+        "user_id": user_id,
+        "details": details,
+    }
 
-            message = aio_pika.Message(
-                body=json.dumps(message_body, default=str).encode("utf-8"),
-                delivery_mode=aio_pika.DeliveryMode.PERSISTENT,
-                content_type="application/json",
-            )
-
-            # صف مقصد با نام دقیق صف، روی Default Exchange مسیریابی مستقیم می‌شود
-            await channel.default_exchange.publish(message, routing_key=LOGS_QUEUE_NAME)
-    except Exception as e:
-        logger.error(f"Failed to send '{action}' log to RabbitMQ: {e}")
+    success = await message_broker.publish_to_queue(LOGS_QUEUE_NAME, message_body)
+    if not success:
+        logger.error(f"Failed to send '{action}' log to RabbitMQ.")
 
 
 async def send_audit_log(
@@ -228,27 +220,6 @@ class AuditLogService:
             recent_logs=items[:50],
             period_days=days
         )
-
-    async def purge_old_logs(self, days: int, current_user) -> dict:
-        try:
-            async with httpx.AsyncClient(timeout=15.0) as client:
-                response = await client.delete(f"{self.base_url}/logs", params={"older_than_days": days})
-            response.raise_for_status()
-            deleted_count = response.json().get("deleted_count", 0)
-        except httpx.RequestError as exc:
-            raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=f"سرویس لاگ در دسترس نیست: {exc}")
-
-        await send_audit_log(
-            action="PURGE_AUDIT_LOGS",
-            user_id=current_user.id,
-            username=current_user.email,
-            user_role=current_user.role,
-            description=f"Purged {deleted_count} logs older than {days} days.",
-            severity="WARNING"
-        )
-
-        return {"success": True, "message": f"Successfully deleted {deleted_count} logs.",
-                "deleted_count": deleted_count}
 
 
 class CommandLogService:

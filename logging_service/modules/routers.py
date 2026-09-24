@@ -6,7 +6,6 @@ from modules.schemas import (
     LogListResponse,
     LogItem,
     LogFilterOptionsResponse,
-    LogPurgeResponse,
 )
 from modules.services import logging_service_instance
 
@@ -52,15 +51,6 @@ async def fetch_logs(
 async def fetch_filter_options():
     """لیست مقادیر یکتای service_name/action برای ساخت فیلترهای پنل ادمین"""
     return await logging_service_instance.get_filter_options()
-
-
-@router.delete("", response_model=LogPurgeResponse)
-async def purge_logs(
-    older_than_days: int = Query(default=90, ge=1, le=3650, description="حذف لاگ‌های قدیمی‌تر از این تعداد روز")
-):
-    """حذف لاگ‌های قدیمی‌تر از تعداد روز مشخص شده"""
-    deleted_count = await logging_service_instance.purge_old_logs(older_than_days)
-    return LogPurgeResponse(deleted_count=deleted_count)
 
 
 @router.get("/{log_id}", response_model=LogItem)

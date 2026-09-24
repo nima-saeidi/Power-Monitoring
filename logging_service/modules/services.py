@@ -1,7 +1,7 @@
 import logging
-from datetime import datetime, timedelta
+import time
 from typing import Optional
-from sqlalchemy import select, func, or_, delete
+from sqlalchemy import select, func, or_
 from core.database import AsyncSessionLocal
 from modules.models import AuditLog
 from modules.schemas import (
@@ -13,6 +13,14 @@ from modules.schemas import (
 )
 
 logger = logging.getLogger(__name__)
+
+# مقادیر یکتای service_name/action روی جدولی با میلیون‌ها رکورد به‌ندرت تغییر
+# می‌کنند (فقط با اضافه شدن یک سرویس/اکشن جدید)، اما SELECT DISTINCT روی چنین
+# جدولی می‌تواند اسکن کامل و پرهزینه باشد. به همین دلیل نتیجه به مدت کوتاهی در
+# حافظه Cache می‌شود تا هر بار که پنل ادمین فیلترها را باز می‌کند، این اسکن
+# سنگین تکرار نشود.
+_FILTER_OPTIONS_CACHE_TTL_SECONDS = 300
+_filter_options_cache: dict = {"data": None, "expires_at": 0.0}
 
 
 class LoggingService:
@@ -71,19 +79,24 @@ class LoggingService:
 
     @staticmethod
     async def get_logs(filters: LogFilterRequest) -> LogListResponse:
-        """دریافت و فیلتر لاگ‌ها از دیتابیس PostgreSQL به صورت Async"""
+        """
+        دریافت و فیلتر لاگ‌ها از دیتابیس PostgreSQL به صورت Async.
+
+        بهینه‌سازی: به‌جای دو کوئری جدا (یکی برای شمارش کل نتایج، یکی برای واکشی
+        صفحه‌ی فعلی) که روی جدولی با میلیون‌ها رکورد دو برابر هزینه‌ی Round-trip و
+        برنامه‌ریزی کوئری دارد، از window function ``count(*) OVER()`` استفاده
+        می‌شود تا تعداد کل نتایج فیلترشده در همان کوئری واکشی صفحه محاسبه شود.
+        """
         async with AsyncSessionLocal() as session:
-            query = LoggingService._apply_filters(select(AuditLog), filters)
-            count_query = LoggingService._apply_filters(select(func.count(AuditLog.id)), filters)
-
-            total_result = await session.execute(count_query)
-            total = total_result.scalar_one_or_none() or 0
-
+            total_count_col = func.count().over().label("total_count")
+            query = LoggingService._apply_filters(select(AuditLog, total_count_col), filters)
             query = query.order_by(AuditLog.created_at.desc()).offset(filters.offset).limit(filters.limit)
-            result = await session.execute(query)
-            logs = result.scalars().all()
 
-            items = [LogItem.model_validate(log) for log in logs]
+            result = await session.execute(query)
+            rows = result.all()
+
+            total = rows[0].total_count if rows else 0
+            items = [LogItem.model_validate(row[0]) for row in rows]
             return LogListResponse(total=total, items=items)
 
     @staticmethod
@@ -95,7 +108,16 @@ class LoggingService:
 
     @staticmethod
     async def get_filter_options() -> LogFilterOptionsResponse:
-        """لیست مقادیر یکتای service_name و action برای ساخت فیلترهای پنل ادمین"""
+        """
+        لیست مقادیر یکتای service_name و action برای ساخت فیلترهای پنل ادمین.
+        نتیجه به مدت ۵ دقیقه Cache می‌شود (روی جدولی با میلیون‌ها رکورد،
+        SELECT DISTINCT هر بار اسکن سنگینی است و این مقادیر به‌ندرت تغییر می‌کنند).
+        """
+        now = time.monotonic()
+        cached = _filter_options_cache
+        if cached["data"] is not None and now < cached["expires_at"]:
+            return cached["data"]
+
         async with AsyncSessionLocal() as session:
             services_result = await session.execute(
                 select(AuditLog.service_name).where(AuditLog.service_name.is_not(None)).distinct()
@@ -105,18 +127,11 @@ class LoggingService:
             )
             services = sorted([s for s in services_result.scalars().all() if s])
             actions = sorted([a for a in actions_result.scalars().all() if a])
-            return LogFilterOptionsResponse(services=services, actions=actions)
+            data = LogFilterOptionsResponse(services=services, actions=actions)
 
-    @staticmethod
-    async def purge_old_logs(older_than_days: int) -> int:
-        """حذف لاگ‌های قدیمی‌تر از تعداد روز مشخص شده"""
-        cutoff = datetime.utcnow() - timedelta(days=older_than_days)
-        async with AsyncSessionLocal() as session:
-            result = await session.execute(
-                delete(AuditLog).where(AuditLog.created_at < cutoff)
-            )
-            await session.commit()
-            return result.rowcount or 0
+        cached["data"] = data
+        cached["expires_at"] = now + _FILTER_OPTIONS_CACHE_TTL_SECONDS
+        return data
 
 
 logging_service_instance = LoggingService()

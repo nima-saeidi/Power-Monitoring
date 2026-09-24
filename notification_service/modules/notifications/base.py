@@ -47,6 +47,10 @@ class NotificationPayload(BaseModel):
         min_length=1,
         description="متن پیام اعلان"
     )
+    html_message: Optional[str] = Field(
+        default=None,
+        description="نسخه HTML پیام (فقط برای کانال ایمیل استفاده می‌شود؛ اختیاری)"
+    )
     phone_numbers: Optional[List[str]] = Field(
         default_factory=list,
         description="لیست شماره تلفن‌های گیرنده پیامک"

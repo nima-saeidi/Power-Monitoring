@@ -1,4 +1,4 @@
-# main_api/modules/auth/models.py
+# main_api/modules/users/models.py
 from sqlalchemy import Column, Integer, String, Boolean, DateTime, Enum as SQLEnum
 from sqlalchemy.sql import func
 from main_api.core.database import Base

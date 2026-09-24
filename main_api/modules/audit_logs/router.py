@@ -1,9 +1,9 @@
 from typing import Optional
 from datetime import datetime
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, Query
 
-from main_api.modules.auth.dependencies import require_admin, require_tech_or_admin
-from main_api.modules.auth.models import User
+from main_api.modules.auth.dependencies import require_tech_or_admin
+from main_api.modules.users.models import User
 from main_api.modules.audit_logs.schemas import (
     AuditLogResponse, AuditLogListResponse, CommandLogListResponse,
     UserActivityResponse, DeviceTestLogListResponse
@@ -81,15 +81,6 @@ async def get_user_activity(
         current_user: User = Depends(require_tech_or_admin)
 ):
     return await service.get_user_activity(user_id, days)
-
-
-@router.delete("/purge", status_code=status.HTTP_200_OK)
-async def purge_old_logs(
-        days: int = Query(90, ge=30, le=365, description="حذف لاگ‌های قدیمی‌تر از این روز"),
-        service: AuditLogService = Depends(get_audit_log_service),
-        current_user: User = Depends(require_admin)
-):
-    return await service.purge_old_logs(days, current_user)
 
 
 # ==========================================

@@ -57,3 +57,5 @@ wrapt==2.4.0
 aio-pika
 requests
 graypy
+reportlab==5.0.1
+pillow==12.3.0

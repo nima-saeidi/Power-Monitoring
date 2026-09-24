@@ -14,15 +14,12 @@ from main_api.core.security import (
     verify_password,
     create_access_token
 )
-from main_api.core.email import send_reset_code_email
-from main_api.modules.auth.repository import UserRepository
+from main_api.modules.users.repository import UserRepository
+from main_api.modules.users.schemas import UserResponse
 from main_api.modules.auth.schemas import (
     AdminRegisterRequest,
     LoginRequest,
     TokenResponse,
-    UserResponse,
-    UserCreate,
-    UserUpdate,
     UserProfileUpdate,
     ChangePasswordRequest,
     ForgotPasswordRequest,
@@ -30,13 +27,17 @@ from main_api.modules.auth.schemas import (
     VerifyCodeRequest
 )
 from main_api.modules.settings.service import SettingService
-from main_api.core.broker import RabbitMQPublisher
+from main_api.core.broker import RabbitMQPublisher, send_notification_to_queue
+from main_api.core.email_templates import build_reset_code_email_html
 
 # ایمپورت تابع ارسال لاگ
 from main_api.modules.audit_logs.services import send_audit_log, schedule_audit_log
 
 
 class AuthService:
+    """احراز هویت: لاگین، پروفایل شخصی، تغییر/بازیابی رمز عبور و ثبت‌نام ادمین اولیه.
+    برای مدیریت کاربران توسط ادمین (CRUD) به main_api.modules.users.service.UserService مراجعه کنید."""
+
     def __init__(self, repository: UserRepository, publisher: RabbitMQPublisher, db: AsyncSession):
         self.repo = repository
         self.publisher = publisher
@@ -183,16 +184,6 @@ class AuthService:
         if user.failed_login_attempts or user.locked_until:
             await self.repo.update_login_state(user, failed_attempts=0, locked_until=None)
 
-    async def get_all_users(self) -> list[UserResponse]:
-        users = await self.repo.get_all()
-        return [UserResponse.model_validate(u) for u in users]
-
-    async def get_user_by_id(self, user_id: int) -> UserResponse:
-        user = await self.repo.get_by_id(user_id)
-        if not user:
-            raise HTTPException(status_code=404, detail="کاربر یافت نشد.")
-        return UserResponse.model_validate(user)
-
     async def forgot_password(self, data: ForgotPasswordRequest, background_tasks: BackgroundTasks):
         user = await self.repo.get_by_email(data.email)
         if not user:
@@ -211,7 +202,21 @@ class AuthService:
             algorithm=settings.ALGORITHM
         )
 
-        background_tasks.add_task(send_reset_code_email, user.email, code)
+        # ارسال ایمیل دیگر در main_api انجام نمی‌شود؛ فقط رویداد به صف notification_events
+        # منتشر می‌شود تا notification_service آن را از طریق EmailProvider ارسال کند.
+        background_tasks.add_task(
+            send_notification_to_queue,
+            title="کد تأیید بازیابی رمز عبور",
+            message=(
+                f"کد تأیید بازیابی رمز عبور شما: {code}\n"
+                "این کد به مدت ۵ دقیقه معتبر است. اگر این درخواست را نداده‌اید، این پیام را نادیده بگیرید."
+            ),
+            html_message=build_reset_code_email_html(code),
+            channel="email",
+            email_addresses=[user.email],
+            priority="high",
+            metadata={"event_type": "password_reset_otp", "user_id": user.id},
+        )
 
         background_tasks.add_task(
             send_audit_log, action="PASSWORD_RESET_REQUESTED", user_id=user.id,
@@ -281,7 +286,7 @@ class AuthService:
                 "name": data.name,
                 "email": data.email,
                 "phone_number": data.phone_number,
-                "hashed_password": hash_password(data.password),  # اصلاح شد
+                "hashed_password": hash_password(data.password),
                 "role": "admin",
                 "is_active": True
             }
@@ -292,62 +297,6 @@ class AuthService:
             success=True, severity="INFO", description="درخواست ثبت ادمین در صف قرار گرفت"
         )
         return {"status": "accepted", "message": "درخواست ثبت ادمین در صف پردازش قرار گرفت."}
-
-    async def create_user(self, data: UserCreate, background_tasks: Optional[BackgroundTasks] = None, current_user: UserResponse = None):
-        if await self.repo.get_by_email(data.email):
-            raise HTTPException(status_code=400, detail="این ایمیل قبلاً ثبت شده است.")
-        if data.phone_number and await self.repo.get_by_phone_number(data.phone_number):
-            raise HTTPException(status_code=400, detail="این شماره تلفن قبلاً ثبت شده است.")
-
-        await self._publish({
-            "entity": "user",
-            "action": "CREATE_USER",
-            "data": {
-                "name": data.name,
-                "email": data.email,
-                "phone_number": data.phone_number,
-                "hashed_password": hash_password(data.password),  # اصلاح شد
-                "role": data.role,
-                "is_active": data.is_active,
-                "sms_notification_enabled": data.sms_notification_enabled
-            }
-        })
-
-        actor_id = current_user.id if current_user else None
-        actor_name = current_user.email if current_user else None
-
-        schedule_audit_log(
-            background_tasks, action="CREATE_USER_QUEUED", user_id=actor_id, username=actor_name,
-            success=True, severity="INFO", description=f"درخواست ایجاد کاربر {data.email} در صف قرار گرفت"
-        )
-        return {"status": "accepted", "message": "درخواست ایجاد کاربر در صف پردازش قرار گرفت."}
-
-    async def update_user(self, user_id: int, data: UserUpdate, background_tasks: Optional[BackgroundTasks] = None,
-                          current_user: UserResponse = None):
-        user = await self.repo.get_by_id(user_id)
-        if not user:
-            raise HTTPException(status_code=404, detail="کاربر یافت نشد.")
-
-        update_data = data.model_dump(exclude_unset=True)
-        if "password" in update_data:
-            update_data["hashed_password"] = hash_password(update_data.pop("password"))
-
-        if update_data:
-            await self._publish({
-                "entity": "user",
-                "action": "UPDATE_USER",
-                "user_id": user_id,
-                "data": update_data
-            })
-
-            actor_id = current_user.id if current_user else user_id
-            actor_name = current_user.email if current_user else user.email
-
-            schedule_audit_log(
-                background_tasks, action="UPDATE_USER_QUEUED", user_id=actor_id, username=actor_name,
-                success=True, severity="INFO", description=f"بروزرسانی اطلاعات کاربر با ID {user_id}"
-            )
-        return {"status": "accepted", "message": "درخواست بروزرسانی کاربر در صف قرار گرفت."}
 
     async def update_profile(self, user_id: int, data: UserProfileUpdate, background_tasks: Optional[BackgroundTasks] = None):
         user = await self.repo.get_by_id(user_id)
@@ -393,7 +342,7 @@ class AuthService:
             "entity": "user",
             "action": "UPDATE_USER",
             "user_id": user_id,
-            "data": {"hashed_password": hash_password(data.new_password)}  # اصلاح شد
+            "data": {"hashed_password": hash_password(data.new_password)}
         })
 
         schedule_audit_log(
@@ -404,7 +353,7 @@ class AuthService:
 
     async def reset_password(self, data: ResetPasswordRequest, background_tasks: Optional[BackgroundTasks] = None):
         try:
-            payload = jwt.decode(data.reset_token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])  # اصلاح شد
+            payload = jwt.decode(data.reset_token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
             email: str = payload.get("sub")
             if not email or payload.get("type") != "password_reset":
                 raise JWTError
@@ -423,7 +372,7 @@ class AuthService:
             "entity": "user",
             "action": "UPDATE_USER",
             "user_id": user.id,
-            "data": {"hashed_password": hash_password(data.new_password)}  # اصلاح شد
+            "data": {"hashed_password": hash_password(data.new_password)}
         })
 
         schedule_audit_log(
@@ -431,23 +380,3 @@ class AuthService:
             user_role=user.role, success=True, severity="INFO"
         )
         return {"status": "accepted", "message": "درخواست بازنشانی رمز عبور در صف قرار گرفت."}
-
-    async def delete_user(self, user_id: int, background_tasks: Optional[BackgroundTasks] = None, current_user: UserResponse = None):
-        user_to_delete = await self.repo.get_by_id(user_id)
-        if not user_to_delete:
-            raise HTTPException(status_code=404, detail="کاربر یافت نشد.")
-
-        await self._publish({
-            "entity": "user",
-            "action": "DELETE_USER",
-            "user_id": user_id
-        })
-
-        actor_id = current_user.id if current_user else None
-        actor_name = current_user.email if current_user else None
-
-        schedule_audit_log(
-            background_tasks, action="DELETE_USER_QUEUED", user_id=actor_id, username=actor_name,
-            success=True, severity="CRITICAL", description=f"کاربر با ID {user_id} حذف شد"
-        )
-        return {"status": "accepted", "message": "درخواست حذف کاربر در صف قرار گرفت."}

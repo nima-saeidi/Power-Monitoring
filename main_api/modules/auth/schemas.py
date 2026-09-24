@@ -1,7 +1,7 @@
-from pydantic import BaseModel, EmailStr, ConfigDict, Field
+from pydantic import BaseModel, EmailStr, Field
 from typing import Optional
 from datetime import datetime
-from main_api.modules.auth.models import RoleEnum
+from main_api.modules.users.schemas import UserResponse
 
 class AdminRegisterRequest(BaseModel):
     name: str
@@ -13,46 +13,14 @@ class LoginRequest(BaseModel):
     email: EmailStr
     password: str = Field(..., max_length=50)
 
-class UserCreate(BaseModel):
-    name: str
-    email: EmailStr
-    phone_number: Optional[str] = Field(None, min_length=10, max_length=15)
-    password: str = Field(..., min_length=6, max_length=50)
-    role: RoleEnum = RoleEnum.USER
-    is_active: bool = True
-    sms_notification_enabled: bool = False # اضافه شد (پیش‌فرض: غیرفعال)
-
-class UserUpdate(BaseModel):
-    name: Optional[str] = None
-    email: Optional[EmailStr] = None
-    phone_number: Optional[str] = Field(None, min_length=10, max_length=15)
-    password: Optional[str] = Field(default=None, min_length=6, max_length=50)
-    role: Optional[RoleEnum] = None
-    is_active: Optional[bool] = None
-    sms_notification_enabled: Optional[bool] = None # اضافه شد
-
 class UserProfileUpdate(BaseModel):
     name: Optional[str] = None
     phone_number: Optional[str] = Field(None, min_length=10, max_length=15)
 
-# اسکماهای جدید تغییر رمز عبور
+# اسکماهای تغییر رمز عبور
 class ChangePasswordRequest(BaseModel):
     old_password: str = Field(..., min_length=6, max_length=50, description="رمز عبور فعلی")
     new_password: str = Field(..., min_length=6, max_length=50, description="رمز عبور جدید")
-
-class UserResponse(BaseModel):
-    id: int
-    name: str
-    email: EmailStr
-    phone_number: Optional[str] = None
-    role: RoleEnum | str
-    is_active: bool
-    sms_notification_enabled: bool | None = False  # در پایتون ۳.۱۰ به بالا
-    failed_login_attempts: int = 0
-    locked_until: Optional[datetime] = None
-    created_at: datetime
-
-    model_config = ConfigDict(from_attributes=True)
 
 class TokenResponse(BaseModel):
     access_token: str
@@ -60,9 +28,8 @@ class TokenResponse(BaseModel):
     user: UserResponse
     expires_in: int            # مدت زمان اعتبار توکن به ثانیه
     expires_at: datetime       # زمان دقیق منقضی شدن توکن
-# برای دریافت ایمیل از کاربر
-from pydantic import BaseModel, EmailStr
 
+# برای دریافت ایمیل از کاربر
 class ForgotPasswordRequest(BaseModel):
     email: EmailStr
 

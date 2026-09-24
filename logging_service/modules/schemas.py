@@ -43,7 +43,3 @@ class LogListResponse(BaseModel):
 class LogFilterOptionsResponse(BaseModel):
     services: List[str]
     actions: List[str]
-
-
-class LogPurgeResponse(BaseModel):
-    deleted_count: int

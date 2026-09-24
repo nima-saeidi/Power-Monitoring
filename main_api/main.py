@@ -25,14 +25,12 @@ from main_api.core.logging import setup_logging
 from main_api.core.broker import message_broker, send_log_to_rabbitmq
 
 # ماژول‌های برنامه و روترها
-from main_api.modules.auth.auth_router import auth_router
-from main_api.modules.auth.user_router import user_router
-from main_api.modules.devices.router import (
-    locations_router,
-    posts_router,
-    feeders_router,
-    links_router,
-)
+from main_api.modules.auth.router import auth_router
+from main_api.modules.users.router import user_router
+from main_api.modules.locations.router import locations_router
+from main_api.modules.posts.router import posts_router
+from main_api.modules.feeders.router import feeders_router
+from main_api.modules.links.router import links_router
 from main_api.modules.settings.router import router as settings_router
 from main_api.modules.notifications.router import router as notifications_router
 from main_api.modules.telemetry.router import router as telemetry_router
@@ -271,40 +269,6 @@ async def global_exception_handler(request: Request, exc: Exception):
             "error_code": "INTERNAL_SERVER_ERROR"
         }
     )
-
-
-# =======================================================
-# روت‌های سیستمی، سلامت و تست
-# =======================================================
-
-@app.get("/health", tags=["System / Monitoring"], summary="بررسی سلامت سرویس")
-async def health_check():
-    """بررسی وضعیت کارکرد Main API و اتصال به RabbitMQ"""
-    broker_connected = getattr(message_broker, "is_connected", False)
-    return {
-        "status": "healthy" if broker_connected else "degraded",
-        "service": "main_api",
-        "rabbitmq_connected": broker_connected
-    }
-
-
-@app.post("/test-log", tags=["System / Testing"], summary="ارسال لاگ تستی")
-async def create_test_log(message: str = "Test log event", level: str = "INFO"):
-    """ارسال دستی لاگ تستی به صف RabbitMQ جهت بررسی کارکرد سرویس لاگینگ"""
-    try:
-        await send_log_to_rabbitmq(
-            level=level,
-            message=message,
-            service="main_api",
-            extra_data={"action": "manual_test"}
-        )
-        return {"status": "success", "message": "Log sent to queue successfully"}
-    except Exception as e:
-        logger.error(f"Failed to send test log: {e}")
-        return JSONResponse(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            content={"status": "error", "message": f"Could not dispatch log: {str(e)}"}
-        )
 
 
 # =======================================================

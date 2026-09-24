@@ -4,7 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from main_api.core.database import get_db
 # اصلاح مسیر ایمپورت بر اساس تغییرات ساختاری سیستم
 from main_api.modules.auth.dependencies import get_current_user
-from main_api.modules.auth.models import User
+from main_api.modules.users.models import User
 from main_api.modules.notifications.schemas import (
     NotificationListResponse,
     NotificationPreferenceResponse,

@@ -7,7 +7,7 @@ from main_api.core.database import get_db
 from main_api.core.rabbitmq import get_rabbitmq_publisher, RabbitMQPublisher
 
 # Import access control dependencies
-from main_api.modules.auth.dependencies import require_any_user, require_admin
+from main_api.modules.auth.dependencies import require_any_user, require_tech_or_admin
 
 router = APIRouter(prefix="/settings", tags=["System Settings"])
 
@@ -30,7 +30,7 @@ async def update_system_settings(
     db: AsyncSession = Depends(get_db),
     # ✅ پرانتزهای تابع get_rabbitmq_publisher برداشته شد:
     broker: RabbitMQPublisher = Depends(get_rabbitmq_publisher),
-    current_user=Depends(require_admin)  # فقط ادمین مجاز به تغییر تنظیمات سیستم است
+    current_user=Depends(require_tech_or_admin)  # ادمین و اپراتور فنی مجاز به تغییر تنظیمات سیستم هستند
 ):
     return await SettingService.update_settings(
         db=db, data=data, broker=broker, username=current_user.email

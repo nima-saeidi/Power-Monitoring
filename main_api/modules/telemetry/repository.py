@@ -5,7 +5,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
 # مدل‌های سیستم
-from main_api.modules.devices.models import Feeder, Post, TimeseriesData
+from main_api.modules.feeders.models import Feeder, TimeseriesData
 from main_api.modules.telemetry.schemas import TelemetryCreate, ActiveFeederConfig
 from main_api.modules.settings.service import SettingService
 from main_api.modules.settings.models import SystemSetting

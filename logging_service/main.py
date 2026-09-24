@@ -3,6 +3,7 @@ import logging
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import text
 
 from core.config import settings
 from core.consumer import start_consumer
@@ -15,6 +16,24 @@ import modules.models  # حتماً ایمپورت شود تا مدل‌ها د�
 logger = logging.getLogger(__name__)
 
 
+# ایندکس‌های تکمیلی که برای بهینه‌سازی گزارش‌گیری روی جدولی با میلیون‌ها رکورد لازم‌اند
+# و چون این سرویس Alembic ندارد (فقط create_all)، این ایندکس‌ها را با IF NOT EXISTS
+# به‌صورت idempotent در استارت‌آپ می‌سازیم تا هم روی دیتابیس‌های تازه و هم قدیمی اعمال شوند.
+_EXTRA_INDEX_STATEMENTS = [
+    # فعال‌سازی pg_trgm برای جستجوی سریع ILIKE ('%...%') روی action/service_name
+    "CREATE EXTENSION IF NOT EXISTS pg_trgm",
+    "CREATE INDEX IF NOT EXISTS ix_service_logs_action_trgm ON service_logs USING gin (action gin_trgm_ops)",
+    "CREATE INDEX IF NOT EXISTS ix_service_logs_service_name_trgm ON service_logs USING gin (service_name gin_trgm_ops)",
+    # فیلترهای severity/success داخل details (JSONB) بدون ایندکس، اسکن کامل جدول انجام می‌دادند
+    "CREATE INDEX IF NOT EXISTS ix_service_logs_severity ON service_logs ((details->>'severity'))",
+    "CREATE INDEX IF NOT EXISTS ix_service_logs_success ON service_logs ((details->>'success'))",
+    # ایندکس‌های ترکیبی برای الگوی رایج «فیلتر روی یک ستون + مرتب‌سازی بر اساس created_at»
+    "CREATE INDEX IF NOT EXISTS ix_service_logs_service_created ON service_logs (service_name, created_at DESC)",
+    "CREATE INDEX IF NOT EXISTS ix_service_logs_action_created ON service_logs (action, created_at DESC)",
+    "CREATE INDEX IF NOT EXISTS ix_service_logs_user_created ON service_logs (user_id, created_at DESC)",
+]
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # ۱. ساخت خودکار جداول در صورت عدم وجود (Database Initialization)
@@ -23,6 +42,16 @@ async def lifespan(app: FastAPI):
     try:
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
+
+            logger.info("Ensuring reporting indexes exist on service_logs...")
+            for statement in _EXTRA_INDEX_STATEMENTS:
+                try:
+                    await conn.execute(text(statement))
+                except Exception as idx_err:
+                    # عدم موفقیت در ساخت یک ایندکس (مثلاً کمبود دسترسی برای CREATE EXTENSION)
+                    # نباید کل استارت‌آپ سرویس را متوقف کند.
+                    logger.warning(f"Could not ensure index ({statement[:60]}...): {idx_err}")
+
         logger.info("Database tables initialized successfully.")
     except Exception as e:
         logger.error(f"Error creating database tables: {e}")

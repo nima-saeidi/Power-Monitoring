@@ -3,20 +3,20 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from main_api.core.database import get_db
 from main_api.core.broker import get_rabbitmq_publisher, RabbitMQPublisher
-from main_api.modules.auth.repository import UserRepository
+from main_api.modules.users.repository import UserRepository
 from main_api.modules.auth.service import AuthService
 from main_api.modules.auth.dependencies import get_current_user
 from main_api.modules.auth.schemas import (
     AdminRegisterRequest,
     LoginRequest,
     TokenResponse,
-    UserResponse,
     UserProfileUpdate,
     ChangePasswordRequest,
     ForgotPasswordRequest,
     ResetPasswordRequest,
     VerifyCodeRequest,
 )
+from main_api.modules.users.schemas import UserResponse
 
 auth_router = APIRouter(prefix="/auth", tags=["Authentication & Profile"])
 
