@@ -25,6 +25,11 @@ from  main_api.modules.settings.models import SystemSetting
 from  main_api.modules.telemetry.models import TimeseriesData
 config = context.config
 
+# آدرس دیتابیس از DATABASE_URL (همان .env سرویس‌ها) خوانده می‌شود تا رمز فقط در یک جا باشد
+# و با عوض شدن رمز، alembic.ini (که در git نیست) از آن عقب نماند. ٪ برای ConfigParser escape می‌شود.
+if os.getenv("DATABASE_URL"):
+    config.set_main_option("sqlalchemy.url", os.environ["DATABASE_URL"].replace("%", "%%"))
+
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
