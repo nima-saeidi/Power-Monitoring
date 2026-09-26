@@ -13,6 +13,9 @@ volumes:
   graylog_data:
 
 services:
+  # امنیت: جز API (پورت 8000) هیچ سرویسی نباید از اینترنت در دسترس باشد؛ بقیه فقط روی
+  # 127.0.0.1 سرور باز هستند (برای دسترسی مدیریتی از SSH tunnel استفاده کنید).
+  # Postgres قبلاً با پورت باز 5432 هک شده بود.
   # 1. Database Service (TimescaleDB / PostgreSQL)
   db:
     image: timescale/timescaledb:latest-pg15
@@ -20,7 +23,7 @@ services:
     restart: unless-stopped
     env_file: .env
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - /etc/localtime:/etc/localtime:ro
@@ -39,8 +42,8 @@ services:
     restart: unless-stopped
     env_file: .env
     ports:
-      - "5672:5672"
-      - "15672:15672"
+      - "127.0.0.1:5672:5672"
+      - "127.0.0.1:15672:15672"
     volumes:
       - rabbitmq_data:/var/lib/rabbitmq
       - ./rabbitmq/rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf:ro
@@ -68,7 +71,7 @@ services:
       DOCKER_INFLUXDB_INIT_BUCKET: ${INFLUX_BUCKET}
       DOCKER_INFLUXDB_INIT_ADMIN_TOKEN: ${INFLUX_TOKEN}
     ports:
-      - "8086:8086"
+      - "127.0.0.1:8086:8086"
     volumes:
       - influxdb_data:/var/lib/influxdb2
       - /etc/localtime:/etc/localtime:ro
@@ -130,9 +133,9 @@ services:
       - GRAYLOG_HTTP_BIND_ADDRESS=0.0.0.0:9000
       - "GRAYLOG_SERVER_JAVA_OPTS=-Xms512m -Xmx512m"
     ports:
-      - "9000:9000"
-      - "12201:12201/udp"
-      - "12201:12201/tcp"
+      - "127.0.0.1:9000:9000"
+      - "127.0.0.1:12201:12201/udp"
+      - "127.0.0.1:12201:12201/tcp"
     volumes:
       - graylog_data:/usr/share/graylog/data
     depends_on:
@@ -225,7 +228,7 @@ services:
     restart: unless-stopped
     command: uvicorn main:app --host 0.0.0.0 --port 8002
     ports:
-      - "8002:8002"
+      - "127.0.0.1:8002:8002"
     env_file: .env
     depends_on:
       db:
@@ -245,7 +248,7 @@ services:
     container_name: power_monitoring_telemetry
     restart: unless-stopped
     ports:
-      - "8001:8001"
+      - "127.0.0.1:8001:8001"
     env_file: .env
     depends_on:
       rabbitmq:
