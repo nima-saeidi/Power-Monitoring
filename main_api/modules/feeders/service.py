@@ -12,8 +12,10 @@ except ImportError:
 
 from main_api.modules.audit_logs.services import send_audit_log, schedule_audit_log
 
+from main_api.modules.feeders.excel_import import import_hierarchy
 from main_api.modules.feeders.repository import FeederRepository
-from main_api.modules.feeders.schemas import CommandRequest, FeederCreate, FeederUpdate
+from main_api.modules.feeders.schemas import FeederCreate, FeederUpdate
+from main_api.modules.telemetry.live import live_monitor
 
 
 class FeederService:
@@ -62,6 +64,7 @@ class FeederService:
         for data in data_list:
             new_feeder = await self.repo.create_feeder(data)
             await self._publish("feeder", "create", data=new_feeder)
+            live_monitor.invalidate()
             created_feeders.append(new_feeder)
 
         schedule_audit_log(
@@ -84,6 +87,7 @@ class FeederService:
         updated_feeder = await self.repo.update_feeder(feeder, data)
         update_data = data.model_dump(exclude_unset=True)
         await self._publish("feeder", "update", data=update_data, filters={"id": feeder_id})
+        live_monitor.invalidate()
 
         schedule_audit_log(
             background_tasks, action="UPDATE_FEEDER", username=username, success=True, severity="INFO",
@@ -102,6 +106,7 @@ class FeederService:
 
         await self.repo.delete_feeder(feeder)
         await self._publish("feeder", "delete", data={}, filters={"id": feeder_id})
+        live_monitor.invalidate()
 
         schedule_audit_log(
             background_tasks, action="DELETE_FEEDER", username=username, success=True, severity="WARNING",
@@ -109,8 +114,8 @@ class FeederService:
         )
         return {"message": "Feeder deleted successfully."}
 
-    async def get_feeders(self, post_id: Optional[int] = None, skip: int = 0, limit: int = 100):
-        return await self.repo.get_all_feeders(post_id=post_id, skip=skip, limit=limit)
+    async def get_feeders(self, post_id: Optional[int] = None, skip: int = 0, limit: int = 100, **filters):
+        return await self.repo.get_all_feeders(post_id=post_id, skip=skip, limit=limit, **filters)
 
     async def get_feeder(self, feeder_id: int):
         feeder = await self.repo.get_feeder_by_id(feeder_id)
@@ -119,25 +124,15 @@ class FeederService:
         return feeder
 
     # =========================================================
-    # COMMAND SERVICES (IoT Actions)
+    # EXCEL IMPORT (پردیس ← واحد ← پست ← فیدر)
     # =========================================================
-    async def execute_command(self, data: CommandRequest, background_tasks: Optional[BackgroundTasks] = None,
-                              username: Optional[str] = None):
-        try:
-            # ارسال فرمان اجرایی به دیوایس‌های لبه (Edge Devices) از طریق رابیت‌ام‌کیو
-            await self._publish("device", "command_execute", data=data)
-
-            background_tasks.add_task(
-                send_audit_log, action="EXECUTE_COMMAND", username=username, success=True, severity="WARNING",
-                description=f"فرمان کنترلی '{getattr(data, 'command_type', 'نامشخص')}' برای دستگاه صادر شد."
-            )
-            return {"message": "Command issued successfully.", "status": "pending_execution"}
-        except Exception as e:
-            asyncio.create_task(send_audit_log(
-                action="EXECUTE_COMMAND_FAILED", username=username, success=False, severity="ERROR",
-                description=f"خطا در صدور فرمان کنترلی: {str(e)}"
-            ))
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Failed to issue command to device."
-            )
+    async def import_feeders_from_excel(self, df, background_tasks: Optional[BackgroundTasks] = None,
+                                        username: Optional[str] = None):
+        stats = await import_hierarchy(self.repo.db, df)
+        live_monitor.invalidate()
+        schedule_audit_log(
+            background_tasks, action="IMPORT_FEEDERS_EXCEL", username=username, success=True, severity="INFO",
+            description=(f"ورود اکسل: {stats['rows']} ردیف، {stats['posts_created']} پست و "
+                         f"{stats['feeders_created']} فیدر جدید، {stats['feeders_updated']} فیدر به‌روزرسانی شد.")
+        )
+        return stats

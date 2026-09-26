@@ -73,6 +73,9 @@ class SettingService:
 
         # بروزرسانی بلادرنگ سیستم با جایگزین کردن کش
         _settings_cache = updated_settings
+        # آستانه‌های هشدار/بحرانی جدید فوراً در پایش زنده اعمال شوند (ایمپورت محلی: جلوگیری از چرخه)
+        from main_api.modules.telemetry.live import live_monitor
+        live_monitor.invalidate()
 
         # ---------------------------------------------------------
         # ثبت لاگ حسابرسی تغییر تنظیمات

@@ -18,7 +18,8 @@ class NotificationResponse(BaseModel):
     message: str
     source_type: Optional[str]
     source_id: Optional[int]
-    metadata: Optional[Dict[str, Any]]
+    # ستون مدل meta_data است؛ بدون alias مقدار از Base.metadata (شیء SQLAlchemy) خوانده می‌شد
+    metadata: Optional[Dict[str, Any]] = Field(None, validation_alias="meta_data")
     is_read: bool
     read_at: Optional[datetime]
     is_dismissed: bool

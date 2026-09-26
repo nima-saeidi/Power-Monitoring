@@ -14,6 +14,7 @@ from main_api.modules.audit_logs.services import send_audit_log, schedule_audit_
 
 from main_api.modules.links.repository import LinkRepository
 from main_api.modules.links.schemas import LinkCreate, LinkUpdate
+from main_api.modules.telemetry.live import live_monitor
 
 
 class LinkService:
@@ -54,6 +55,7 @@ class LinkService:
     async def create_link(self, data: LinkCreate, background_tasks: Optional[BackgroundTasks] = None, username: Optional[str] = None):
         new_link = await self.repo.create_link(data)
         await self._publish("link", "create", data=new_link)
+        live_monitor.invalidate()
 
         schedule_audit_log(
             background_tasks, action="CREATE_LINK", username=username, success=True, severity="INFO",
@@ -74,6 +76,7 @@ class LinkService:
         updated_link = await self.repo.update_link(link, data)
         update_data = data.model_dump(exclude_unset=True)
         await self._publish("link", "update", data=update_data, filters={"id": link_id})
+        live_monitor.invalidate()
 
         schedule_audit_log(
             background_tasks, action="UPDATE_LINK", username=username, success=True, severity="INFO",
@@ -92,6 +95,7 @@ class LinkService:
 
         await self.repo.delete_link(link)
         await self._publish("link", "delete", data={}, filters={"id": link_id})
+        live_monitor.invalidate()
 
         schedule_audit_log(
             background_tasks, action="DELETE_LINK", username=username, success=True, severity="WARNING",
@@ -99,8 +103,8 @@ class LinkService:
         )
         return {"message": "Link deleted successfully."}
 
-    async def get_links(self, skip: int = 0, limit: int = 100):
-        return await self.repo.get_all_links(skip=skip, limit=limit)
+    async def get_links(self, skip: int = 0, limit: int = 100, **filters):
+        return await self.repo.get_all_links(skip=skip, limit=limit, **filters)
 
     async def get_link(self, link_id: int):
         link = await self.repo.get_link_by_id(link_id)

@@ -14,6 +14,7 @@ from main_api.modules.audit_logs.services import send_audit_log, schedule_audit_
 
 from main_api.modules.posts.repository import PostRepository
 from main_api.modules.posts.schemas import PostCreate, PostUpdate
+from main_api.modules.telemetry.live import live_monitor
 
 
 class PostService:
@@ -54,6 +55,7 @@ class PostService:
     async def create_post(self, data: PostCreate, background_tasks: Optional[BackgroundTasks] = None, username: Optional[str] = None):
         new_post = await self.repo.create_post(data)
         await self._publish("post", "create", data=new_post)
+        live_monitor.invalidate()
 
         schedule_audit_log(
             background_tasks, action="CREATE_POST", username=username, success=True, severity="INFO",
@@ -74,6 +76,7 @@ class PostService:
         updated_post = await self.repo.update_post(post, data)
         update_data = data.model_dump(exclude_unset=True)
         await self._publish("post", "update", data=update_data, filters={"id": post_id})
+        live_monitor.invalidate()
 
         schedule_audit_log(
             background_tasks, action="UPDATE_POST", username=username, success=True, severity="INFO",
@@ -92,6 +95,7 @@ class PostService:
 
         await self.repo.delete_post(post)
         await self._publish("post", "delete", data={}, filters={"id": post_id})
+        live_monitor.invalidate()
 
         schedule_audit_log(
             background_tasks, action="DELETE_POST", username=username, success=True, severity="WARNING",
@@ -99,8 +103,8 @@ class PostService:
         )
         return {"message": "Post deleted successfully."}
 
-    async def get_posts(self, skip: int = 0, limit: int = 100):
-        return await self.repo.get_all_posts(skip=skip, limit=limit)
+    async def get_posts(self, skip: int = 0, limit: int = 100, **filters):
+        return await self.repo.get_all_posts(skip=skip, limit=limit, **filters)
 
     async def get_post(self, post_id: int):
         post = await self.repo.get_post_by_id(post_id)

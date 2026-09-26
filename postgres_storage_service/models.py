@@ -31,6 +31,8 @@ class User(Base):
 
     # فیلد جدید برای فعال/غیرفعال بودن نوتیفیکیشن پیامکی
     sms_notification_enabled = Column(Boolean, default=False)
+    # صفحه‌هایی که این حساب اجازه‌ی دیدنشان را دارد؛ None یعنی همه‌ی صفحه‌های مجاز برای نقش
+    allowed_pages = Column(JSONB, nullable=True)
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
@@ -40,6 +42,7 @@ class Location(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String(100), index=True, nullable=False)
+    code = Column(String(50), unique=True, nullable=True, index=True)  # کد یکتای مکان
     location_type = Column(String(50), nullable=True)
     description = Column(Text, nullable=True)
     address = Column(String(255), nullable=True)
@@ -58,6 +61,9 @@ class Post(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String(100), index=True, nullable=False)
+    code = Column(String(50), unique=True, nullable=True, index=True)  # کد یکتای پست
+    # نوع پست: consumer (مصرف‌کننده) یا producer (تولیدکننده، مثل پنل خورشیدی)
+    post_type = Column(String(20), nullable=True)
 
     supply_source = Column(String(150), nullable=True)
     location_id = Column(Integer, ForeignKey("locations.id", ondelete="SET NULL"), nullable=True)
@@ -102,6 +108,10 @@ class Feeder(Base):
     voltage_register = Column(Integer, nullable=True)
     current_register = Column(Integer, nullable=True)
     power_factor_register = Column(Integer, nullable=True)
+    # آدرس Coil فرمان قطع/وصل این فیدر (برای /feeders/{id}/command)
+    control_register = Column(Integer, nullable=True)
+    # وضعیت بار بر اساس جریان نسبت به max_current: normal / warning / critical / unknown
+    load_status = Column(String(20), nullable=False, default="unknown", server_default="unknown")
 
     metadata_info = Column("metadata", JSONB, nullable=True)
 
@@ -132,6 +142,10 @@ class Link(Base):
     cable_type = Column(String(50), nullable=True)
     cross_section = Column(Float, nullable=True)
     allowed_current = Column(Float, nullable=True)
+    # فیدری که جریان این لینک را اندازه می‌گیرد (داده‌ی پویای لینک از همین فیدر خوانده می‌شود)
+    feeder_id = Column(Integer, ForeignKey("feeders.id", ondelete="SET NULL"), nullable=True)
+    # وضعیت بار لینک بر اساس جریان فیدر اندازه‌گیر نسبت به allowed_current
+    load_status = Column(String(20), nullable=False, default="unknown", server_default="unknown")
     length = Column(Float, nullable=True)
 
     metadata_info = Column("metadata", JSONB, nullable=True)
@@ -153,7 +167,7 @@ class SystemSetting(Base):
     warning_threshold = Column(Float, default=75.0, nullable=False, comment="آستانه هشدار (Warning Threshold)")
 
     # تنظیمات احراز هویت
-    access_token_expire_minutes = Column(Integer, default=1440, nullable=False,
+    access_token_expire_minutes = Column(Integer, default=20, nullable=False,
                                          comment="مدت اعتبار Access Token (دقیقه)")
     max_login_attempts = Column(Integer, default=5, nullable=False, comment="حداکثر تلاش ناموفق ورود")
     lockout_duration_minutes = Column(Integer, default=30, nullable=False, comment="مدت قفل شدن حساب (دقیقه)")

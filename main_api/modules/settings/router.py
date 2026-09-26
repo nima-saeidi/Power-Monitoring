@@ -1,5 +1,5 @@
 # main_api/modules/settings/router.py
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from .schemas import SettingUpdate, SettingResponse
 from .service import SettingService
@@ -8,8 +8,17 @@ from main_api.core.rabbitmq import get_rabbitmq_publisher, RabbitMQPublisher
 
 # Import access control dependencies
 from main_api.modules.auth.dependencies import require_any_user, require_tech_or_admin
+from main_api.modules.users.models import RoleEnum
 
 router = APIRouter(prefix="/settings", tags=["System Settings"])
+
+# تنظیمات امنیتی احراز هویت فقط توسط ادمین قابل تغییر است (نه اپراتور فنی)
+ADMIN_ONLY_FIELDS = {
+    "access_token_expire_minutes",
+    "max_login_attempts",
+    "lockout_duration_minutes",
+    "session_timeout_minutes",
+}
 
 
 @router.get(
@@ -32,6 +41,12 @@ async def update_system_settings(
     broker: RabbitMQPublisher = Depends(get_rabbitmq_publisher),
     current_user=Depends(require_tech_or_admin)  # ادمین و اپراتور فنی مجاز به تغییر تنظیمات سیستم هستند
 ):
+    restricted = ADMIN_ONLY_FIELDS & data.model_dump(exclude_unset=True).keys()
+    if restricted and current_user.role != RoleEnum.ADMIN:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"تغییر تنظیمات امنیتی فقط توسط ادمین مجاز است: {', '.join(sorted(restricted))}"
+        )
     return await SettingService.update_settings(
         db=db, data=data, broker=broker, username=current_user.email
     )

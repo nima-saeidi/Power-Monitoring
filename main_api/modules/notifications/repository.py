@@ -41,7 +41,7 @@ class NotificationRepository:
             priority=priority,
             source_type=source_type,
             source_id=source_id,
-            metadata=metadata,
+            meta_data=metadata,
             action_url=action_url,
             expires_at=expires_at
         )

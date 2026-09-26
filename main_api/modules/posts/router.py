@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from typing import List
+from typing import List, Literal, Optional
 
 from main_api.core.database import get_db
 from main_api.core.broker import RabbitMQPublisher
@@ -42,8 +42,13 @@ async def create_post(data: PostCreate, service: PostService = Depends(get_post_
 
 @posts_router.get("", response_model=List[PostResponse], summary="Get All Posts")
 async def get_posts(skip: int = Query(0, ge=0), limit: int = Query(100, ge=1),
+                    location_id: Optional[int] = Query(None, description="فیلتر مکان (دانشکده/پردیس)"),
+                    post_type: Optional[Literal["consumer", "producer"]] = Query(None, description="مصرف‌کننده/تولیدکننده"),
+                    is_active: Optional[bool] = Query(None),
+                    search: Optional[str] = Query(None, max_length=100, description="جستجو در نام یا کد"),
                     service: PostService = Depends(get_post_service), current_user=Depends(require_any_user)):
-    return await service.get_posts(skip=skip, limit=limit)
+    return await service.get_posts(skip=skip, limit=limit, location_id=location_id, post_type=post_type,
+                                   is_active=is_active, search=search)
 
 
 @posts_router.get("/{post_id}", response_model=PostResponse, summary="Get Specific Post")

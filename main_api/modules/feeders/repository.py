@@ -19,13 +19,26 @@ class FeederRepository:
         await self.db.refresh(feeder)
         return feeder
 
-    async def get_all_feeders(self, post_id: Optional[int] = None, skip: int = 0, limit: int = 100) -> List[Feeder]:
+    async def get_all_feeders(self, post_id: Optional[int] = None, skip: int = 0, limit: int = 100,
+                              feeder_type: Optional[str] = None, is_active: Optional[bool] = None,
+                              is_online: Optional[bool] = None, load_status: Optional[str] = None,
+                              search: Optional[str] = None) -> List[Feeder]:
         query = select(Feeder).options(
             selectinload(Feeder.post)
         )
         if post_id:
             query = query.where(Feeder.post_id == post_id)
-        query = query.offset(skip).limit(limit)
+        if feeder_type:
+            query = query.where(Feeder.feeder_type == feeder_type)
+        if is_active is not None:
+            query = query.where(Feeder.is_active == is_active)
+        if is_online is not None:
+            query = query.where(Feeder.is_online == is_online)
+        if load_status:
+            query = query.where(Feeder.load_status == load_status)
+        if search:
+            query = query.where(Feeder.name.ilike(f"%{search}%"))
+        query = query.order_by(Feeder.id).offset(skip).limit(limit)
         result = await self.db.execute(query)
         return list(result.scalars().all())
 

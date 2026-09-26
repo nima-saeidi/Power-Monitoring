@@ -1,4 +1,5 @@
 import os
+from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings
 
 
@@ -10,15 +11,17 @@ class Settings(BaseSettings):
     RABBITMQ_PASSWORD: str = "guest"
 
     # Exchange & Queue Settings
-    TELEMETRY_EXCHANGE: str = "telemetry_exchange"
+    # باید با Exchange ناشر (telemetry_service) یکی باشد
+    TELEMETRY_EXCHANGE: str = "telemetry_events"
     TIMESERIES_QUEUE: str = "telemetry_timeseries_queue"
     ROUTING_KEY: str = "telemetry.*"  # یا telemetry.metric یا الگوی دلخواه
 
-    # InfluxDB Settings
-    INFLUXDB_URL: str = "http://influxdb:8086"
-    INFLUXDB_TOKEN: str = "my-super-secret-auth-token"
-    INFLUXDB_ORG: str = "power_monitoring_org"
-    INFLUXDB_BUCKET: str = "power_monitoring_telemetry"
+    # InfluxDB Settings — .env مشترک با نام‌های INFLUX_* است (همان که telemetry_service می‌خواند)؛
+    # بدون این alias ها مقادیر پیش‌فرض با org/bucket/token واقعی نمی‌خواند و نوشتن شکست می‌خورد.
+    INFLUXDB_URL: str = Field("http://influxdb:8086", validation_alias=AliasChoices("INFLUXDB_URL", "INFLUX_URL"))
+    INFLUXDB_TOKEN: str = Field("my-super-secret-auth-token", validation_alias=AliasChoices("INFLUXDB_TOKEN", "INFLUX_TOKEN"))
+    INFLUXDB_ORG: str = Field("power_monitoring_org", validation_alias=AliasChoices("INFLUXDB_ORG", "INFLUX_ORG"))
+    INFLUXDB_BUCKET: str = Field("power_monitoring_telemetry", validation_alias=AliasChoices("INFLUXDB_BUCKET", "INFLUX_BUCKET"))
 
     @property
     def RABBITMQ_URL(self) -> str:

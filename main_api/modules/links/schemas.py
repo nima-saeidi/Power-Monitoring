@@ -13,6 +13,8 @@ class LinkBase(BaseModel):
     cross_section: Optional[float] = None
     allowed_current: Optional[float] = None
     length: Optional[float] = None
+    # فیدری که جریان این لینک را اندازه می‌گیرد
+    feeder_id: Optional[int] = None
     metadata_info: Optional[Dict[str, Any]] = None
     is_active: bool = True
 
@@ -27,12 +29,15 @@ class LinkUpdate(BaseModel):
     cross_section: Optional[float] = None
     allowed_current: Optional[float] = None
     length: Optional[float] = None
+    feeder_id: Optional[int] = None
     metadata_info: Optional[Dict[str, Any]] = None
     is_active: Optional[bool] = None
 
 
 class LinkResponse(LinkBase):
     id: int
+    # normal / warning / critical / unknown
+    load_status: str = "unknown"
     # اضافه‌کردن روابط برای نمایش اطلاعات کامل پست مبدأ و مقصد
     from_post: Optional[PostResponse] = None
     to_post: Optional[PostResponse] = None

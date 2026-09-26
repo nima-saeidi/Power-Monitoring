@@ -1,7 +1,11 @@
-from fastapi import APIRouter, Depends, status, BackgroundTasks
+from fastapi import APIRouter, Depends, Request, status, BackgroundTasks
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from main_api.core.database import get_db
+from main_api.core.rate_limit import (
+    limiter, CHANGE_PASSWORD_LIMIT, FORGOT_PASSWORD_LIMIT, LOGIN_LIMIT,
+    REGISTER_ADMIN_LIMIT, RESET_PASSWORD_LIMIT, VERIFY_CODE_LIMIT,
+)
 from main_api.core.broker import get_rabbitmq_publisher, RabbitMQPublisher
 from main_api.modules.users.repository import UserRepository
 from main_api.modules.auth.service import AuthService
@@ -34,7 +38,9 @@ def get_auth_service(
     status_code=status.HTTP_202_ACCEPTED,
     summary="Register Initial Admin",
 )
+@limiter.limit(REGISTER_ADMIN_LIMIT)
 async def register_admin(
+    request: Request,
     data: AdminRegisterRequest,
     service: AuthService = Depends(get_auth_service),
 ):
@@ -47,7 +53,9 @@ async def register_admin(
     response_model=TokenResponse,
     summary="Login and Get Token",
 )
+@limiter.limit(LOGIN_LIMIT)
 async def login(
+    request: Request,
     data: LoginRequest,
     service: AuthService = Depends(get_auth_service),
 ):
@@ -86,7 +94,9 @@ async def update_my_profile(
     status_code=status.HTTP_202_ACCEPTED,
     summary="Change Password",
 )
+@limiter.limit(CHANGE_PASSWORD_LIMIT)
 async def change_password(
+    request: Request,
     data: ChangePasswordRequest,
     current_user=Depends(get_current_user),
     service: AuthService = Depends(get_auth_service),
@@ -99,7 +109,9 @@ async def change_password(
     "/forgot-password",
     summary="Request Password Reset Code",
 )
+@limiter.limit(FORGOT_PASSWORD_LIMIT)
 async def forgot_password(
+    request: Request,
     data: ForgotPasswordRequest,
     background_tasks: BackgroundTasks,
     service: AuthService = Depends(get_auth_service),
@@ -112,7 +124,9 @@ async def forgot_password(
     "/verify-reset-code",
     summary="Verify Password Reset Code",
 )
+@limiter.limit(VERIFY_CODE_LIMIT)
 async def verify_reset_code(
+    request: Request,
     data: VerifyCodeRequest,
     service: AuthService = Depends(get_auth_service),
 ):
@@ -125,7 +139,9 @@ async def verify_reset_code(
     status_code=status.HTTP_202_ACCEPTED,
     summary="Reset Password Using Token",
 )
+@limiter.limit(RESET_PASSWORD_LIMIT)
 async def reset_password(
+    request: Request,
     data: ResetPasswordRequest,
     service: AuthService = Depends(get_auth_service),
 ):

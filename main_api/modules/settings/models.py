@@ -13,7 +13,7 @@ class SystemSetting(Base):
     warning_threshold = Column(Float, default=75.0, nullable=False, comment="آستانه هشدار (Warning Threshold)")
 
     # تنظیمات احراز هویت
-    access_token_expire_minutes = Column(Integer, default=1440, nullable=False,
+    access_token_expire_minutes = Column(Integer, default=20, nullable=False,
                                          comment="مدت اعتبار Access Token (دقیقه)")
     max_login_attempts = Column(Integer, default=5, nullable=False, comment="حداکثر تلاش ناموفق ورود")
     lockout_duration_minutes = Column(Integer, default=30, nullable=False, comment="مدت قفل شدن حساب (دقیقه)")

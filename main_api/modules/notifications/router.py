@@ -3,7 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from main_api.core.database import get_db
 # اصلاح مسیر ایمپورت بر اساس تغییرات ساختاری سیستم
-from main_api.modules.auth.dependencies import get_current_user
+from main_api.modules.auth.dependencies import get_current_user, authenticate_websocket
 from main_api.modules.users.models import User
 from main_api.modules.notifications.schemas import (
     NotificationListResponse,
@@ -14,9 +14,7 @@ from main_api.modules.notifications.schemas import (
 )
 from main_api.modules.notifications.repository import NotificationRepository
 
-# ایمپورت منیجرهای وب‌سوکت که در فایل‌های قبلی ساختیم
-# from websockets.managers import notification_manager
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Depends
+from fastapi import WebSocket, WebSocketDisconnect, Query, status
 from .websocket import notifier_manager
 router = APIRouter(prefix="/notifications", tags=["Notifications"])
 
@@ -137,12 +135,18 @@ async def update_preferences(
 # =====================================================================
 
 @router.websocket("/ws/{user_id}")
-async def websocket_notifications(websocket: WebSocket, user_id: int):
+async def websocket_notifications(websocket: WebSocket, user_id: int, token: str | None = Query(default=None)):
     """
     وب‌سوکت اختصاصی کاربر برای دریافت زنده نوتیفیکیشن‌ها و هشدارها
-    مسیر اتصال: ws://domain/notifications/ws/{user_id}
+    مسیر اتصال: ws://domain/notifications/ws/{user_id}?token=<access_token>
+    user_id باید همان کاربر صاحب توکن باشد. پیام‌ها: {"type": "NEW_NOTIFICATION", "data": {...}}
     """
-    await notification_manager.connect(websocket, user_id)
+    user = await authenticate_websocket(token)
+    if not user or user.id != user_id:
+        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+        return
+
+    await notifier_manager.connect(websocket, user_id)
     try:
         while True:
             # کلاینت معمولا شنونده است، اما برای باز ماندن اتصال منتظر می‌مانیم
@@ -153,4 +157,4 @@ async def websocket_notifications(websocket: WebSocket, user_id: int):
                 await websocket.send_text("pong")
                 
     except WebSocketDisconnect:
-        notification_manager.disconnect(websocket, user_id)
+        notifier_manager.disconnect(websocket, user_id)

@@ -21,6 +21,9 @@ class Settings(BaseSettings):
     INTERNAL_API_KEY: str = "super_secret_internal_key"
     MAIN_API_URL: str = "http://127.0.0.1:8000"
 
+    # Exchange رویدادهای تله‌متری؛ timeseries_storage_service و main_api (وب‌سوکت) از همین می‌خوانند
+    TELEMETRY_EXCHANGE: str = "telemetry_events"
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",

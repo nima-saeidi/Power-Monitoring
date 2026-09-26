@@ -12,3 +12,6 @@ venv/
 
 # Ignore all alembic.ini files anywhere in the project
 alembic.ini
+
+# ویدیوها و فایل‌های حجیم (GitHub فایل بالای ۱۰۰ مگابایت را رد می‌کند)
+*.mp4

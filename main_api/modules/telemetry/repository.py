@@ -11,6 +11,10 @@ from main_api.modules.settings.service import SettingService
 from main_api.modules.settings.models import SystemSetting
 
 
+def overrides_of(feeder: Feeder) -> dict:
+    return feeder.metadata_info if isinstance(feeder.metadata_info, dict) else {}
+
+
 class TelemetryRepository:
     def __init__(self, session: AsyncSession):
         self.session = session
@@ -75,6 +79,13 @@ class TelemetryRepository:
                     slave_id=slave_id,
                     is_active=f.is_active,
                     is_online=f.is_online,
+                    active_power_register=f.active_power_register,
+                    reactive_power_register=f.reactive_power_register,
+                    voltage_register=f.voltage_register,
+                    current_register=f.current_register,
+                    power_factor_register=f.power_factor_register,
+                    register_scales=overrides_of(f).get("register_scales") or {},
+                    signed_registers=overrides_of(f).get("signed_registers") or [],
                     **runtime_config,
                 )
             )

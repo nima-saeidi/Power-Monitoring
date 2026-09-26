@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from typing import List
+from typing import List, Literal, Optional
 
 from main_api.core.database import get_db
 from main_api.core.broker import RabbitMQPublisher
@@ -42,8 +42,12 @@ async def create_link(data: LinkCreate, service: LinkService = Depends(get_link_
 
 @links_router.get("", response_model=List[LinkResponse], summary="Get All Links")
 async def get_links(skip: int = Query(0, ge=0), limit: int = Query(100, ge=1),
+                    post_id: Optional[int] = Query(None, description="لینک‌های متصل به این پست"),
+                    is_active: Optional[bool] = Query(None),
+                    load_status: Optional[Literal["normal", "warning", "critical", "unknown"]] = Query(None),
                     service: LinkService = Depends(get_link_service), current_user=Depends(require_any_user)):
-    return await service.get_links(skip=skip, limit=limit)
+    return await service.get_links(skip=skip, limit=limit, post_id=post_id, is_active=is_active,
+                                   load_status=load_status)
 
 
 @links_router.get("/{link_id}", response_model=LinkResponse, summary="Get Specific Link")

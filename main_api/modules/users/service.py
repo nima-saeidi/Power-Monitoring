@@ -61,7 +61,8 @@ class UserService:
                 "hashed_password": hash_password(data.password),
                 "role": data.role,
                 "is_active": data.is_active,
-                "sms_notification_enabled": data.sms_notification_enabled
+                "sms_notification_enabled": data.sms_notification_enabled,
+                "allowed_pages": data.allowed_pages,
             }
         })
 

@@ -2,7 +2,7 @@ from typing import Optional
 from datetime import datetime
 from fastapi import APIRouter, Depends, Query
 
-from main_api.modules.auth.dependencies import require_tech_or_admin
+from main_api.modules.auth.dependencies import require_tech_or_admin, require_page
 from main_api.modules.users.models import User
 from main_api.modules.audit_logs.schemas import (
     AuditLogResponse, AuditLogListResponse, CommandLogListResponse,
@@ -22,7 +22,7 @@ from main_api.modules.audit_logs.services import (
 # ==========================================
 # Audit Logs Router
 # ==========================================
-router = APIRouter(prefix="/audit-logs", tags=["Audit Logs"])
+router = APIRouter(prefix="/audit-logs", tags=["Audit Logs"], dependencies=[Depends(require_page("audit_logs"))])
 
 @router.get("/", response_model=AuditLogListResponse)
 async def get_audit_logs(
@@ -86,7 +86,7 @@ async def get_user_activity(
 # ==========================================
 # Command Logs Router
 # ==========================================
-command_router = APIRouter(prefix="/command-logs", tags=["Command Logs"])
+command_router = APIRouter(prefix="/command-logs", tags=["Command Logs"], dependencies=[Depends(require_page("audit_logs"))])
 
 @command_router.get("/", response_model=CommandLogListResponse)
 async def get_command_logs(
@@ -117,7 +117,7 @@ async def get_failed_commands(
 # ==========================================
 # Device Test Logs Router
 # ==========================================
-test_log_router = APIRouter(prefix="/test-logs", tags=["Device Test Logs"])
+test_log_router = APIRouter(prefix="/test-logs", tags=["Device Test Logs"], dependencies=[Depends(require_page("audit_logs"))])
 
 @test_log_router.get("/", response_model=DeviceTestLogListResponse)
 async def get_recent_test_logs(

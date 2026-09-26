@@ -38,6 +38,10 @@ class Feeder(Base):
     voltage_register = Column(Integer, nullable=True)
     current_register = Column(Integer, nullable=True)
     power_factor_register = Column(Integer, nullable=True)
+    # آدرس Coil فرمان قطع/وصل این فیدر (برای /feeders/{id}/command)
+    control_register = Column(Integer, nullable=True)
+    # وضعیت بار بر اساس جریان نسبت به max_current: normal / warning / critical / unknown
+    load_status = Column(String(20), nullable=False, default="unknown", server_default="unknown")
 
     metadata_info = Column("metadata", JSONB, nullable=True)
 

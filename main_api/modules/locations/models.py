@@ -9,6 +9,7 @@ class Location(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String(100), index=True, nullable=False)
+    code = Column(String(50), unique=True, nullable=True, index=True)  # کد یکتای مکان
     location_type = Column(String(50), nullable=True)
     description = Column(Text, nullable=True)
     address = Column(String(255), nullable=True, doc="آدرس متنی موقعیت")

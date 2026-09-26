@@ -10,6 +10,9 @@ class Post(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String(100), index=True, nullable=False)
+    code = Column(String(50), unique=True, nullable=True, index=True)  # کد یکتای پست
+    # نوع پست: consumer (مصرف‌کننده) یا producer (تولیدکننده، مثل پنل خورشیدی)
+    post_type = Column(String(20), nullable=True)
 
     # --- اطلاعات پایه ---
     supply_source = Column(String(150), nullable=True)  # محل تغذیه

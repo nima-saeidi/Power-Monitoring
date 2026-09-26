@@ -11,18 +11,18 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
 # ================= Rate Limiting =================
-from slowapi import Limiter
-from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 
-# تعریف محدودکننده (پیش‌فرض: ۱۰۰ درخواست در دقیقه برای هر IP)
-limiter = Limiter(key_func=get_remote_address, default_limits=["100/minute"])
+# محدودکننده در main_api/core/rate_limit.py تعریف شده تا روترها هم بتوانند از آن استفاده کنند
+from main_api.core.rate_limit import limiter
+from main_api.core.config import settings
 # =================================================
 
 # هسته لاگینگ و بروکر پیام
 from main_api.core.logging import setup_logging
 from main_api.core.broker import message_broker, send_log_to_rabbitmq
+from main_api.modules.telemetry.consumer import telemetry_ws_consumer
 
 # ماژول‌های برنامه و روترها
 from main_api.modules.auth.router import auth_router
@@ -34,6 +34,7 @@ from main_api.modules.links.router import links_router
 from main_api.modules.settings.router import router as settings_router
 from main_api.modules.notifications.router import router as notifications_router
 from main_api.modules.telemetry.router import router as telemetry_router
+from main_api.modules.dashboard.router import router as dashboard_router
 from main_api.modules.audit_logs.router import (
     router as audit_logs_router,
     command_router as command_logs_router,
@@ -71,10 +72,18 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.error(f"❌ Failed to connect to RabbitMQ broker on startup: {e}", exc_info=True)
 
+    # دریافت داده‌ی زنده‌ی Modbus از RabbitMQ و ارسال به وب‌سوکت /telemetry/ws
+    try:
+        await telemetry_ws_consumer.start()
+    except Exception as e:
+        logger.error(f"❌ Failed to start telemetry WebSocket consumer: {e}", exc_info=True)
+
     yield  # برنامه در حال سرویس‌دهی است
 
     # -------- Shutdown --------
     logger.info("🛑 Main API is shutting down...")
+
+    await telemetry_ws_consumer.stop()
 
     # بستن ایمن ارتباط با RabbitMQ
     try:
@@ -102,22 +111,36 @@ app = FastAPI(
     description="سرویس مرکزی API برای مدیریت تجهیزات، کاربران و انتشار رویدادهای مانیتورینگ به RabbitMQ",
     version="1.1.0",
     lifespan=lifespan,
-    docs_url="/docs",
-    redoc_url="/redoc"
+    docs_url="/docs" if settings.ENABLE_DOCS else None,
+    redoc_url="/redoc" if settings.ENABLE_DOCS else None,
+    openapi_url="/openapi.json" if settings.ENABLE_DOCS else None,
 )
 
 # اتصال Limiter
 app.state.limiter = limiter
 app.add_middleware(SlowAPIMiddleware)
 
-# تنظیمات CORS
+# تنظیمات CORS: originهای مجاز از CORS_ORIGINS در .env خوانده می‌شوند (با کاما جدا).
+# احراز هویت با هدر Bearer است نه کوکی، پس برای "*" نیازی به allow_credentials نیست.
+_cors_origins = [o.strip() for o in settings.CORS_ORIGINS.split(",") if o.strip()]
+_cors_allow_all = "*" in _cors_origins
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
+    allow_origins=["*"] if _cors_allow_all else _cors_origins,
+    allow_credentials=not _cors_allow_all,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+# هدرهای امنیتی پایه روی همه‌ی پاسخ‌ها
+@app.middleware("http")
+async def security_headers_middleware(request: Request, call_next):
+    response = await call_next(request)
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("X-Frame-Options", "DENY")
+    response.headers.setdefault("Referrer-Policy", "no-referrer")
+    return response
 
 
 # =======================================================
@@ -287,6 +310,7 @@ app.include_router(links_router)
 
 # تله‌متری و داده‌های مانیتورینگ
 app.include_router(telemetry_router)
+app.include_router(dashboard_router)
 
 # نوتیفیکیشن‌ها و تنظیمات سامانه
 app.include_router(notifications_router)
