@@ -56,6 +56,18 @@ def sanitize_data_for_model(model_class, data: Dict[str, Any]) -> Dict[str, Any]
     return sanitized
 
 
+def _extract_id(payload: Dict[str, Any], filters: Dict[str, Any], data: Any):
+    """
+    شناسه‌ی رکورد برای update/delete. main_api برای کاربران شناسه را در سطح بالای پیام
+    (user_id) می‌فرستد؛ بدون خواندن آن، ویرایش/حذف کاربر و تغییر/بازنشانی رمز هیچ‌وقت اعمال نمی‌شد.
+    """
+    for source in (filters or {}, data if isinstance(data, dict) else {}, payload):
+        for key in ("id", "user_id"):
+            if source.get(key):
+                return source[key]
+    return None
+
+
 async def handle_db_write_event(payload: Dict[str, Any]):
     """
     پردازش انواع عملیات نوشتنی روی دیتابیس بر اساس پیلود پیام
@@ -107,10 +119,7 @@ async def handle_db_write_event(payload: Dict[str, Any]):
                     logger.info(f"Bulk created {len(instances)} items for {entity_name}.")
 
             elif action == "update":
-                # ۴. بهبود استخراج شناسه از id یا user_id
-                item_id = filters.get("id") or filters.get("user_id")
-                if not item_id and isinstance(data, dict):
-                    item_id = data.get("id") or data.get("user_id")
+                item_id = _extract_id(payload, filters, data)
 
                 if not item_id:
                     logger.warning(f"Update operation requires an ID for {entity_name}.")
@@ -133,10 +142,7 @@ async def handle_db_write_event(payload: Dict[str, Any]):
                 logger.info(f"Updated {entity_name} with id={item_id}.")
 
             elif action == "delete":
-                # ۴. بهبود استخراج شناسه
-                item_id = filters.get("id") or filters.get("user_id")
-                if not item_id and isinstance(data, dict):
-                    item_id = data.get("id") or data.get("user_id")
+                item_id = _extract_id(payload, filters, data)
 
                 if not item_id:
                     logger.warning(f"Delete operation requires an ID for {entity_name}.")
