@@ -18,7 +18,7 @@ class EmailProvider(BaseNotificationProvider):
             return False
 
         message = EmailMessage()
-        message["From"] = settings.SMTP_FROM_EMAIL
+        message["From"] = settings.SMTP_FROM_EMAIL or settings.SMTP_USER
         message["To"] = ", ".join(to_emails)
         message["Subject"] = subject
         message.set_content(body)
@@ -32,7 +32,9 @@ class EmailProvider(BaseNotificationProvider):
                 port=settings.SMTP_PORT,
                 username=settings.SMTP_USER,
                 password=settings.SMTP_PASSWORD,
-                start_tls=settings.SMTP_USE_TLS,
+                # پورت 465 از ابتدا SSL است (implicit TLS)؛ پورت‌های دیگر با STARTTLS
+                use_tls=settings.SMTP_PORT == 465,
+                start_tls=settings.SMTP_USE_TLS and settings.SMTP_PORT != 465,
                 timeout=15.0
             )
             logger.info(f"✅ Email successfully sent to {to_emails}")

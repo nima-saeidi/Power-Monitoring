@@ -1,6 +1,6 @@
 import logging
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from pydantic import computed_field
+from pydantic import AliasChoices, Field, computed_field
 
 class Settings(BaseSettings):
     # Logging Configuration
@@ -18,12 +18,15 @@ class Settings(BaseSettings):
     def RABBITMQ_URL(self) -> str:
         return f"amqp://{self.RABBITMQ_USER}:{self.RABBITMQ_PASSWORD}@{self.RABBITMQ_HOST}:{self.RABBITMQ_PORT}/"
 
-    # SMTP Settings (Email)
-    SMTP_HOST: str = "smtp.gmail.com"
+    # SMTP Settings (Email) — .env مشترک پروژه SMTP_SERVER / SMTP_USERNAME دارد؛ بدون این alias ها
+    # نام کاربری خالی خوانده می‌شد و هیچ ایمیلی ارسال نمی‌شد.
+    SMTP_HOST: str = Field("smtp.gmail.com", validation_alias=AliasChoices("SMTP_HOST", "SMTP_SERVER"))
     SMTP_PORT: int = 587
-    SMTP_USER: str = ""
+    SMTP_USER: str = Field("", validation_alias=AliasChoices("SMTP_USER", "SMTP_USERNAME"))
     SMTP_PASSWORD: str = ""
-    SMTP_FROM_EMAIL: str = "noreply@powermonitoring.com"
+    # خالی یعنی همان حساب SMTP (Gmail فقط از آدرس خود حساب اجازه‌ی ارسال می‌دهد)
+    SMTP_FROM_EMAIL: str = ""
+    # STARTTLS روی 587؛ روی 465 اتصال از ابتدا SSL است (خودکار تشخیص داده می‌شود)
     SMTP_USE_TLS: bool = True
 
     # SMS Settings
