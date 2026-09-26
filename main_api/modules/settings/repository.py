@@ -17,7 +17,7 @@ class SettingRepository:
         settings = SystemSetting(
             critical_threshold=90.0,
             warning_threshold=75.0,
-            access_token_expire_minutes=1440,
+            access_token_expire_minutes=20,
             max_login_attempts=5,
             lockout_duration_minutes=30,
             session_timeout_minutes=120,

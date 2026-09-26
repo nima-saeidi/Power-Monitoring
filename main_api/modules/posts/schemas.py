@@ -1,5 +1,7 @@
 from typing import Optional, List, Dict, Any
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+from main_api.core.domain import normalize_energy_role
 
 from main_api.modules.feeders.schemas import FeederResponse
 from main_api.modules.locations.schemas import LocationResponse
@@ -8,6 +10,9 @@ from main_api.modules.locations.schemas import LocationResponse
 # ----------------- Post Schemas -----------------
 class PostBase(BaseModel):
     name: str
+    code: Optional[str] = Field(None, max_length=50)
+    # consumer (مصرف‌کننده) یا producer (تولیدکننده)
+    post_type: Optional[str] = None
     supply_source: Optional[str] = None
     location_id: Optional[int] = None
     transformer_specs: Optional[str] = None
@@ -19,6 +24,11 @@ class PostBase(BaseModel):
     is_active: bool = True
     consecutive_failures: int = 0
 
+    @field_validator("post_type", mode="before")
+    @classmethod
+    def _normalize_post_type(cls, value):
+        return normalize_energy_role(value)
+
 
 class PostCreate(PostBase):
     pass
@@ -26,6 +36,8 @@ class PostCreate(PostBase):
 
 class PostUpdate(BaseModel):
     name: Optional[str] = None
+    code: Optional[str] = Field(None, max_length=50)
+    post_type: Optional[str] = None
     supply_source: Optional[str] = None
     location_id: Optional[int] = None
     transformer_specs: Optional[str] = None
@@ -36,6 +48,11 @@ class PostUpdate(BaseModel):
     metadata_info: Optional[Dict[str, Any]] = None
     is_active: Optional[bool] = None
     consecutive_failures: Optional[int] = None
+
+    @field_validator("post_type", mode="before")
+    @classmethod
+    def _normalize_post_type(cls, value):
+        return normalize_energy_role(value)
 
 
 class PostResponse(PostBase):

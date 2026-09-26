@@ -23,7 +23,7 @@ payload = {
 }
 
 channel.basic_publish(
-    exchange='telemetry_exchange',
+    exchange='telemetry_events',
     routing_key='telemetry.metric',
     body=json.dumps(payload)
 )

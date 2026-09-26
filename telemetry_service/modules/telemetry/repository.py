@@ -105,7 +105,6 @@ class TelemetryRepository:
               |> filter(fn: (r) => r["_measurement"] == "feeder_telemetry")
               |> filter(fn: (r) => r["feeder_id"] == "{feeder_id}")
               |> aggregateWindow(every: {window_period}, fn: mean, createEmpty: false)
-              |> yield(name: "mean")
               |> pivot(rowKey:["_time"], columnKey: ["_field"], valueColumn: "_value")
             '''
 

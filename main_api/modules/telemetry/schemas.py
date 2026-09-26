@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from typing import Optional, List
+from typing import Dict, Optional, List
 from datetime import datetime
 
 class TelemetryBase(BaseModel):
@@ -41,6 +41,15 @@ class ActiveFeederConfig(BaseModel):
     offline_retry_interval: int = 300
     is_active: bool = True
     is_online: bool = True
+    # آدرس رجیسترهای Modbus هر پارامتر که ادمین برای فیدر تنظیم کرده
+    active_power_register: Optional[int] = None
+    reactive_power_register: Optional[int] = None
+    voltage_register: Optional[int] = None
+    current_register: Optional[int] = None
+    power_factor_register: Optional[int] = None
+    # ضریب هر پارامتر (مقدار واقعی = مقدار خام × ضریب) و پارامترهای علامت‌دار (int16)
+    register_scales: Dict[str, float] = {}
+    signed_registers: List[str] = []
 
     class Config:
         from_attributes = True

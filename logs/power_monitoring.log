@@ -78,3 +78,132 @@
 2026-09-24 10:45:19 - power_monitoring - WARNING - setup_logging:126 - graypy package is not installed. Graylog logging disabled.
 2026-09-24 10:45:38 - power_monitoring - WARNING - setup_logging:126 - graypy package is not installed. Graylog logging disabled.
 2026-09-24 10:45:39 - power_monitoring - WARNING - setup_logging:126 - graypy package is not installed. Graylog logging disabled.
+2026-09-26 09:25:38 - power_monitoring - WARNING - setup_logging:126 - graypy package is not installed. Graylog logging disabled.
+2026-09-26 09:25:46 - power_monitoring - WARNING - setup_logging:126 - graypy package is not installed. Graylog logging disabled.
+2026-09-26 09:25:48 - power_monitoring - WARNING - setup_logging:126 - graypy package is not installed. Graylog logging disabled.
+2026-09-26 09:25:57 - power_monitoring - WARNING - setup_logging:126 - graypy package is not installed. Graylog logging disabled.
+2026-09-26 09:25:58 - power_monitoring - WARNING - setup_logging:126 - graypy package is not installed. Graylog logging disabled.
+2026-09-26 09:26:07 - power_monitoring - WARNING - setup_logging:126 - graypy package is not installed. Graylog logging disabled.
+2026-09-26 09:26:08 - power_monitoring - WARNING - setup_logging:126 - graypy package is not installed. Graylog logging disabled.
+2026-09-26 09:33:05 - power_monitoring - WARNING - setup_logging:126 - graypy package is not installed. Graylog logging disabled.
+2026-09-26 09:33:07 - power_monitoring - WARNING - setup_logging:126 - graypy package is not installed. Graylog logging disabled.
+2026-09-26 09:44:51 - power_monitoring - WARNING - setup_logging:126 - graypy package is not installed. Graylog logging disabled.
+2026-09-26 09:44:53 - power_monitoring - WARNING - setup_logging:126 - graypy package is not installed. Graylog logging disabled.
+2026-09-26 09:44:57 - power_monitoring - WARNING - setup_logging:126 - graypy package is not installed. Graylog logging disabled.
+2026-09-26 09:44:59 - power_monitoring - WARNING - setup_logging:126 - graypy package is not installed. Graylog logging disabled.
+2026-09-26 09:45:09 - power_monitoring - WARNING - setup_logging:126 - graypy package is not installed. Graylog logging disabled.
+2026-09-26 09:45:11 - power_monitoring - WARNING - setup_logging:126 - graypy package is not installed. Graylog logging disabled.
+2026-09-26 10:20:08 - power_monitoring - WARNING - setup_logging:126 - graypy package is not installed. Graylog logging disabled.
+2026-09-26 10:20:11 - power_monitoring - WARNING - setup_logging:126 - graypy package is not installed. Graylog logging disabled.
+2026-09-26 10:20:55 - power_monitoring - WARNING - setup_logging:126 - graypy package is not installed. Graylog logging disabled.
+2026-09-26 10:20:57 - power_monitoring - WARNING - setup_logging:126 - graypy package is not installed. Graylog logging disabled.
+2026-09-26 10:22:58 - power_monitoring - WARNING - setup_logging:126 - graypy package is not installed. Graylog logging disabled.
+2026-09-26 10:23:00 - power_monitoring - WARNING - setup_logging:126 - graypy package is not installed. Graylog logging disabled.
+2026-09-26 10:23:07 - power_monitoring.api - INFO - create:53 - Created notification 1 for user 1: alert - قطعی فیدر: Feeder-7
+2026-09-26 10:23:07 - power_monitoring.api - INFO - create:53 - Created notification 2 for user 2: alert - قطعی فیدر: Feeder-7
+2026-09-26 10:23:08 - power_monitoring.api - INFO - create:53 - Created notification 3 for user 1: success - اتصال مجدد فیدر: Feeder-7
+2026-09-26 10:23:08 - power_monitoring.api - INFO - create:53 - Created notification 4 for user 2: success - اتصال مجدد فیدر: Feeder-7
+2026-09-26 10:23:21 - power_monitoring - WARNING - setup_logging:126 - graypy package is not installed. Graylog logging disabled.
+2026-09-26 10:23:22 - power_monitoring - WARNING - setup_logging:126 - graypy package is not installed. Graylog logging disabled.
+2026-09-26 10:23:29 - power_monitoring.api - INFO - create:53 - Created notification 1 for user 1: alert - قطعی فیدر: Feeder-7
+2026-09-26 10:23:29 - power_monitoring.api - INFO - create:53 - Created notification 2 for user 2: alert - قطعی فیدر: Feeder-7
+2026-09-26 10:23:31 - power_monitoring.api - INFO - create:53 - Created notification 3 for user 1: success - اتصال مجدد فیدر: Feeder-7
+2026-09-26 10:23:31 - power_monitoring.api - INFO - create:53 - Created notification 4 for user 2: success - اتصال مجدد فیدر: Feeder-7
+2026-09-26 10:23:40 - power_monitoring - WARNING - setup_logging:126 - graypy package is not installed. Graylog logging disabled.
+2026-09-26 10:23:42 - power_monitoring - WARNING - setup_logging:126 - graypy package is not installed. Graylog logging disabled.
+2026-09-26 10:23:48 - power_monitoring - WARNING - setup_logging:126 - graypy package is not installed. Graylog logging disabled.
+2026-09-26 10:23:49 - power_monitoring - WARNING - setup_logging:126 - graypy package is not installed. Graylog logging disabled.
+2026-09-26 12:50:47 - power_monitoring - WARNING - setup_logging:126 - graypy package is not installed. Graylog logging disabled.
+2026-09-26 12:50:50 - power_monitoring - WARNING - setup_logging:126 - graypy package is not installed. Graylog logging disabled.
+2026-09-26 12:51:31 - power_monitoring - WARNING - setup_logging:126 - graypy package is not installed. Graylog logging disabled.
+2026-09-26 12:51:33 - power_monitoring - WARNING - setup_logging:126 - graypy package is not installed. Graylog logging disabled.
+2026-09-26 12:54:54 - power_monitoring - WARNING - setup_logging:126 - graypy package is not installed. Graylog logging disabled.
+2026-09-26 12:54:56 - power_monitoring - WARNING - setup_logging:126 - graypy package is not installed. Graylog logging disabled.
+2026-09-26 12:56:09 - power_monitoring - WARNING - setup_logging:126 - graypy package is not installed. Graylog logging disabled.
+2026-09-26 12:56:11 - power_monitoring - WARNING - setup_logging:126 - graypy package is not installed. Graylog logging disabled.
+2026-09-26 12:57:09 - power_monitoring - WARNING - setup_logging:126 - graypy package is not installed. Graylog logging disabled.
+2026-09-26 12:57:11 - power_monitoring - WARNING - setup_logging:126 - graypy package is not installed. Graylog logging disabled.
+2026-09-26 12:58:07 - power_monitoring - WARNING - setup_logging:126 - graypy package is not installed. Graylog logging disabled.
+2026-09-26 12:58:09 - power_monitoring - WARNING - setup_logging:126 - graypy package is not installed. Graylog logging disabled.
+2026-09-26 12:59:10 - power_monitoring - WARNING - setup_logging:126 - graypy package is not installed. Graylog logging disabled.
+2026-09-26 12:59:12 - power_monitoring - WARNING - setup_logging:126 - graypy package is not installed. Graylog logging disabled.
+2026-09-26 13:01:01 - power_monitoring - WARNING - setup_logging:126 - graypy package is not installed. Graylog logging disabled.
+2026-09-26 13:01:02 - power_monitoring - WARNING - setup_logging:126 - graypy package is not installed. Graylog logging disabled.
+2026-09-26 13:01:14 - power_monitoring - WARNING - setup_logging:126 - graypy package is not installed. Graylog logging disabled.
+2026-09-26 13:01:16 - power_monitoring - WARNING - setup_logging:126 - graypy package is not installed. Graylog logging disabled.
+2026-09-26 13:01:48 - power_monitoring - WARNING - setup_logging:126 - graypy package is not installed. Graylog logging disabled.
+2026-09-26 13:01:50 - power_monitoring - WARNING - setup_logging:126 - graypy package is not installed. Graylog logging disabled.
+2026-09-26 13:01:57 - power_monitoring - WARNING - setup_logging:126 - graypy package is not installed. Graylog logging disabled.
+2026-09-26 13:01:58 - power_monitoring - WARNING - setup_logging:126 - graypy package is not installed. Graylog logging disabled.
+2026-09-26 13:03:41 - power_monitoring - WARNING - setup_logging:126 - graypy package is not installed. Graylog logging disabled.
+2026-09-26 13:03:42 - power_monitoring - WARNING - setup_logging:126 - graypy package is not installed. Graylog logging disabled.
+2026-09-26 13:05:15 - power_monitoring - WARNING - setup_logging:126 - graypy package is not installed. Graylog logging disabled.
+2026-09-26 13:05:16 - power_monitoring - WARNING - setup_logging:126 - graypy package is not installed. Graylog logging disabled.
+2026-09-26 13:05:30 - power_monitoring - WARNING - setup_logging:126 - graypy package is not installed. Graylog logging disabled.
+2026-09-26 13:05:31 - power_monitoring - WARNING - setup_logging:126 - graypy package is not installed. Graylog logging disabled.
+2026-09-26 13:05:58 - power_monitoring.api - INFO - create:53 - Created notification 1 for user 1: warning - وضعیت هشدار فیدر: F-A1
+2026-09-26 13:05:58 - power_monitoring.api - INFO - create:53 - Created notification 2 for user 2: warning - وضعیت هشدار فیدر: F-A1
+2026-09-26 13:05:58 - power_monitoring.api - INFO - create:53 - Created notification 3 for user 3: warning - وضعیت هشدار فیدر: F-A1
+2026-09-26 13:05:58 - power_monitoring.api - INFO - create:53 - Created notification 4 for user 1: alert - وضعیت بحرانی فیدر: F-A1
+2026-09-26 13:05:58 - power_monitoring.api - INFO - create:53 - Created notification 5 for user 2: alert - وضعیت بحرانی فیدر: F-A1
+2026-09-26 13:05:58 - power_monitoring.api - INFO - create:53 - Created notification 6 for user 3: alert - وضعیت بحرانی فیدر: F-A1
+2026-09-26 13:05:58 - power_monitoring.api - INFO - create:53 - Created notification 7 for user 1: alert - وضعیت بحرانی لینک: L1
+2026-09-26 13:05:58 - power_monitoring.api - INFO - create:53 - Created notification 8 for user 2: alert - وضعیت بحرانی لینک: L1
+2026-09-26 13:05:58 - power_monitoring.api - INFO - create:53 - Created notification 9 for user 3: alert - وضعیت بحرانی لینک: L1
+2026-09-26 13:05:58 - power_monitoring.api - INFO - create:53 - Created notification 10 for user 1: success - بازگشت فیدر به وضعیت عادی: F-A1
+2026-09-26 13:05:58 - power_monitoring.api - INFO - create:53 - Created notification 11 for user 2: success - بازگشت فیدر به وضعیت عادی: F-A1
+2026-09-26 13:05:58 - power_monitoring.api - INFO - create:53 - Created notification 12 for user 3: success - بازگشت فیدر به وضعیت عادی: F-A1
+2026-09-26 13:05:58 - power_monitoring.api - INFO - create:53 - Created notification 13 for user 1: success - بازگشت لینک به وضعیت عادی: L1
+2026-09-26 13:05:58 - power_monitoring.api - INFO - create:53 - Created notification 14 for user 2: success - بازگشت لینک به وضعیت عادی: L1
+2026-09-26 13:05:58 - power_monitoring.api - INFO - create:53 - Created notification 15 for user 3: success - بازگشت لینک به وضعیت عادی: L1
+2026-09-26 13:05:58 - power_monitoring.api - INFO - create:53 - Created notification 16 for user 1: alert - قطعی فیدر: F-A2
+2026-09-26 13:05:58 - power_monitoring.api - INFO - create:53 - Created notification 17 for user 2: alert - قطعی فیدر: F-A2
+2026-09-26 13:05:58 - power_monitoring.api - INFO - create:53 - Created notification 18 for user 3: alert - قطعی فیدر: F-A2
+2026-09-26 13:11:43 - power_monitoring - WARNING - setup_logging:126 - graypy package is not installed. Graylog logging disabled.
+2026-09-26 13:11:45 - power_monitoring - WARNING - setup_logging:126 - graypy package is not installed. Graylog logging disabled.
+2026-09-26 13:11:50 - power_monitoring - WARNING - setup_logging:126 - graypy package is not installed. Graylog logging disabled.
+2026-09-26 13:11:52 - power_monitoring - WARNING - setup_logging:126 - graypy package is not installed. Graylog logging disabled.
+2026-09-26 13:11:57 - power_monitoring - WARNING - setup_logging:126 - graypy package is not installed. Graylog logging disabled.
+2026-09-26 13:11:59 - power_monitoring - WARNING - setup_logging:126 - graypy package is not installed. Graylog logging disabled.
+2026-09-26 13:12:05 - power_monitoring.api - INFO - create:53 - Created notification 1 for user 1: alert - قطعی فیدر: Feeder-7
+2026-09-26 13:12:05 - power_monitoring.api - INFO - create:53 - Created notification 2 for user 2: alert - قطعی فیدر: Feeder-7
+2026-09-26 13:12:07 - power_monitoring.api - INFO - create:53 - Created notification 3 for user 1: success - اتصال مجدد فیدر: Feeder-7
+2026-09-26 13:12:07 - power_monitoring.api - INFO - create:53 - Created notification 4 for user 2: success - اتصال مجدد فیدر: Feeder-7
+2026-09-26 13:12:09 - power_monitoring - WARNING - setup_logging:126 - graypy package is not installed. Graylog logging disabled.
+2026-09-26 13:12:11 - power_monitoring - WARNING - setup_logging:126 - graypy package is not installed. Graylog logging disabled.
+2026-09-26 13:12:17 - power_monitoring.api - INFO - create:53 - Created notification 1 for user 1: alert - قطعی فیدر: Feeder-7
+2026-09-26 13:12:17 - power_monitoring.api - INFO - create:53 - Created notification 2 for user 2: alert - قطعی فیدر: Feeder-7
+2026-09-26 13:12:19 - power_monitoring.api - INFO - create:53 - Created notification 3 for user 1: success - اتصال مجدد فیدر: Feeder-7
+2026-09-26 13:12:19 - power_monitoring.api - INFO - create:53 - Created notification 4 for user 2: success - اتصال مجدد فیدر: Feeder-7
+2026-09-26 13:12:32 - power_monitoring - WARNING - setup_logging:126 - graypy package is not installed. Graylog logging disabled.
+2026-09-26 13:12:34 - power_monitoring - WARNING - setup_logging:126 - graypy package is not installed. Graylog logging disabled.
+2026-09-26 13:12:40 - power_monitoring.api - INFO - create:53 - Created notification 1 for user 1: alert - قطعی فیدر: Feeder-7
+2026-09-26 13:12:40 - power_monitoring.api - INFO - create:53 - Created notification 2 for user 2: alert - قطعی فیدر: Feeder-7
+2026-09-26 13:12:42 - power_monitoring.api - INFO - create:53 - Created notification 3 for user 1: success - اتصال مجدد فیدر: Feeder-7
+2026-09-26 13:12:42 - power_monitoring.api - INFO - create:53 - Created notification 4 for user 2: success - اتصال مجدد فیدر: Feeder-7
+2026-09-26 13:12:58 - power_monitoring - WARNING - setup_logging:126 - graypy package is not installed. Graylog logging disabled.
+2026-09-26 13:12:59 - power_monitoring - WARNING - setup_logging:126 - graypy package is not installed. Graylog logging disabled.
+2026-09-26 13:13:06 - power_monitoring.api - INFO - create:53 - Created notification 1 for user 1: alert - قطعی فیدر: Feeder-7
+2026-09-26 13:13:06 - power_monitoring.api - INFO - create:53 - Created notification 2 for user 2: alert - قطعی فیدر: Feeder-7
+2026-09-26 13:13:07 - power_monitoring.api - INFO - create:53 - Created notification 3 for user 1: success - اتصال مجدد فیدر: Feeder-7
+2026-09-26 13:13:07 - power_monitoring.api - INFO - create:53 - Created notification 4 for user 2: success - اتصال مجدد فیدر: Feeder-7
+2026-09-26 13:13:12 - power_monitoring - WARNING - setup_logging:126 - graypy package is not installed. Graylog logging disabled.
+2026-09-26 13:13:12 - power_monitoring - WARNING - setup_logging:126 - graypy package is not installed. Graylog logging disabled.
+2026-09-26 13:13:39 - power_monitoring.api - INFO - create:53 - Created notification 1 for user 1: warning - وضعیت هشدار فیدر: F-A1
+2026-09-26 13:13:39 - power_monitoring.api - INFO - create:53 - Created notification 2 for user 2: warning - وضعیت هشدار فیدر: F-A1
+2026-09-26 13:13:39 - power_monitoring.api - INFO - create:53 - Created notification 3 for user 3: warning - وضعیت هشدار فیدر: F-A1
+2026-09-26 13:13:39 - power_monitoring.api - INFO - create:53 - Created notification 4 for user 1: alert - وضعیت بحرانی فیدر: F-A1
+2026-09-26 13:13:39 - power_monitoring.api - INFO - create:53 - Created notification 5 for user 2: alert - وضعیت بحرانی فیدر: F-A1
+2026-09-26 13:13:39 - power_monitoring.api - INFO - create:53 - Created notification 6 for user 3: alert - وضعیت بحرانی فیدر: F-A1
+2026-09-26 13:13:40 - power_monitoring.api - INFO - create:53 - Created notification 7 for user 1: alert - وضعیت بحرانی لینک: L1
+2026-09-26 13:13:40 - power_monitoring.api - INFO - create:53 - Created notification 8 for user 2: alert - وضعیت بحرانی لینک: L1
+2026-09-26 13:13:40 - power_monitoring.api - INFO - create:53 - Created notification 9 for user 3: alert - وضعیت بحرانی لینک: L1
+2026-09-26 13:13:40 - power_monitoring.api - INFO - create:53 - Created notification 10 for user 1: success - بازگشت فیدر به وضعیت عادی: F-A1
+2026-09-26 13:13:40 - power_monitoring.api - INFO - create:53 - Created notification 11 for user 2: success - بازگشت فیدر به وضعیت عادی: F-A1
+2026-09-26 13:13:40 - power_monitoring.api - INFO - create:53 - Created notification 12 for user 3: success - بازگشت فیدر به وضعیت عادی: F-A1
+2026-09-26 13:13:40 - power_monitoring.api - INFO - create:53 - Created notification 13 for user 1: success - بازگشت لینک به وضعیت عادی: L1
+2026-09-26 13:13:40 - power_monitoring.api - INFO - create:53 - Created notification 14 for user 2: success - بازگشت لینک به وضعیت عادی: L1
+2026-09-26 13:13:40 - power_monitoring.api - INFO - create:53 - Created notification 15 for user 3: success - بازگشت لینک به وضعیت عادی: L1
+2026-09-26 13:13:40 - power_monitoring.api - INFO - create:53 - Created notification 16 for user 1: alert - قطعی فیدر: F-A2
+2026-09-26 13:13:40 - power_monitoring.api - INFO - create:53 - Created notification 17 for user 2: alert - قطعی فیدر: F-A2
+2026-09-26 13:13:40 - power_monitoring.api - INFO - create:53 - Created notification 18 for user 3: alert - قطعی فیدر: F-A2

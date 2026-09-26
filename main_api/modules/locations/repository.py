@@ -56,6 +56,7 @@ class LocationRepository:
             nodes[location.id] = {
                 "id": location.id,
                 "campus_name": location.name,
+                "code": location.code,
                 "location_type": location.location_type,
                 "parent_id": location.parent_id,
                 "description": location.description,
@@ -94,6 +95,7 @@ class LocationRepository:
             nodes[location.id] = {
                 "id": location.id,
                 "campus_name": location.name,
+                "code": location.code,
                 "location_type": location.location_type,
                 "parent_id": location.parent_id,
                 "description": location.description,

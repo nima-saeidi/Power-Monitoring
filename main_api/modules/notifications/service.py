@@ -5,6 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi import BackgroundTasks
 
 from main_api.modules.notifications.repository import NotificationRepository
+from main_api.modules.notifications.websocket import notifier_manager
 from main_api.modules.notifications.models import (
     NotificationType,
     NotificationPriority,
@@ -59,6 +60,7 @@ class NotificationService:
             return None
 
         notification = await NotificationRepository.create(db=db, **request.dict())
+        await NotificationService._push_live(notification)
 
         # ثبت لاگ برای ارسال موفق نوتیفیکیشن
         log_coroutine = send_audit_log(
@@ -88,7 +90,10 @@ class NotificationService:
                 blocked_count += 1
                 continue
 
-            await NotificationRepository.create(db=db, user_id=user_id, **request.dict(exclude={'user_ids'}))
+            notification = await NotificationRepository.create(
+                db=db, user_id=user_id, **request.dict(exclude={'user_ids'})
+            )
+            await NotificationService._push_live(notification)
             sent_count += 1
 
         # ثبت لاگ برای عملیات ارسال گروهی
@@ -201,6 +206,17 @@ class NotificationService:
             background_tasks.add_task(send_rabbitmq_notification, payload)
 
         return {"status": "Threshold violation alert processed and logged"}
+
+    @staticmethod
+    async def _push_live(notification) -> None:
+        """
+        ارسال زنده‌ی نوتیفیکیشن ثبت‌شده به وب‌سوکت /notifications/ws کاربر (اگر آنلاین باشد).
+        پیام: {"type": "NEW_NOTIFICATION", "data": <NotificationResponse>}
+        """
+        payload = NotificationResponse.model_validate(notification).model_dump(mode="json")
+        await notifier_manager.send_personal_message(
+            {"type": "NEW_NOTIFICATION", "data": payload}, notification.user_id
+        )
 
     @staticmethod
     def _should_send(pref: NotificationPreference, n_type: NotificationType, priority: NotificationPriority) -> bool:

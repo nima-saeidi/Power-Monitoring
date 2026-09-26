@@ -3,6 +3,7 @@
 به صف notification_events منتشر می‌شود؛ ارسال واقعی ایمیل توسط notification_service
 (از طریق EmailProvider) انجام می‌شود.
 """
+from html import escape
 
 
 def build_reset_code_email_html(code: str) -> str:
@@ -181,3 +182,57 @@ def build_feeder_offline_email_html(feeder_name: str, feeder_id: int, consecutiv
     </body>
     </html>
     """
+
+
+def _card_email_html(heading: str, color: str, intro: str, badge: str, meta_lines: list, note: str) -> str:
+    """قالب مشترک ایمیل‌های هشدار و کد تأیید (RTL، هم‌سبک با قالب قطعی فیدر)"""
+    meta_html = "<br>".join(escape(str(line)) for line in meta_lines)
+    return f"""
+    <!DOCTYPE html>
+    <html lang="fa" dir="rtl">
+    <head><meta charset="UTF-8"></head>
+    <body style="font-family: Tahoma, 'Vazir', Arial, sans-serif; background-color: #f4f6f8; margin: 0;
+                 padding: 20px; color: #333; direction: rtl; text-align: right;">
+        <div style="max-width: 500px; margin: 0 auto; background-color: #ffffff; padding: 30px; border-radius: 8px;
+                    border: 1px solid #e1e4e8;">
+            <h2 style="text-align: center; color: {color}; margin: 0 0 20px;">{escape(heading)}</h2>
+            <p>{escape(intro)}</p>
+            <div style="text-align: center; margin: 25px 0;">
+                <span style="display: inline-block; font-size: 20px; font-weight: bold; color: {color};
+                             background-color: #f8f9fa; padding: 10px 24px; border-radius: 6px;
+                             border: 1px dashed {color}; letter-spacing: 2px;">{escape(badge)}</span>
+            </div>
+            <div style="font-size: 13px; color: #555; background-color: #f8f9fa; border-radius: 6px;
+                        padding: 12px 16px;">{meta_html}</div>
+            <p style="margin-top: 20px;">{escape(note)}</p>
+            <div style="font-size: 12px; color: #888; margin-top: 30px; border-top: 1px solid #eee;
+                        padding-top: 15px; text-align: center;">سامانه پایش مصرف انرژی (Power Monitoring)</div>
+        </div>
+    </body>
+    </html>
+    """
+
+
+def build_load_alert_email_html(entity_label: str, entity_name: str, status_label: str, is_critical: bool,
+                                meta_lines: list) -> str:
+    """ایمیل هشدار بار فیدر/لینک (وضعیت هشدار یا بحرانی نسبت به جریان مجاز)"""
+    return _card_email_html(
+        heading=f"{'🚨' if is_critical else '⚠️'} وضعیت {status_label} {entity_label}",
+        color="#c62828" if is_critical else "#ef6c00",
+        intro=f"جریان {entity_label} زیر از حد مجاز تعیین‌شده در تنظیمات سامانه عبور کرد:",
+        badge=entity_name,
+        meta_lines=meta_lines,
+        note="لطفاً وضعیت بار را بررسی کنید.",
+    )
+
+
+def build_command_code_email_html(code: str, feeder_name: str, action_label: str, expires_seconds: int) -> str:
+    """ایمیل کد تأیید فرمان قطع/وصل"""
+    return _card_email_html(
+        heading="🔐 کد تأیید فرمان",
+        color="#1565c0",
+        intro=f"برای اجرای فرمان «{action_label}» روی فیدر «{feeder_name}» کد زیر را وارد کنید:",
+        badge=code,
+        meta_lines=[f"اعتبار کد: {expires_seconds} ثانیه"],
+        note="اگر این فرمان را شما درخواست نکرده‌اید، فوراً به مدیر سامانه اطلاع دهید.",
+    )

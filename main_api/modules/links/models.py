@@ -17,6 +17,10 @@ class Link(Base):
     cable_type = Column(String(50), nullable=True)  # نوع سیم
     cross_section = Column(Float, nullable=True)  # سطح مقطع
     allowed_current = Column(Float, nullable=True)  # جریان مجاز (A)
+    # فیدری که جریان این لینک را اندازه می‌گیرد (داده‌ی پویای لینک از همین فیدر خوانده می‌شود)
+    feeder_id = Column(Integer, ForeignKey("feeders.id", ondelete="SET NULL"), nullable=True)
+    # وضعیت بار لینک بر اساس جریان فیدر اندازه‌گیر نسبت به allowed_current
+    load_status = Column(String(20), nullable=False, default="unknown", server_default="unknown")
     length = Column(Float, nullable=True)  # طول لینک
 
     metadata_info = Column("metadata", JSONB, nullable=True)
@@ -28,3 +32,4 @@ class Link(Base):
     # روابط
     from_post = relationship("Post", foreign_keys=[from_post_id], back_populates="outgoing_links")
     to_post = relationship("Post", foreign_keys=[to_post_id], back_populates="incoming_links")
+    feeder = relationship("Feeder", foreign_keys=[feeder_id])

@@ -1,4 +1,6 @@
-import random
+import hashlib
+import hmac
+import secrets
 import uuid
 import asyncio
 from math import ceil
@@ -32,6 +34,21 @@ from main_api.core.email_templates import build_reset_code_email_html
 
 # ایمپورت تابع ارسال لاگ
 from main_api.modules.audit_logs.services import send_audit_log, schedule_audit_log
+
+
+_INVALID_CREDENTIALS = "ایمیل یا رمز عبور اشتباه است."
+_DUMMY_PASSWORD_HASH = hash_password(secrets.token_urlsafe(16))
+_FORGOT_PASSWORD_MESSAGE = "اگر ایمیل در سیستم موجود باشد، کد تأیید ارسال خواهد شد."
+
+
+def _otp_digest(email: str, code: str) -> str:
+    """هش HMAC کد OTP؛ خود کد هرگز داخل توکن (که برای کلاینت قابل خواندن است) قرار نمی‌گیرد."""
+    return hmac.new(settings.SECRET_KEY.encode(), f"otp:{email}:{code}".encode(), hashlib.sha256).hexdigest()
+
+
+def _password_fingerprint(hashed_password: str) -> str:
+    """اثر انگشت رمز فعلی؛ بعد از تغییر رمز، reset_token قبلی دیگر معتبر نیست (یک‌بار مصرف)."""
+    return hmac.new(settings.SECRET_KEY.encode(), f"pwf:{hashed_password}".encode(), hashlib.sha256).hexdigest()[:32]
 
 
 class AuthService:
@@ -69,7 +86,10 @@ class AuthService:
                 action="USER_LOGIN_FAILED", username=data.email, success=False,
                 severity="WARNING", description="کاربری با این ایمیل یافت نشد."
             ))
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="کاربری با این ایمیل یافت نشد.")
+            # هش ساختگی تا زمان پاسخ با حالت «رمز اشتباه» یکسان باشد و پیام هم یکی باشد
+            # (جلوگیری از کشف ایمیل‌های ثبت‌شده)
+            verify_password(data.password, _DUMMY_PASSWORD_HASH)
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=_INVALID_CREDENTIALS)
 
         # تنظیمات سیستم یک‌بار در ابتدا خوانده می‌شود تا هم در بررسی قفل حساب و
         # هم در محاسبه‌ی مدت اعتبار توکن از همان مقادیر به‌روز استفاده شود.
@@ -79,7 +99,7 @@ class AuthService:
 
         if not verify_password(data.password, user.hashed_password):
             await self._register_failed_login(user, db_settings)
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="رمز عبور اشتباه است.")
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=_INVALID_CREDENTIALS)
 
         if not user.is_active:
             asyncio.create_task(send_audit_log(
@@ -97,7 +117,7 @@ class AuthService:
 
         # اصلاح ساختار توکن که به هم ریخته بود
         access_token = create_access_token(
-            data={"sub": str(user.id), "email": user.email, "role": user.role},
+            data={"sub": str(user.id), "email": user.email, "role": user.role, "type": "access"},
             expires_delta=expires_delta
         )
 
@@ -186,21 +206,24 @@ class AuthService:
 
     async def forgot_password(self, data: ForgotPasswordRequest, background_tasks: BackgroundTasks):
         user = await self.repo.get_by_email(data.email)
+
+        code = f"{secrets.randbelow(1_000_000):06d}"
+        expire = datetime.now(timezone.utc) + timedelta(minutes=5)
+
+        # برای ایمیل ناموجود هم یک session_token (با کدی که به کسی ارسال نمی‌شود) برمی‌گردد
+        # تا پاسخ دو حالت یکسان باشد و نشود ایمیل‌های ثبت‌شده را کشف کرد
+        token = jwt.encode(
+            {"sub": data.email, "code_hash": _otp_digest(data.email, code), "type": "otp_session", "exp": expire},
+            settings.SECRET_KEY,
+            algorithm=settings.ALGORITHM
+        )
+
         if not user:
             asyncio.create_task(send_audit_log(
                 action="PASSWORD_RESET_REQUEST_FAILED", username=data.email,
                 success=False, severity="WARNING", description="درخواست فراموشی رمز برای ایمیل ناموجود"
             ))
-            return {"message": "اگر ایمیل در سیستم موجود باشد، کد تأیید ارسال خواهد شد."}
-
-        code = str(random.randint(100000, 999999))
-        expire = datetime.now(timezone.utc) + timedelta(minutes=5)
-
-        token = jwt.encode(
-            {"sub": user.email, "code": code, "type": "otp_session", "exp": expire},
-            settings.SECRET_KEY,
-            algorithm=settings.ALGORITHM
-        )
+            return {"message": _FORGOT_PASSWORD_MESSAGE, "session_token": token}
 
         # ارسال ایمیل دیگر در main_api انجام نمی‌شود؛ فقط رویداد به صف notification_events
         # منتشر می‌شود تا notification_service آن را از طریق EmailProvider ارسال کند.
@@ -223,7 +246,7 @@ class AuthService:
             username=user.email, user_role=user.role, success=True, severity="INFO"
         )
 
-        return {"message": "کد تأیید به ایمیل شما ارسال شد.", "session_token": token}
+        return {"message": _FORGOT_PASSWORD_MESSAGE, "session_token": token}
 
     async def verify_reset_code(self, data: VerifyCodeRequest, background_tasks: Optional[BackgroundTasks] = None):
         try:
@@ -233,10 +256,10 @@ class AuthService:
                 algorithms=[settings.ALGORITHM]
             )
             email: str = payload.get("sub")
-            expected_code: str = payload.get("code")
+            expected_hash: str = payload.get("code_hash")
             token_type: str = payload.get("type")
 
-            if not email or not expected_code or token_type != "otp_session":
+            if not email or not expected_hash or token_type != "otp_session":
                 asyncio.create_task(send_audit_log(
                     action="PASSWORD_RESET_VERIFY_FAILED", success=False, severity="WARNING",
                     description="توکن جلسه نامعتبر است."
@@ -249,7 +272,8 @@ class AuthService:
             ))
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="توکن جلسه منقضی شده یا نامعتبر است.")
 
-        if str(data.code).strip() != str(expected_code).strip():
+        user = await self.repo.get_by_email(email)
+        if not user or not hmac.compare_digest(_otp_digest(email, str(data.code).strip()), expected_hash):
             asyncio.create_task(send_audit_log(
                 action="PASSWORD_RESET_VERIFY_FAILED", username=email, success=False, severity="WARNING",
                 description="کد تایید اشتباه است."
@@ -258,7 +282,8 @@ class AuthService:
 
         reset_expire = datetime.now(timezone.utc) + timedelta(minutes=10)
         reset_token = jwt.encode(
-            {"sub": email, "type": "password_reset", "exp": reset_expire},
+            {"sub": email, "type": "password_reset", "exp": reset_expire,
+             "pwf": _password_fingerprint(user.hashed_password)},
             settings.SECRET_KEY,
             algorithm=settings.ALGORITHM
         )
@@ -365,8 +390,10 @@ class AuthService:
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="توکن منقضی شده یا نامعتبر است.")
 
         user = await self.repo.get_by_email(email)
-        if not user:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="کاربر یافت نشد.")
+        # توکن فقط تا وقتی رمز عوض نشده معتبر است (استفاده‌ی مجدد از همان توکن رد می‌شود)
+        if not user or not hmac.compare_digest(
+                str(payload.get("pwf", "")), _password_fingerprint(user.hashed_password)):
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="توکن منقضی شده یا نامعتبر است.")
 
         await self._publish({
             "entity": "user",

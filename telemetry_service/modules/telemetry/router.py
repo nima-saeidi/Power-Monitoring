@@ -1,10 +1,82 @@
+import hmac
 from datetime import datetime, timezone, timedelta
 from typing import List, Optional
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
+from pydantic import BaseModel, Field
+from core.config import settings
+from modules.telemetry import analytics
+from modules.telemetry.modbus_client import ModbusReader
 from modules.telemetry.schemas import TelemetryCreate, TelemetryResponse
 from modules.telemetry.service import TelemetryService
 
-router = APIRouter(prefix="/telemetry", tags=["Telemetry"])
+
+async def verify_internal_api_key(x_internal_api_key: Optional[str] = Header(default=None)):
+    """
+    این سرویس فقط از main_api فراخوانی می‌شود (پورت 8001 در docker-compose بیرون باز است)،
+    پس همه‌ی اندپوینت‌ها کلید مشترک INTERNAL_API_KEY را می‌خواهند.
+    """
+    expected = settings.INTERNAL_API_KEY
+    if not expected or not x_internal_api_key or not hmac.compare_digest(x_internal_api_key, expected):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
+
+
+router = APIRouter(prefix="/telemetry", tags=["Telemetry"], dependencies=[Depends(verify_internal_api_key)])
+
+# حداکثر انتظار برای پاسخ دستگاه به فرمان قطع/وصل (ثانیه)
+COMMAND_TIMEOUT_SECONDS = 3
+
+
+def _resolve_range(start_time: Optional[datetime], end_time: Optional[datetime]) -> tuple[datetime, datetime]:
+    end_time = end_time or datetime.now(timezone.utc)
+    start_time = start_time or end_time - timedelta(hours=24)
+    if start_time >= end_time:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="start_time must be before end_time")
+    return start_time, end_time
+
+
+@router.get("/energy")
+async def get_energy(
+    feeder_ids: List[int] = Query(..., description="یک یا چند شناسه‌ی فیدر"),
+    start_time: Optional[datetime] = Query(default=None),
+    end_time: Optional[datetime] = Query(default=None),
+    window: Optional[str] = Query(default=None, pattern="^(1h|1d|1w|1mo)$", description="سری انرژی به تفکیک بازه"),
+):
+    """انرژی اکتیو (kWh) و راکتیو (kVARh) هر فیدر = انتگرال توان در بازه."""
+    start_time, end_time = _resolve_range(start_time, end_time)
+    energy = await analytics.get_energy(feeder_ids, start_time, end_time, window)
+    return {"start_time": start_time, "end_time": end_time, "feeders": list(energy.values())}
+
+
+@router.get("/forecast/{feeder_id}")
+async def get_forecast(
+    feeder_id: int,
+    hours: int = Query(default=24, ge=1, le=168),
+    history_days: int = Query(default=7, ge=1, le=60),
+):
+    """پیش‌بینی ساعتی توان اکتیو و راکتیو (میانگین همان ساعت در روزهای گذشته)."""
+    return await analytics.get_forecast(feeder_id, hours, history_days)
+
+
+class CoilWriteRequest(BaseModel):
+    ip_address: str = Field(..., max_length=50)
+    port: int = Field(502, ge=1, le=65535)
+    slave_id: int = Field(1, ge=0, le=247)
+    register_address: int = Field(..., ge=0, le=65535)
+    value: bool
+
+
+@router.post("/command")
+async def write_coil(data: CoilWriteRequest):
+    """اجرای فرمان قطع/وصل روی دستگاه (نوشتن Coil). تأیید دومرحله‌ای در main_api انجام می‌شود."""
+    reader = ModbusReader(host=data.ip_address, port=data.port, timeout=COMMAND_TIMEOUT_SECONDS, retries=2)
+    try:
+        ok = await reader.write_coil(data.register_address, data.value, slave=data.slave_id)
+    finally:
+        await reader.close()
+    if not ok:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="Device did not accept the command.")
+    return {"success": True, "register_address": data.register_address, "value": data.value}
+
 
 
 @router.post("/", response_model=TelemetryResponse, status_code=status.HTTP_201_CREATED)

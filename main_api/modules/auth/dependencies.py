@@ -1,9 +1,10 @@
-from fastapi import Depends, HTTPException, status
+import hmac
+from fastapi import Depends, Header, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 import jwt
 from jwt.exceptions import PyJWTError, ExpiredSignatureError
-from main_api.core.database import get_db
+from main_api.core.database import get_db, AsyncSessionLocal
 from main_api.core.config import settings
 from main_api.modules.users.repository import UserRepository
 from main_api.modules.users.models import RoleEnum
@@ -21,7 +22,8 @@ async def get_current_user(token: str = Depends(oauth2_scheme), db: AsyncSession
     try:
         payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
         email: str = payload.get("email")
-        if email is None:
+        # توکن‌های otp_session / password_reset نباید به‌جای توکن دسترسی پذیرفته شوند
+        if email is None or payload.get("type", "access") != "access":
             raise credentials_exception
     except ExpiredSignatureError:
         raise HTTPException(
@@ -37,7 +39,48 @@ async def get_current_user(token: str = Depends(oauth2_scheme), db: AsyncSession
     if user is None:
         raise credentials_exception
 
+    # کاربری که ادمین غیرفعالش کرده، با توکن قبلی‌اش هم دیگر دسترسی ندارد
+    if not user.is_active:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="حساب کاربری غیرفعال است.")
+
     return user
+
+
+async def authenticate_websocket(token: str | None):
+    """
+    احراز هویت وب‌سوکت با توکن query (?token=...). از یک سشن کوتاه‌مدت استفاده می‌شود
+    تا اتصال دیتابیس در تمام مدت باز بودن وب‌سوکت اشغال نماند. در صورت نامعتبر بودن None برمی‌گرداند.
+    """
+    if not token:
+        return None
+    try:
+        async with AsyncSessionLocal() as db:
+            return await get_current_user(token, db)
+    except HTTPException:
+        return None
+
+
+async def verify_internal_api_key(x_internal_api_key: str | None = Header(default=None)):
+    """اعتبارسنجی اندپوینت‌های داخلی بین میکروسرویس‌ها با کلید مشترک INTERNAL_API_KEY."""
+    expected = settings.INTERNAL_API_KEY
+    if not expected or not x_internal_api_key or not hmac.compare_digest(x_internal_api_key, expected):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="دسترسی به این اندپوینت داخلی مجاز نیست.")
+
+
+def require_page(page: str):
+    """
+    دسترسی به صفحه‌ای از پنل که ادمین برای هر حساب تعیین می‌کند (users.allowed_pages).
+    ادمین همیشه دسترسی دارد؛ allowed_pages خالی (None) یعنی همه‌ی صفحه‌ها.
+    """
+    async def checker(current_user=Depends(get_current_user)):
+        if current_user.role == RoleEnum.ADMIN:
+            return current_user
+        allowed = current_user.allowed_pages
+        if allowed is not None and page not in allowed:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
+                                detail="دسترسی به این بخش برای حساب شما فعال نشده است.")
+        return current_user
+    return checker
 
 
 class RoleChecker:

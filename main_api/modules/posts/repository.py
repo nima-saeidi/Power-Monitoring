@@ -1,5 +1,5 @@
 from typing import List, Optional
-from sqlalchemy import select
+from sqlalchemy import select, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -19,11 +19,22 @@ class PostRepository:
         await self.db.refresh(post)
         return await self.get_post_by_id(post.id)
 
-    async def get_all_posts(self, skip: int = 0, limit: int = 100) -> List[Post]:
+    async def get_all_posts(self, skip: int = 0, limit: int = 100, location_id: Optional[int] = None,
+                            post_type: Optional[str] = None, is_active: Optional[bool] = None,
+                            search: Optional[str] = None) -> List[Post]:
         query = select(Post).options(
             selectinload(Post.feeders),
             selectinload(Post.location)
-       ).offset(skip).limit(limit)
+        )
+        if location_id is not None:
+            query = query.where(Post.location_id == location_id)
+        if post_type:
+            query = query.where(Post.post_type == post_type)
+        if is_active is not None:
+            query = query.where(Post.is_active == is_active)
+        if search:
+            query = query.where(or_(Post.name.ilike(f"%{search}%"), Post.code.ilike(f"%{search}%")))
+        query = query.order_by(Post.id).offset(skip).limit(limit)
 
         result = await self.db.execute(query)
         return list(result.scalars().all())

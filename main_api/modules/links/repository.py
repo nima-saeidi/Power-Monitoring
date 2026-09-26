@@ -1,5 +1,5 @@
 from typing import List, Optional
-from sqlalchemy import select
+from sqlalchemy import select, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -21,7 +21,8 @@ class LinkRepository:
         # تغییر مهم: لینک را همراه با تمام جزئیات پست‌ها واکشی و برمی‌گردانیم
         return await self.get_link_by_id(link.id)
 
-    async def get_all_links(self, skip: int = 0, limit: int = 100):
+    async def get_all_links(self, skip: int = 0, limit: int = 100, post_id: Optional[int] = None,
+                            is_active: Optional[bool] = None, load_status: Optional[str] = None):
         query = select(Link).options(
             # بارگذاری پست مبدأ به همراه فیدرها و مکان آن
             selectinload(Link.from_post).selectinload(Post.feeders),
@@ -30,7 +31,14 @@ class LinkRepository:
             # بارگذاری پست مقصد به همراه فیدرها و مکان آن
             selectinload(Link.to_post).selectinload(Post.feeders),
             selectinload(Link.to_post).selectinload(Post.location)
-        ).offset(skip).limit(limit)
+        )
+        if post_id is not None:
+            query = query.where(or_(Link.from_post_id == post_id, Link.to_post_id == post_id))
+        if is_active is not None:
+            query = query.where(Link.is_active == is_active)
+        if load_status:
+            query = query.where(Link.load_status == load_status)
+        query = query.order_by(Link.id).offset(skip).limit(limit)
 
         result = await self.db.execute(query)
         return list(result.scalars().all())

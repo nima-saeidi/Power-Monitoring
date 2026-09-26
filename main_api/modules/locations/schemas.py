@@ -6,6 +6,7 @@ from pydantic import BaseModel, ConfigDict, Field
 class LocationFlatResponse(BaseModel):
     id: int
     campus_name: Optional[str] = Field(default=None, validation_alias="name")
+    code: Optional[str] = Field(default=None, max_length=50)
     location_type: Optional[str] = None
     parent_id: Optional[int] = None
     description: Optional[str] = None
@@ -15,6 +16,7 @@ class LocationFlatResponse(BaseModel):
 
 class LocationBase(BaseModel):
     name: str = Field(alias="campus_name")
+    code: Optional[str] = Field(default=None, max_length=50)
     location_type: Optional[str] = None
     parent_id: Optional[int] = None
     description: Optional[str] = None
@@ -36,6 +38,7 @@ class CampusWithSubsectionsCreate(BaseModel):
 
 class LocationUpdate(BaseModel):
     name: Optional[str] = Field(default=None, alias="campus_name")
+    code: Optional[str] = Field(default=None, max_length=50)
     location_type: Optional[str] = None
     parent_id: Optional[int] = None
     description: Optional[str] = None
@@ -47,6 +50,7 @@ class LocationUpdate(BaseModel):
 class LocationResponse(BaseModel):
     id: int
     campus_name: Optional[str] = Field(default=None, validation_alias="name")
+    code: Optional[str] = Field(default=None, max_length=50)
     location_type: Optional[str] = None
     parent_id: Optional[int] = None
     description: Optional[str] = None

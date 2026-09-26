@@ -14,6 +14,24 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(level
 logger = logging.getLogger("telemetry_scheduler")
 
 
+def apply_register_config(raw: dict, scales: dict, signed: list) -> dict:
+    """
+    تبدیل مقدار خام رجیسترهای ۱۶ بیتی به مقدار واقعی:
+    پارامترهای علامت‌دار به int16 (مثلاً 65436 -> -100) و سپس ضرب در ضریب (مثلاً 2305 × 0.1 = 230.5 ولت).
+    """
+    values = {}
+    for key, value in raw.items():
+        if key in signed and value > 32767:
+            value -= 65536
+        values[key] = value * float(scales.get(key, 1))
+    return values
+
+
+def _internal_headers() -> dict:
+    """هدر احراز هویت اندپوینت‌های داخلی main_api (باید با INTERNAL_API_KEY در main_api یکی باشد)."""
+    return {"X-Internal-API-Key": settings.INTERNAL_API_KEY}
+
+
 class TelemetryScheduler:
     def __init__(self):
         self.is_running = False
@@ -129,7 +147,7 @@ class TelemetryScheduler:
             payload["last_success"] = datetime.now(timezone.utc).isoformat()
         try:
             async with httpx.AsyncClient() as client:
-                response = await client.post(url, json=payload, timeout=10.0)
+                response = await client.post(url, json=payload, headers=_internal_headers(), timeout=10.0)
                 if response.status_code >= 400:
                     logger.error(
                         f"Failed to report status for Feeder ID {feeder_id}: "
@@ -142,6 +160,7 @@ class TelemetryScheduler:
             self, feeder_id: int, device_ip: str, port: int, modbus_address: int, polling_interval: int, registers: dict,
             max_failures: int = 3, modbus_timeout: int = 3, modbus_retry_count: int = 3,
             offline_retry_interval: int = 300, initial_is_online: bool = True,
+            register_scales: dict | None = None, signed_registers: list | None = None,
     ):
         """
         پایش مداوم و ناهمگام یک فیدر با هندل کردن کامل خطاها.
@@ -181,7 +200,9 @@ class TelemetryScheduler:
 
                     if not has_error and read_values:
                         current_fails = 0
-                        await self.handle_success(feeder_id, read_values)
+                        await self.handle_success(
+                            feeder_id, apply_register_config(read_values, register_scales or {}, signed_registers or [])
+                        )
 
                         if not is_online:
                             # بازگشت فیدر پس از دوره‌ی آفلاین بودن
@@ -228,7 +249,7 @@ class TelemetryScheduler:
         url = f"{main_api_url}/telemetry/active-feeders"
         try:
             async with httpx.AsyncClient() as client:
-                response = await client.get(url, timeout=10.0)
+                response = await client.get(url, headers=_internal_headers(), timeout=10.0)
                 if response.status_code == 200:
                     return response.json()
                 logger.error(
@@ -265,6 +286,8 @@ class TelemetryScheduler:
                     modbus_timeout = feeder.get("modbus_timeout", 3)
                     modbus_retry_count = feeder.get("modbus_retry_count", 3)
                     offline_retry_interval = feeder.get("offline_retry_interval", 300)
+                    register_scales = feeder.get("register_scales") or {}
+                    signed_registers = feeder.get("signed_registers") or []
                     initial_is_online = feeder.get("is_online", True)
 
                     if not (feeder_id and ip):
@@ -272,12 +295,14 @@ class TelemetryScheduler:
 
                     current_active_ids.add(feeder_id)
 
+                    # رجیستر تنظیم‌شده‌ی هر فیدر؛ اگر ادمین مقداری نگذاشته باشد آدرس پیش‌فرض ۰ تا ۴
                     registers = {
-                        "active_power": feeder.get("active_power_register", 0),
-                        "reactive_power": feeder.get("reactive_power_register", 1),
-                        "voltage": feeder.get("voltage_register", 2),
-                        "current": feeder.get("current_register", 3),
-                        "power_factor": feeder.get("power_factor_register", 4)
+                        name: feeder.get(f"{name}_register")
+                        if feeder.get(f"{name}_register") is not None else default
+                        for name, default in (
+                            ("active_power", 0), ("reactive_power", 1), ("voltage", 2),
+                            ("current", 3), ("power_factor", 4),
+                        )
                     }
 
                     config_fingerprint = {
@@ -289,7 +314,9 @@ class TelemetryScheduler:
                         "modbus_timeout": modbus_timeout,
                         "modbus_retry_count": modbus_retry_count,
                         "offline_retry_interval": offline_retry_interval,
-                        "registers": registers
+                        "registers": registers,
+                        "register_scales": register_scales,
+                        "signed_registers": signed_registers,
                     }
 
                     # ۱. ری‌استارت تسک در صورت تغییر کانفیگ (شامل تغییر تنظیمات سیستم)
@@ -308,6 +335,7 @@ class TelemetryScheduler:
                                 modbus_retry_count=modbus_retry_count,
                                 offline_retry_interval=offline_retry_interval,
                                 initial_is_online=initial_is_online,
+                                register_scales=register_scales, signed_registers=signed_registers,
                             )
                         )
                         self._tasks[feeder_id] = task
