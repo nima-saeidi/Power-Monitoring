@@ -12,3 +12,4 @@ sqlalchemy>=2.0.0
 asyncpg>=0.29.0
 SQLAlchemy>=2.0.0
 pygelf>=0.0.8
+greenlet==3.5.4
