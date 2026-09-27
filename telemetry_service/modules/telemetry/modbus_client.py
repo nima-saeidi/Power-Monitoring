@@ -6,7 +6,6 @@ from pymodbus.exceptions import ModbusException
 
 logger = logging.getLogger(__name__)
 
-# ترتیب اولویت نام‌هایی که pymodbus در نسخه‌های مختلف برای شناسه‌ی slave/unit استفاده کرده است
 _SLAVE_KWARG_CANDIDATES = ("slave", "device_id", "unit")
 
 class ModbusReader:
@@ -17,16 +16,11 @@ class ModbusReader:
         self.retries = retries
         self.client = AsyncModbusTcpClient(self.host, port=self.port, timeout=self.timeout)
 
-        # تشخیص یک‌باره‌ی نام صحیح پارامتر بر اساس نسخه‌ی نصب‌شده‌ی pymodbus
         self._slave_kwarg = self._detect_slave_kwarg()
         logger.debug(f"Detected pymodbus slave-id kwarg: '{self._slave_kwarg}'")
 
     @staticmethod
     def _detect_slave_kwarg(candidates=_SLAVE_KWARG_CANDIDATES) -> str:
-        """
-        بررسی امضای متد read_holding_registers در نسخه‌ی نصب‌شده‌ی pymodbus
-        جهت پشتیبانی از slave / device_id / unit
-        """
         try:
             params = inspect.signature(AsyncModbusTcpClient.read_holding_registers).parameters
         except (TypeError, ValueError):

@@ -4,7 +4,6 @@ from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-# مدل‌های سیستم
 from main_api.modules.feeders.models import Feeder, TimeseriesData
 from main_api.modules.telemetry.schemas import TelemetryCreate, ActiveFeederConfig
 from main_api.modules.settings.service import SettingService
@@ -21,18 +20,12 @@ class TelemetryRepository:
 
     @staticmethod
     def _resolve_ip_and_port(feeder: Feeder) -> tuple[str, int]:
-        """تعیین IP/Port نهایی فیدر: اولویت با مقدار خود فیدر، سپس Fallback به پست متصل."""
         ip = feeder.ip_address or (feeder.post.ip_address if feeder.post else None) or "127.0.0.1"
         port = feeder.port or (feeder.post.port if feeder.post else None) or 502
         return ip, port
 
     @staticmethod
     def _resolve_runtime_config(feeder: Feeder, system_settings: SystemSetting) -> dict:
-        """
-        تعیین مقادیر polling/modbus هر فیدر: پیش‌فرض از تنظیمات سراسری سیستم
-        (system_settings) خوانده می‌شود؛ اگر خود فیدر در metadata_info مقدار
-        اختصاصی داشته باشد، همان مقدار اختصاصی اولویت می‌گیرد.
-        """
         config = {
             "scan_interval": system_settings.polling_interval,
             "max_failures": system_settings.max_telemetry_failures,
@@ -47,10 +40,6 @@ class TelemetryRepository:
         return config
 
     async def get_active_feeders(self) -> List[ActiveFeederConfig]:
-        """
-        واکشی لیست تمام فیدرهای فعال از دیتابیس به همراه پیکربندی polling/modbus
-        که از تنظیمات سراسری سیستم (system_settings) اعمال می‌شود.
-        """
         query = (
             select(Feeder)
             .options(selectinload(Feeder.post))
@@ -99,11 +88,6 @@ class TelemetryRepository:
             consecutive_failures: int,
             last_success: Optional[datetime] = None,
     ) -> Optional[Feeder]:
-        """
-        ذخیره نتیجه آخرین Polling یک فیدر (توسط telemetry_service گزارش می‌شود).
-        این متد فقط وضعیت اتصال (is_online/consecutive_failures/last_success) را
-        تغییر می‌دهد و کاری به is_active (کلید دستی ادمین) ندارد.
-        """
         result = await self.session.execute(select(Feeder).where(Feeder.id == feeder_id))
         feeder = result.scalar_one_or_none()
         if not feeder:
@@ -119,17 +103,12 @@ class TelemetryRepository:
         return feeder
 
     async def create_record(self, data: TelemetryCreate) -> TimeseriesData:
-        """
-        ذخیره داده تله‌متری جدید در دیتابیس رابطه‌ای.
-        """
-        # استخراج ایمن شناسه فیدر (سازگار با هر دو فیلد feeder_id یا device_id)
         raw_id = getattr(data, "feeder_id", getattr(data, "device_id", None))
         try:
             target_feeder_id = int(raw_id) if raw_id is not None else 1
         except (ValueError, TypeError):
             target_feeder_id = 1
 
-        # تعیین زمان ثبت
         ts = getattr(data, "timestamp", None)
         if ts is None:
             ts = func.now()

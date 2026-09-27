@@ -1,8 +1,3 @@
-"""
-داشبورد: خلاصه‌ی وضعیت شبکه و داده‌ی زنده‌ی فیدرها برای صفحه‌ی داشبورد و نقشه.
-مقادیر لحظه‌ای از حافظه‌ی LiveMonitor (آخرین داده‌ی هر فیدر از RabbitMQ) خوانده می‌شوند،
-نه از InfluxDB؛ پس پاسخ سریع است و با هر Polling به‌روز می‌شود.
-"""
 from collections import Counter
 from typing import Dict, List
 

@@ -1,17 +1,3 @@
-"""
-پایش زنده‌ی بار: برای هر داده‌ی Modbus که از RabbitMQ می‌رسد، وضعیت فیدر و لینک‌هایی که
-این فیدر جریانشان را اندازه می‌گیرد محاسبه می‌شود:
-
-    درصد بار = جریان / جریان مجاز × ۱۰۰
-    کمتر از warning_threshold (آلفا)      -> normal   (عادی)
-    بین warning_threshold و critical_threshold -> warning  (هشدار)
-    بیشتر یا مساوی critical_threshold (بتا)  -> critical (بحرانی)
-    بدون جریان مجاز تعریف‌شده                 -> unknown
-
-آستانه‌ها از تنظیمات سیستم (درصد) خوانده می‌شوند. تغییر وضعیت در دیتابیس ذخیره، روی وب‌سوکت
-تله‌متری با نوع STATUS_CHANGE اعلام و برای هشدار/بحرانی نوتیفیکیشن و ایمیل ارسال می‌شود.
-آخرین مقدار هر فیدر هم در حافظه نگه داشته می‌شود تا داشبورد بدون کوئری InfluxDB پاسخ دهد.
-"""
 import asyncio
 import logging
 import time
@@ -37,9 +23,7 @@ from main_api.modules.telemetry.ws_manager import ws_manager
 
 logger = logging.getLogger(__name__)
 
-# هر چند ثانیه اطلاعات ثابت فیدرها/لینک‌ها و آستانه‌ها از دیتابیس تازه می‌شود
 META_REFRESH_SECONDS = 60
-# داده‌ی زنده‌ای که از این قدیمی‌تر باشد در داشبورد «کهنه» (stale) علامت می‌خورد
 STALE_AFTER_SECONDS = 60
 
 STATUS_LABELS = {STATUS_NORMAL: "عادی", STATUS_WARNING: "هشدار", STATUS_CRITICAL: "بحرانی", STATUS_UNKNOWN: "نامشخص"}
@@ -47,13 +31,13 @@ STATUS_LABELS = {STATUS_NORMAL: "عادی", STATUS_WARNING: "هشدار", STATUS
 
 @dataclass
 class _Entity:
-    kind: str                     # feeder | link
+    kind: str
     id: int
     name: str
     rated_current: Optional[float]
     load_status: str
     post_id: Optional[int] = None
-    role: Optional[str] = None    # consumer | producer (فقط فیدر)
+    role: Optional[str] = None
     feeder_id: Optional[int] = None
 
 
@@ -68,7 +52,6 @@ class _StatusChange:
 
 def evaluate_load(current: Optional[float], rated_current: Optional[float],
                   warning_pct: float, critical_pct: float) -> Tuple[str, Optional[float]]:
-    """وضعیت و درصد بار بر اساس جریان و جریان مجاز."""
     if current is None or not rated_current or rated_current <= 0:
         return STATUS_UNKNOWN, None
     percent = round(abs(float(current)) / float(rated_current) * 100, 1)
@@ -92,7 +75,6 @@ class LiveMonitor:
     _last_alert: Dict[Tuple[str, int, str], float] = field(default_factory=dict)
     _lock: asyncio.Lock = field(default_factory=asyncio.Lock)
 
-    # ---------- اطلاعات ثابت ----------
     async def refresh(self, force: bool = False) -> None:
         if not force and time.monotonic() - self._loaded_at < META_REFRESH_SECONDS:
             return
@@ -124,12 +106,9 @@ class LiveMonitor:
             self._loaded_at = time.monotonic()
 
     def invalidate(self) -> None:
-        """بعد از تغییر فیدر/لینک/تنظیمات، دفعه‌ی بعد اطلاعات دوباره خوانده شود."""
         self._loaded_at = 0.0
 
-    # ---------- پردازش داده‌ی زنده ----------
     async def on_metric(self, payload: dict) -> dict:
-        """داده‌ی خام فیدر را با وضعیت بار غنی می‌کند و تغییر وضعیت‌ها را اعمال می‌کند."""
         feeder_id = int(payload["feeder_id"])
         await self.refresh()
         if feeder_id not in self.feeders:
@@ -213,7 +192,6 @@ class LiveMonitor:
                                  source_type=entity.kind, source_id=entity.id, metadata=metadata,
                                  email_html=email_html)
 
-    # ---------- خروجی برای داشبورد ----------
     def snapshot(self) -> Dict[int, dict]:
         now = datetime.now(timezone.utc)
         result = {}
@@ -224,7 +202,6 @@ class LiveMonitor:
 
 
 def role_of(feeder: Feeder) -> Optional[str]:
-    """نوع فیدر؛ اگر روی فیدر تعریف نشده باشد از نوع پست آن گرفته می‌شود."""
     for value in (feeder.feeder_type, feeder.post.post_type if feeder.post else None):
         try:
             role = normalize_energy_role(value)

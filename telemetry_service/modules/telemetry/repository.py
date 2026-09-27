@@ -15,7 +15,6 @@ class TelemetryRepository:
 
     @staticmethod
     def _format_time(dt: datetime) -> str:
-        """تبدیل تاریخ به فرمت استاندارد RFC3339 برای InfluxDB"""
         if dt.tzinfo is None:
             dt = dt.replace(tzinfo=timezone.utc)
         return dt.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -74,7 +73,6 @@ class TelemetryRepository:
             client = influx_manager.get_client()
             query_api = client.query_api()
 
-            # اضافه شدن group() قبل از pivot برای ادغام تمام فیلدها در یک رکورد
             query = f'''
             from(bucket: "{settings.INFLUX_BUCKET}")
               |> range(start: -30d)

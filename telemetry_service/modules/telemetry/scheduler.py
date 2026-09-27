@@ -5,20 +5,14 @@ from datetime import datetime, timezone
 import httpx
 import aio_pika
 
-# ایمپورت تنظیمات و ماژول‌ها
 from core.config import settings
 from modules.telemetry.modbus_client import ModbusReader
 
-# تنظیمات لاگر
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 logger = logging.getLogger("telemetry_scheduler")
 
 
 def apply_register_config(raw: dict, scales: dict, signed: list) -> dict:
-    """
-    تبدیل مقدار خام رجیسترهای ۱۶ بیتی به مقدار واقعی:
-    پارامترهای علامت‌دار به int16 (مثلاً 65436 -> -100) و سپس ضرب در ضریب (مثلاً 2305 × 0.1 = 230.5 ولت).
-    """
     values = {}
     for key, value in raw.items():
         if key in signed and value > 32767:
@@ -28,25 +22,21 @@ def apply_register_config(raw: dict, scales: dict, signed: list) -> dict:
 
 
 def _internal_headers() -> dict:
-    """هدر احراز هویت اندپوینت‌های داخلی main_api (باید با INTERNAL_API_KEY در main_api یکی باشد)."""
     return {"X-Internal-API-Key": settings.INTERNAL_API_KEY}
 
 
 class TelemetryScheduler:
     def __init__(self):
         self.is_running = False
-        # نگهداری تسک‌ها و تنظیمات بر اساس feeder_id
         self._tasks: dict[int, asyncio.Task] = {}
         self._task_configs: dict[int, dict] = {}
         self._sync_task: asyncio.Task | None = None
 
-        # مدیریت اتصال پایدار RabbitMQ
         self._rmq_connection: aio_pika.abc.AbstractRobustConnection | None = None
         self._rmq_channel: aio_pika.abc.AbstractChannel | None = None
         self._telemetry_exchange: aio_pika.abc.AbstractExchange | None = None
 
     async def _init_rabbitmq(self):
-        """راه‌اندازی اتصال و Exchange در RabbitMQ"""
         try:
             rabbitmq_url = getattr(settings, "RABBITMQ_URL", "amqp://guest:guest@rabbitmq:5672/")
             exchange_name = getattr(settings, "TELEMETRY_EXCHANGE", "telemetry_events")
@@ -65,7 +55,6 @@ class TelemetryScheduler:
             raise
 
     async def _publish_event(self, routing_key: str, payload: dict):
-        """ارسال امن پیام به Exchange در RabbitMQ"""
         if not self._telemetry_exchange:
             logger.error("RabbitMQ exchange is not ready. Message dropped.")
             return
@@ -82,7 +71,6 @@ class TelemetryScheduler:
             logger.error(f"❌ Error publishing event to {routing_key}: {e}")
 
     async def handle_success(self, feeder_id: int, values: dict):
-        """پردازش ۵ پارامتر الکتریکی و ارسال پیام Event به RabbitMQ برای ذخیره‌سازی سری‌زمانی"""
         active_power_val = float(values.get('active_power', 0.0))
         reactive_power_val = float(values.get('reactive_power', 0.0))
         voltage_val = float(values.get('voltage', 0.0))
@@ -109,16 +97,13 @@ class TelemetryScheduler:
             "timestamp": now_utc
         }
 
-        # انتشار داده برای مصرف در timeseries_storage_service
         await self._publish_event(routing_key="telemetry.metric", payload=payload)
 
     async def handle_failure(self, feeder_id: int, current_failures: int, error_msg: str):
-        """ارسال رویداد خطا/هشدار در صورت عدم پاسخگویی تجهیز به صف رخدادها"""
         logger.warning(
             f"⚠️ Feeder ID {feeder_id} failed to respond. Failures: {current_failures} | Error: {error_msg}"
         )
 
-        # انتشار لاگ یا آلرت تجهیز برای سیستم مانیتورینگ/لاگینگ
         alert_payload = {
             "feeder_id": feeder_id,
             "failures_count": current_failures,
@@ -130,11 +115,6 @@ class TelemetryScheduler:
     async def report_feeder_status(
             self, feeder_id: int, is_online: bool, consecutive_failures: int, status_changed: bool
     ):
-        """
-        گزارش وضعیت اتصال فیدر (آنلاین/آفلاین) به main_api جهت ذخیره در دیتابیس
-        (فیلدهای is_online/consecutive_failures/last_success روی جدول feeders) و
-        در صورت تغییر واقعی وضعیت، ثبت لاگ در سیستم لاگینگ مرکزی از طریق main_api.
-        """
         main_api_url = getattr(settings, "MAIN_API_URL", "http://main_api:8000").rstrip("/")
         url = f"{main_api_url}/telemetry/feeder-status"
         payload = {
@@ -162,23 +142,8 @@ class TelemetryScheduler:
             offline_retry_interval: int = 300, initial_is_online: bool = True,
             register_scales: dict | None = None, signed_registers: list | None = None,
     ):
-        """
-        پایش مداوم و ناهمگام یک فیدر با هندل کردن کامل خطاها.
-        max_failures/modbus_timeout/modbus_retry_count/offline_retry_interval از
-        تنظیمات سراسری سیستم main_api (system_settings) از طریق
-        /telemetry/active-feeders دریافت می‌شوند و دیگر مقدار ثابت محلی این
-        سرویس نیستند.
-
-        منطق آنلاین/آفلاین: پس از رسیدن خطاهای متوالی به max_failures، فیدر
-        «آفلاین» علامت‌گذاری می‌شود (is_online=False روی main_api) و پایش با
-        فاصله‌ی کندتر offline_retry_interval ادامه می‌یابد تا در صورت بازگشت
-        دستگاه، بلافاصله دوباره «آنلاین» علامت‌گذاری شود. توجه: این وضعیت کاملاً
-        از is_active (کلید دستی ادمین برای فعال/غیرفعال‌سازی پایش) مستقل است،
-        پس هیچ‌گاه پایش این فیدر به‌طور کامل متوقف نمی‌شود.
-        """
         reader = ModbusReader(host=device_ip, port=port, timeout=modbus_timeout, retries=modbus_retry_count)
         current_fails = 0
-        # فرض بر این است که فیدر با وضعیت فعلی ذخیره‌شده در main_api شروع به کار می‌کند
         is_online = initial_is_online
 
         try:
@@ -205,7 +170,6 @@ class TelemetryScheduler:
                         )
 
                         if not is_online:
-                            # بازگشت فیدر پس از دوره‌ی آفلاین بودن
                             is_online = True
                             await self.report_feeder_status(feeder_id, True, 0, status_changed=True)
                     else:
@@ -216,7 +180,6 @@ class TelemetryScheduler:
                             is_online = False
                             await self.report_feeder_status(feeder_id, False, current_fails, status_changed=True)
                         elif not is_online:
-                            # فیدر از قبل آفلاین بود؛ فقط شمارنده را بدون ثبت لاگ تکراری به‌روز کن
                             await self.report_feeder_status(feeder_id, False, current_fails, status_changed=False)
 
                 except asyncio.CancelledError:
@@ -231,8 +194,6 @@ class TelemetryScheduler:
                     elif not is_online:
                         await self.report_feeder_status(feeder_id, False, current_fails, status_changed=False)
 
-                # پس از آفلاین شدن، فاصله‌ی تست بعدی به‌جای polling_interval معمولی،
-                # از تنظیمات قابل‌تغییر توسط ادمین (پیش‌فرض ۵ دقیقه) استفاده می‌کند
                 if not is_online:
                     await asyncio.sleep(offline_retry_interval)
                 else:
@@ -244,7 +205,6 @@ class TelemetryScheduler:
                 await reader.close()
 
     async def get_active_feeders_from_api(self) -> list[dict]:
-        """واکشی لیست فیدرهای فعال از main_api"""
         main_api_url = getattr(settings, "MAIN_API_URL", "http://main_api:8000").rstrip("/")
         url = f"{main_api_url}/telemetry/active-feeders"
         try:
@@ -260,9 +220,8 @@ class TelemetryScheduler:
         return []
 
     async def _sync_feeders_loop(self):
-        """حلقه همگام‌سازی دوره‌ای فیدرهای فعال بدون نیاز به ری‌استارت سرویس"""
         default_interval = getattr(settings, "POLLING_INTERVAL", 300)
-        sync_interval = getattr(settings, "FEEDER_SYNC_INTERVAL", 10)  # بررسی هر ۱۰ ثانیه
+        sync_interval = getattr(settings, "FEEDER_SYNC_INTERVAL", 10)
 
         while self.is_running:
             try:
@@ -280,8 +239,6 @@ class TelemetryScheduler:
                     )
                     interval = feeder.get("scan_interval") or default_interval
 
-                    # مقادیر تنظیمات سراسری سیستم (system_settings در main_api) که از طریق
-                    # /telemetry/active-feeders برای هر فیدر ارسال می‌شوند
                     max_failures = feeder.get("max_failures", 3)
                     modbus_timeout = feeder.get("modbus_timeout", 3)
                     modbus_retry_count = feeder.get("modbus_retry_count", 3)
@@ -295,7 +252,6 @@ class TelemetryScheduler:
 
                     current_active_ids.add(feeder_id)
 
-                    # رجیستر تنظیم‌شده‌ی هر فیدر؛ اگر ادمین مقداری نگذاشته باشد آدرس پیش‌فرض ۰ تا ۴
                     registers = {
                         name: feeder.get(f"{name}_register")
                         if feeder.get(f"{name}_register") is not None else default
@@ -319,14 +275,12 @@ class TelemetryScheduler:
                         "signed_registers": signed_registers,
                     }
 
-                    # ۱. ری‌استارت تسک در صورت تغییر کانفیگ (شامل تغییر تنظیمات سیستم)
                     if feeder_id in self._tasks:
                         if self._task_configs.get(feeder_id) != config_fingerprint:
                             logger.info(f"🔄 Config changed for Feeder ID {feeder_id}. Restarting task...")
                             self._tasks[feeder_id].cancel()
                             self._tasks.pop(feeder_id, None)
 
-                    # ۲. شروع تسک جدید یا بازنشانی‌شده
                     if feeder_id not in self._tasks or self._tasks[feeder_id].done():
                         task = asyncio.create_task(
                             self.poll_device(
@@ -348,7 +302,6 @@ class TelemetryScheduler:
                             f"offline_retry_interval={offline_retry_interval}s]."
                         )
 
-                # ۳. حذف فیدرهای غیرفعال شده
                 stale_ids = set(self._tasks.keys()) - current_active_ids
                 for stale_id in stale_ids:
                     logger.info(f"➖ Feeder ID {stale_id} is no longer active. Stopping task...")
@@ -363,14 +316,12 @@ class TelemetryScheduler:
             await asyncio.sleep(sync_interval)
 
     async def start(self):
-        """راه‌اندازی کامل سرویس اسکجولر و اتصال به پیام‌رسان"""
         self.is_running = True
         logger.info("🚀 Starting Dynamic Telemetry Scheduler...")
         await self._init_rabbitmq()
         self._sync_task = asyncio.create_task(self._sync_feeders_loop())
 
     async def stop(self):
-        """توقف ایمن و بستن تسک‌ها و کانکشن‌های باز"""
         logger.info("🛑 Stopping Telemetry Scheduler...")
         self.is_running = False
 

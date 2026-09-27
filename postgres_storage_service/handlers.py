@@ -4,12 +4,10 @@ from datetime import datetime
 from sqlalchemy import delete, update, inspect
 from core.database import AsyncSessionLocal
 
-# ۱. مدل User به لیست ایمپورت‌ها اضافه شد
 from models import Location, Post, Feeder, Link, User
 
 logger = logging.getLogger("postgres_storage")
 
-# ۲. مدل user و users به مپینگ اضافه شدند
 MODEL_MAPPING = {
     "location": Location,
     "locations": Location,
@@ -25,26 +23,20 @@ MODEL_MAPPING = {
 
 
 def sanitize_data_for_model(model_class, data: Dict[str, Any]) -> Dict[str, Any]:
-    """
-    فیلتر کردن کلیدهای نامعتبر و تصحیح فیلدهای خاص مثل metadata و datetime
-    """
     if not isinstance(data, dict):
         return {}
 
     sanitized = {}
 
-    # فیلدهای معتبر تعریف شده روی مدل
     mapper = inspect(model_class)
     valid_columns = {col.key for col in mapper.column_attrs}
 
-    # نگاشت نام فیلد در صورتی که دیتابیس با نام پایتون تفاوت داشته باشد
     payload_copy = data.copy()
     if "metadata" in payload_copy and "metadata_info" in valid_columns:
         payload_copy["metadata_info"] = payload_copy.pop("metadata")
 
     for key, value in payload_copy.items():
         if key in valid_columns:
-            # تبدیل خودکار رشته تاریخ ISO به شیء datetime در صورت نیاز
             col_type = mapper.column_attrs[key].columns[0].type.python_type
             if col_type is datetime and isinstance(value, str):
                 try:
@@ -57,10 +49,6 @@ def sanitize_data_for_model(model_class, data: Dict[str, Any]) -> Dict[str, Any]
 
 
 def _extract_id(payload: Dict[str, Any], filters: Dict[str, Any], data: Any):
-    """
-    شناسه‌ی رکورد برای update/delete. main_api برای کاربران شناسه را در سطح بالای پیام
-    (user_id) می‌فرستد؛ بدون خواندن آن، ویرایش/حذف کاربر و تغییر/بازنشانی رمز هیچ‌وقت اعمال نمی‌شد.
-    """
     for source in (filters or {}, data if isinstance(data, dict) else {}, payload):
         for key in ("id", "user_id"):
             if source.get(key):
@@ -69,9 +57,6 @@ def _extract_id(payload: Dict[str, Any], filters: Dict[str, Any], data: Any):
 
 
 async def handle_db_write_event(payload: Dict[str, Any]):
-    """
-    پردازش انواع عملیات نوشتنی روی دیتابیس بر اساس پیلود پیام
-    """
     entity_name = str(payload.get("entity", "")).lower().strip()
     raw_action = str(payload.get("action", "")).lower().strip()
     data = payload.get("data")
@@ -82,7 +67,6 @@ async def handle_db_write_event(payload: Dict[str, Any]):
         logger.error(f"Unknown entity: '{entity_name}'")
         return
 
-    # ۳. نرمال‌سازی اکشن برای پشتیبانی از حالت‌هایی مثل CREATE_USER
     if "bulk" in raw_action:
         action = "bulk_create"
     elif "create" in raw_action:
@@ -98,7 +82,6 @@ async def handle_db_write_event(payload: Dict[str, Any]):
         try:
             if action == "create":
                 clean_data = sanitize_data_for_model(model, data)
-                # حذف id در create تا خود دیتابیس auto-increment را اعمال کند
                 clean_data.pop("id", None)
 
                 instance = model(**clean_data)
@@ -126,7 +109,7 @@ async def handle_db_write_event(payload: Dict[str, Any]):
                     return
 
                 clean_data = sanitize_data_for_model(model, data)
-                clean_data.pop("id", None)  # جلوگیری از آپدیت کلید اصلی
+                clean_data.pop("id", None)
 
                 if not clean_data:
                     logger.warning(f"No valid fields to update for {entity_name} id={item_id}.")

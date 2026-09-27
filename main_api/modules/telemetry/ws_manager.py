@@ -6,13 +6,11 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-# حداکثر زمان ارسال به یک کلاینت؛ کلاینت کند نباید ارسال به بقیه را متوقف کند
 SEND_TIMEOUT_SECONDS = 5
 
 
 class ConnectionManager:
     def __init__(self):
-        # هر اتصال -> feeder_id مورد علاقه‌ی کلاینت (None یعنی داده‌ی همه‌ی فیدرها)
         self.active_connections: Dict[WebSocket, Optional[int]] = {}
 
     async def connect(self, websocket: WebSocket, feeder_id: Optional[int] = None):
@@ -32,7 +30,6 @@ class ConnectionManager:
             self.disconnect(connection)
 
     async def broadcast(self, message: dict):
-        """ارسال داده به کلاینت‌های متصل (فقط کلاینت‌هایی که همین فیدر یا همه‌ی فیدرها را خواسته‌اند)"""
         text_data = json.dumps(message, default=str)
         feeder_id = (message.get("data") or {}).get("feeder_id")
         targets = [

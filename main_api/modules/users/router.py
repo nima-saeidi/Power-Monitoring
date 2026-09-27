@@ -43,14 +43,11 @@ def get_auth_service(
     repo = UserRepository(db)
     return AuthService(repository=repo, publisher=publisher, db=db)
 
-# ==========================================
-# User Management Routes
-# ==========================================
 
 @user_router.get("", response_model=list[UserResponse], summary="List All Users (Admin / Technical Operator)")
 async def get_all_users(
     service: UserService = Depends(get_user_service),
-    current_user = Depends(require_tech_or_admin)  # کاربر عادی به ایمیل/تلفن بقیه دسترسی ندارد
+    current_user = Depends(require_tech_or_admin)
 ):
     return await service.get_all_users()
 
@@ -60,11 +57,8 @@ async def change_password(
     request: Request,
     data: ChangePasswordRequest,
     service: AuthService = Depends(get_auth_service),
-    current_user = Depends(require_any_user)  # کاربر یا ادمین واردشده
+    current_user = Depends(require_any_user)
 ):
-    """
-    تغییر رمز عبور کاربر/ادمین جاری با دریافت رمز قبلی و رمز جدید
-    """
     return await service.change_password(user_id=current_user.id, data=data)
 
 @user_router.get("/{user_id}", response_model=UserResponse, summary="Get Single User Info (Admin / Operator / Self)")
@@ -73,7 +67,6 @@ async def get_user(
     service: UserService = Depends(get_user_service),
     current_user = Depends(require_any_user)
 ):
-    # کاربر عادی فقط اطلاعات خودش را می‌بیند
     if current_user.role == RoleEnum.USER and current_user.id != user_id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="شما مجوز لازم برای انجام این عملیات را ندارید.")
     return await service.get_user_by_id(user_id)
@@ -82,7 +75,7 @@ async def get_user(
 async def create_user(
     data: UserCreate,
     service: UserService = Depends(get_user_service),
-    current_admin = Depends(require_admin)  # فقط ادمین
+    current_admin = Depends(require_admin)
 ):
     return await service.create_user(data, current_user=current_admin)
 
@@ -91,7 +84,7 @@ async def update_user(
     user_id: int,
     data: UserUpdate,
     service: UserService = Depends(get_user_service),
-    current_admin = Depends(require_admin)  # فقط ادمین
+    current_admin = Depends(require_admin)
 ):
     return await service.update_user(user_id, data, current_user=current_admin)
 
@@ -99,24 +92,19 @@ async def update_user(
 async def delete_user(
     user_id: int,
     service: UserService = Depends(get_user_service),
-    current_admin = Depends(require_admin)  # فقط ادمین
+    current_admin = Depends(require_admin)
 ):
     return await service.delete_user(user_id, current_user=current_admin)
 
 @user_router.get("/pages/list", summary="List panel pages that can be granted to an account")
 async def get_pages(current_user=Depends(require_any_user)):
-    """کلید صفحه‌ها برای فیلد allowed_pages کاربر (ادمین همیشه به همه دسترسی دارد)."""
     return {"pages": [{"value": key, "label": label} for key, label in PAGES.items()]}
 
 
 @user_router.get("/roles/list", summary="List All Available Roles (All Users)")
 async def get_roles(
-    current_user = Depends(require_any_user) # ادمین، اپراتور فنی و کاربر عادی
+    current_user = Depends(require_any_user)
 ):
-    """
-    Returns the list of roles defined in the system for use in the frontend
-    (e.g. in the user create/edit forms).
-    """
     roles = [
         {"value": RoleEnum.ADMIN.value, "label": "System Admin"},
         {"value": RoleEnum.TECHNICAL_OPERATOR.value, "label": "Technical Operator"},
@@ -135,7 +123,6 @@ async def forgot_password(
 ):
     return await service.forgot_password(data, background_tasks)
 
-# ۲. مرحله دوم: تایید کد ارسالی
 @user_router.post("/verify-code", response_model=VerifyCodeResponse, status_code=status.HTTP_200_OK, summary="Verify OTP Code")
 @limiter.limit(VERIFY_CODE_LIMIT)
 async def verify_code(
@@ -145,7 +132,6 @@ async def verify_code(
 ):
     return await service.verify_reset_code(data)
 
-# ۳. مرحله سوم: ثبت رمز عبور جدید
 @user_router.post("/reset-password", status_code=status.HTTP_200_OK, summary="Set New Password")
 @limiter.limit(RESET_PASSWORD_LIMIT)
 async def reset_password(

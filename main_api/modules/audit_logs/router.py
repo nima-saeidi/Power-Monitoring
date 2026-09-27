@@ -9,7 +9,6 @@ from main_api.modules.audit_logs.schemas import (
     UserActivityResponse, DeviceTestLogListResponse
 )
 
-# ایمپورت کردن وابستگی‌های سرویس که در مرحله قبل ساختیم
 from main_api.modules.audit_logs.dependencies import (
     get_audit_log_service,
     get_command_log_service,
@@ -19,9 +18,6 @@ from main_api.modules.audit_logs.services import (
     AuditLogService, CommandLogService, DeviceTestLogService
 )
 
-# ==========================================
-# Audit Logs Router
-# ==========================================
 router = APIRouter(prefix="/audit-logs", tags=["Audit Logs"], dependencies=[Depends(require_page("audit_logs"))])
 
 @router.get("/", response_model=AuditLogListResponse)
@@ -49,7 +45,6 @@ async def get_audit_log_filters(
         service: AuditLogService = Depends(get_audit_log_service),
         current_user: User = Depends(require_tech_or_admin)
 ):
-    """لیست مقادیر یکتای سرویس‌ها و اکشن‌ها برای ساخت کشوی فیلتر در پنل ادمین"""
     return await service.get_filter_options()
 
 
@@ -83,9 +78,6 @@ async def get_user_activity(
     return await service.get_user_activity(user_id, days)
 
 
-# ==========================================
-# Command Logs Router
-# ==========================================
 command_router = APIRouter(prefix="/command-logs", tags=["Command Logs"], dependencies=[Depends(require_page("audit_logs"))])
 
 @command_router.get("/", response_model=CommandLogListResponse)
@@ -114,9 +106,6 @@ async def get_failed_commands(
     return await service.get_failed_commands(hours)
 
 
-# ==========================================
-# Device Test Logs Router
-# ==========================================
 test_log_router = APIRouter(prefix="/test-logs", tags=["Device Test Logs"], dependencies=[Depends(require_page("audit_logs"))])
 
 @test_log_router.get("/", response_model=DeviceTestLogListResponse)

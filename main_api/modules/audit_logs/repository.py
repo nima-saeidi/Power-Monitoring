@@ -3,7 +3,6 @@ from datetime import datetime, timedelta
 from sqlalchemy import select, and_, or_, func, desc
 from sqlalchemy.ext.asyncio import AsyncSession
 
-# فرض بر این است که مدل‌ها در همین ماژول قرار دارند
 from main_api.modules.audit_logs.models import AuditLog, CommandLog, DeviceTestLog
 from main_api.core.logging import audit_logger
 
@@ -49,7 +48,6 @@ class AuditLogRepository:
         await db.commit()
         await db.refresh(audit_log)
 
-        # ثبت در فایل لاگ سیستم برای داشتن بکاپ فایل متنی
         status_str = "SUCCESS" if success else "FAILED"
         audit_logger.info(
             f"AUDIT | {status_str} | User: {username} | Action: {action} | "
@@ -263,7 +261,6 @@ class CommandLogRepository:
 
 
 class DeviceTestLogRepository:
-    """اضافه شده جهت ذخیره و استخراج نتایج Ping و Connection Test"""
 
     @staticmethod
     async def create(

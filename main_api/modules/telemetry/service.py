@@ -16,7 +16,6 @@ from main_api.modules.telemetry.ws_manager import ws_manager
 from main_api.modules.notifications.models import NotificationType, NotificationPriority
 from main_api.modules.notifications.alerts import dispatch_alert
 
-# ایمپورت سیستم Audit Logging
 from main_api.modules.audit_logs.services import send_audit_log
 
 
@@ -25,10 +24,6 @@ _UNIT_SECONDS = {"s": 1, "m": 60, "h": 3600, "d": 86400, "w": 604800}
 
 
 def parse_time(value: str, now: Optional[datetime] = None) -> datetime:
-    """
-    تبدیل زمان ورودی کاربر به datetime: «now()»، زمان نسبی مثل «-24h» / «-7d» یا ISO.
-    (میکروسرویس تله‌متری start_time/end_time از نوع datetime می‌خواهد.)
-    """
     now = now or datetime.now(timezone.utc)
     text = (value or "").strip()
     if text in ("", "now()", "now"):
@@ -44,12 +39,10 @@ def parse_time(value: str, now: Optional[datetime] = None) -> datetime:
 
 
 def internal_headers() -> Dict[str, str]:
-    """telemetry_service همه‌ی اندپوینت‌هایش را پشت کلید مشترک INTERNAL_API_KEY گذاشته است."""
     return {"X-Internal-API-Key": settings.INTERNAL_API_KEY}
 
 
 async def telemetry_request(method: str, path: str, *, params=None, json=None, timeout: float = 10.0) -> Any:
-    """درخواست به میکروسرویس تله‌متری با تبدیل خطاها به HTTPException مناسب."""
     url = f"{settings.TELEMETRY_SERVICE_URL.rstrip('/')}{path}"
     try:
         async with httpx.AsyncClient(timeout=timeout) as client:
@@ -82,9 +75,6 @@ class TelemetryService:
         else:
             self.repo = None
 
-    # ==========================================
-    # ۱. دریافت لیست فیدرهای فعال جهت شروع Polling
-    # ==========================================
     async def get_active_feeders(self) -> List[ActiveFeederConfig]:
         if not self.repo:
             raise ValueError("AsyncSession is required for database operations.")
@@ -92,7 +82,6 @@ class TelemetryService:
         try:
             return await self.repo.get_active_feeders()
         except Exception as e:
-            # ثبت لاگ در صورت بروز خطای دیتابیس هنگام دریافت تنظیمات فیدرها
             asyncio.create_task(send_audit_log(
                 action="GET_ACTIVE_FEEDERS_ERROR",
                 username="System",
@@ -102,9 +91,6 @@ class TelemetryService:
             ))
             raise
 
-    # ==========================================
-    # ۱ب. دریافت گزارش وضعیت اتصال فیدر از telemetry_service (آنلاین/آفلاین)
-    # ==========================================
     async def report_feeder_status(self, data: FeederStatusUpdate) -> None:
         if not self.repo:
             raise ValueError("AsyncSession is required for database operations.")
@@ -118,8 +104,6 @@ class TelemetryService:
         if not feeder:
             return
 
-        # فقط در لحظه‌ی واقعی تغییر وضعیت (نه هر Polling) لاگ ثبت می‌شود تا
-        # سیستم لاگینگ با پیام‌های تکراری پر نشود.
         if data.status_changed:
             action = "FEEDER_ONLINE" if data.is_online else "FEEDER_OFFLINE"
             description = (
@@ -141,13 +125,6 @@ class TelemetryService:
                 consecutive_failures=data.consecutive_failures,
             ))
 
-            # فقط در لحظه‌ی واقعی قطعی فیدر (نه هر بار Polling)، به کاربرانی که
-            # ادمین برایشان ارسال نوتیفیکیشن را فعال کرده، ایمیل هشدار ارسال می‌شود.
-            # ارسال واقعی ایمیل توسط notification_service (از طریق صف notification_events)
-            # انجام می‌شود؛ main_api فقط رویداد را منتشر می‌کند.
-            # هشدار قطعی/اتصال مجدد: نوتیفیکیشن برای کاربران فعال و در قطعی، ایمیل به کاربرانی که
-            # دریافت هشدار برایشان فعال است. await می‌شود (نه create_task) چون از همان AsyncSession
-            # درخواست جاری استفاده می‌کند و AsyncSession برای همزمانی امن نیست.
             await self._alert_feeder_status(feeder, data)
 
     async def _alert_feeder_status(self, feeder, data: FeederStatusUpdate) -> None:
@@ -175,9 +152,6 @@ class TelemetryService:
             email_html=build_feeder_offline_email_html(feeder.name, feeder.id, data.consecutive_failures),
         )
 
-    # ==========================================
-    # ۲. متد ذخیره دیتابیس محلی و برادکست وب‌سوکت
-    # ==========================================
     async def add_telemetry_data(self, data: TelemetryCreate) -> TelemetryResponse:
         if not self.repo:
             raise ValueError("AsyncSession is required for database operations.")
@@ -195,7 +169,6 @@ class TelemetryService:
 
             return record
         except Exception as e:
-            # فقط حالت خطا لاگ می‌شود تا از پر شدن دیتابیس حسابرسی با رکوردهای موفق جلوگیری شود
             feeder_id = data.feeder_id if hasattr(data, 'feeder_id') else 'نامشخص'
             asyncio.create_task(send_audit_log(
                 action="TELEMETRY_INGESTION_ERROR",
@@ -206,9 +179,6 @@ class TelemetryService:
             ))
             raise
 
-    # ==========================================
-    # ۳. ارتباط Proxy با میکروسرویس تلمتری (InfluxDB)
-    # ==========================================
     @staticmethod
     async def get_latest_telemetry(feeder_id: str) -> Dict[str, Any]:
         url = f"{settings.TELEMETRY_SERVICE_URL.rstrip('/')}/telemetry/latest/{feeder_id}"
@@ -225,7 +195,6 @@ class TelemetryService:
             except httpx.RequestError as exc:
                 error_msg = f"ارتباط با میکروسرویس تلمتری برقرار نشد: {str(exc)}"
 
-                # ثبت لاگ قطعی ارتباط با میکروسرویس (سطح بحرانی)
                 asyncio.create_task(send_audit_log(
                     action="TELEMETRY_MICROSERVICE_UNAVAILABLE",
                     username="System",
@@ -247,11 +216,6 @@ class TelemetryService:
             window: str = "1m",
             timeout: float = 10.0
     ) -> List[Dict[str, Any]]:
-        """
-        نکته کارایی: برای گزارش‌های بزرگ (بازه‌های زمانی طولانی/window ریز) کوئری
-        InfluxDB می‌تواند بیش از timeout پیش‌فرض طول بکشد. صداکننده‌های گزارش‌گیری
-        (export) باید timeout بزرگ‌تری پاس بدهند تا با خطای انقضای اتصال شکست نخورند.
-        """
         url = f"{settings.TELEMETRY_SERVICE_URL.rstrip('/')}/telemetry/history/{feeder_id}"
         params = time_range_params(start, stop, window)
 
@@ -287,7 +251,6 @@ class TelemetryService:
             stop: str = "now()",
             window: str = "5m"
     ) -> Dict[str, Any]:
-        """پروکسی دریافت داده‌های تفکیک‌شده نمودار از میکروسرویس تلمتری"""
         url = f"{settings.TELEMETRY_SERVICE_URL.rstrip('/')}/telemetry/chart/{feeder_id}"
         params = time_range_params(start, stop, window)
 
@@ -316,9 +279,6 @@ class TelemetryService:
                     detail=error_msg
                 )
 
-    # ==========================================
-    # ۴. انرژی، پیش‌بینی و فرمان (پروکسی به میکروسرویس تله‌متری)
-    # ==========================================
     @staticmethod
     async def get_energy(feeder_ids: List[int], start: str, stop: str, window: Optional[str] = None,
                          timeout: float = 30.0) -> Dict[str, Any]:

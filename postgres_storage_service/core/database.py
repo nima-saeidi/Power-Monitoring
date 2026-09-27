@@ -1,6 +1,5 @@
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
 from sqlalchemy.orm import declarative_base
-# دقت کنید: اینجا از main_api ایمپورت نمی‌کنیم، بلکه از پوشه خود سرویس است
 from core.config import settings
 
 engine = create_async_engine(

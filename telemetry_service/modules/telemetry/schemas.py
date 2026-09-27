@@ -5,9 +5,6 @@ from pydantic import BaseModel, ConfigDict, Field
 
 
 class TelemetryBase(BaseModel):
-    """
-    مدل پایه داده‌های الکتریکی فیدر.
-    """
 
     feeder_id: int = Field(
         ...,
@@ -51,9 +48,6 @@ class TelemetryBase(BaseModel):
 
 
 class TelemetryCreate(TelemetryBase):
-    """
-    مدل ورودی برای ثبت داده در InfluxDB.
-    """
 
     timestamp: Optional[datetime] = Field(
         default_factory=lambda: datetime.now(timezone.utc),
@@ -62,9 +56,6 @@ class TelemetryCreate(TelemetryBase):
 
 
 class TelemetryResponse(TelemetryBase):
-    """
-    مدل خروجی برای API، وب‌سوکت و کلاینت‌ها.
-    """
 
     timestamp: datetime = Field(
         ...,
@@ -77,9 +68,6 @@ class TelemetryResponse(TelemetryBase):
 
 
 class TelemetryReportQuery(BaseModel):
-    """
-    فیلترهای گزارش‌گیری بازه زمانی.
-    """
 
     feeder_id: int = Field(
         ...,
@@ -103,9 +91,6 @@ class TelemetryReportQuery(BaseModel):
 
 
 class DeviceAlertSchema(BaseModel):
-    """
-    مدل انتشار هشدارهای وضعیت تجهیزات.
-    """
 
     feeder_id: int = Field(
         ...,
@@ -134,9 +119,6 @@ class DeviceAlertSchema(BaseModel):
 
 
 class ChartDataPoint(BaseModel):
-    """
-    یک نقطه از داده‌های نمودار.
-    """
 
     timestamp: Union[datetime, str] = Field(
         ...,
@@ -150,9 +132,6 @@ class ChartDataPoint(BaseModel):
 
 
 class TelemetryChartResponse(BaseModel):
-    """
-    پاسخ داده‌های نمودار تله‌متری.
-    """
 
     feeder_id: int = Field(
         ...,

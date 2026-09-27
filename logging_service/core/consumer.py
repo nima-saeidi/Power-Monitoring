@@ -1,11 +1,10 @@
-# logging_service/core/consumer.py
 import json
 import logging
 import asyncio
 import aio_pika
 from core.config import settings
 from modules.services import logging_service_instance
-from modules.schemas import LogCreate  # اضافه شدن برای اعتبارسنجی
+from modules.schemas import LogCreate
 
 try:
     from pygelf import GelfUdpHandler
@@ -15,7 +14,6 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
-# ---------------- تنظیمات لاگر Graylog ----------------
 graylog_logger = logging.getLogger("graylog_audit")
 graylog_logger.setLevel(logging.INFO)
 
@@ -25,23 +23,18 @@ if GelfUdpHandler and not graylog_logger.handlers:
     )
 
 
-# ------------------------------------------------------
 
 async def process_audit_message(message: aio_pika.IncomingMessage):
-    """پردازش و ذخیره پیام دریافتی از صف در دیتابیس PostgreSQL و ارسال همزمان به Graylog"""
     async with message.process(requeue=False):
         try:
             body = message.body.decode("utf-8")
             data = json.loads(body)
 
-            # اعتبارسنجی ساختار داده با Pydantic (جلوگیری از دیتای ناقص)
             valid_log = LogCreate(**data)
             logger.info(f"Received audit log: {valid_log.action} from {valid_log.service_name}")
 
-            # ۱. ذخیره در PostgreSQL
             await logging_service_instance.save_log(valid_log)
 
-            # ۲. ارسال به Graylog
             if GelfUdpHandler:
                 details = valid_log.details or {}
                 level_str = str(details.get("severity", "INFO")).upper()
@@ -54,7 +47,6 @@ async def process_audit_message(message: aio_pika.IncomingMessage):
                 }
                 log_level = level_map.get(level_str, logging.INFO)
 
-                # فیلدهای اضافی برای پنل Graylog
                 extra_fields = {
                     "_service_name": valid_log.service_name,
                     "_audit_action": valid_log.action,
@@ -64,26 +56,18 @@ async def process_audit_message(message: aio_pika.IncomingMessage):
                     "_extra_data": str(details)
                 }
 
-                # ارسال پیام به گری‌لاگ
                 msg_text = details.get("description") or f"Audit Log: {valid_log.action}"
                 graylog_logger.log(log_level, msg_text, extra=extra_fields)
 
         except json.JSONDecodeError as jde:
             logger.error(f"Failed to decode message JSON: {jde}")
-            raise  # تا nack شود و به DLQ برود (به‌جای گم شدن بی‌صدا)
+            raise
         except Exception as e:
             logger.error(f"Error processing audit message: {e}", exc_info=True)
-            raise  # تا message.process() آن را nack کند و به logs_queue.dlq برود
+            raise
 
 
 async def _declare_logs_queue_with_dlq(connection, channel):
-    """
-    Declare صف logs_queue با x-dead-letter-exchange. توجه: producerهایی که به
-    این صف پیام می‌فرستند (main_api، notification_service) هم باید همین
-    آرگومان را با همین نام‌گذاری (f"logs_queue.dlx") declare کنند، وگرنه
-    RabbitMQ خطای PRECONDITION_FAILED می‌دهد. اگر صف از قبل با آرگومان متفاوت
-    وجود داشته باشد، بدون DLQ fallback می‌کنیم تا سرویس بالا بیاید.
-    """
     queue_name = "logs_queue"
     dlx_name = f"{queue_name}.dlx"
     dlq_name = f"{queue_name}.dlq"
@@ -107,7 +91,6 @@ async def _declare_logs_queue_with_dlq(connection, channel):
 
 
 async def start_consumer():
-    """اتصال به RabbitMQ و گوش دادن به صف audit_logs"""
     try:
         connection = await aio_pika.connect_robust(settings.RABBITMQ_URL)
         channel = await connection.channel()
@@ -120,6 +103,5 @@ async def start_consumer():
         return connection
     except Exception as e:
         logger.error(f"Failed to connect or start RabbitMQ consumer: {e}")
-        # اتصال مجدد در صورت قطعی ربیت‌ام‌کیو در زمان بوت
         await asyncio.sleep(5)
         return await start_consumer()

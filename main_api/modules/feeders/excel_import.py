@@ -1,10 +1,3 @@
-"""
-ورود یکجای ساختار شبکه از فایل اکسل: پردیس ← واحد (دانشکده) ← پست ← فیدر.
-
-- هر ردیف یک فیدر است؛ پردیس/واحد/پست بر اساس نام (و کد پست در صورت وجود) پیدا یا ساخته می‌شوند.
-- ردیف تکراری (همان فیدر در همان پست) به‌روزرسانی می‌شود، نه تکرار.
-- اول همه‌ی ردیف‌ها اعتبارسنجی می‌شوند؛ اگر حتی یک ردیف خطا داشته باشد هیچ تغییری ذخیره نمی‌شود.
-"""
 import math
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -22,7 +15,6 @@ REQUIRED_COLUMNS = ("campus_name", "post_name", "feeder_name")
 REGISTER_COLUMNS = ("active_power_register", "reactive_power_register", "voltage_register",
                     "current_register", "power_factor_register", "control_register")
 
-# ستون‌های فایل نمونه (GET /feeders/download-template) به همراه یک ردیف مثال
 TEMPLATE_ROW: Dict[str, Any] = {
     "campus_name": "پردیس اصلی", "campus_code": "C1",
     "unit_name": "دانشکده برق", "unit_code": "U1",
@@ -145,7 +137,7 @@ async def import_hierarchy(db: AsyncSession, df: pd.DataFrame) -> Dict[str, Any]
     for index, row in enumerate(df.to_dict(orient="records")):
         parsed, errors = _parse_row(row)
         if errors:
-            all_errors.append({"row": index + 2, "errors": errors})  # +2: سطر عنوان و شروع اکسل از ۱
+            all_errors.append({"row": index + 2, "errors": errors})
         rows.append(parsed)
     if all_errors:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,

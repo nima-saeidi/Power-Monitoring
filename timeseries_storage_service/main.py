@@ -16,19 +16,16 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(level
 logger = logging.getLogger("timeseries_storage_service")
 
 async def process_message(message: aio_pika.IncomingMessage):
-    # با requeue=False، پیام ناموفق nack می‌شود و چون صف با x-dead-letter-exchange
-    # declare شده، به‌جای گم شدن کامل به صف <queue>.dlq منتقل می‌شود.
     async with message.process(requeue=False):
         try:
             payload = json.loads(message.body.decode())
             await handle_telemetry_metric(payload)
         except Exception as e:
             logger.error(f"❌ Error processing message: {e}", exc_info=True)
-            raise  # تا message.process() آن را nack کند (به DLQ) نه ack بی‌صدا
+            raise
 
 
 async def _declare_main_queue_with_dlq(connection, channel, queue_name: str):
-    """مشابه توضیح در postgres_storage_service/main.py: declare صف با DLQ، با fallback امن اگر صف قبلاً بدون این آرگومان وجود داشته باشد."""
     dlx_name = f"{queue_name}.dlx"
     dlq_name = f"{queue_name}.dlq"
     try:
@@ -59,9 +56,6 @@ async def main():
     channel = await connection.channel()
     await channel.set_qos(prefetch_count=50)
 
-    # نکته: صف اول declare می‌شود (که ممکن است در صورت fallback کانال را عوض کند)
-    # و بعد Exchange با همان کانال نهایی declare می‌شود، تا exchange/queue حتماً
-    # روی یک کانال یکسان باشند و bind با خطا مواجه نشود.
     queue, channel = await _declare_main_queue_with_dlq(connection, channel, settings.TIMESERIES_QUEUE)
 
     exchange = await channel.declare_exchange(
@@ -76,7 +70,7 @@ async def main():
     logger.info(f"🚀 TimeSeries Storage Service is listening on queue: {settings.TIMESERIES_QUEUE}")
 
     try:
-        await asyncio.Future()  # اجرای نامحدود ورکر
+        await asyncio.Future()
     finally:
         await connection.close()
         await db_client.close()

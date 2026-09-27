@@ -25,10 +25,6 @@ class FeederService:
         self.broker = broker
 
     async def _publish(self, entity: str, action: str, data: dict, filters: Optional[dict] = None):
-        """
-        A helper method to publish events to RabbitMQ.
-        Automatically adds routing_key, event_id, timestamp, and entity name.
-        """
         if hasattr(data, 'model_dump'):
             data_dict = data.model_dump()
         elif hasattr(data, '_asdict'):
@@ -50,9 +46,6 @@ class FeederService:
         routing_key = f"{entity}.{action}"
         await self.broker.publish_event(routing_key=routing_key, message=event_body)
 
-    # =========================================================
-    # FEEDER SERVICES
-    # =========================================================
     async def create_feeders(self, data_input: Union[List[FeederCreate], FeederCreate],
                              background_tasks: Optional[BackgroundTasks] = None, username: Optional[str] = None):
         if not isinstance(data_input, list):
@@ -123,9 +116,6 @@ class FeederService:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Feeder not found.")
         return feeder
 
-    # =========================================================
-    # EXCEL IMPORT (پردیس ← واحد ← پست ← فیدر)
-    # =========================================================
     async def import_feeders_from_excel(self, df, background_tasks: Optional[BackgroundTasks] = None,
                                         username: Optional[str] = None):
         stats = await import_hierarchy(self.repo.db, df)

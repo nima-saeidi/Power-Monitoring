@@ -14,11 +14,6 @@ from modules.schemas import (
 
 logger = logging.getLogger(__name__)
 
-# مقادیر یکتای service_name/action روی جدولی با میلیون‌ها رکورد به‌ندرت تغییر
-# می‌کنند (فقط با اضافه شدن یک سرویس/اکشن جدید)، اما SELECT DISTINCT روی چنین
-# جدولی می‌تواند اسکن کامل و پرهزینه باشد. به همین دلیل نتیجه به مدت کوتاهی در
-# حافظه Cache می‌شود تا هر بار که پنل ادمین فیلترها را باز می‌کند، این اسکن
-# سنگین تکرار نشود.
 _FILTER_OPTIONS_CACHE_TTL_SECONDS = 300
 _filter_options_cache: dict = {"data": None, "expires_at": 0.0}
 
@@ -27,10 +22,8 @@ class LoggingService:
 
     @staticmethod
     async def save_log(log_data: LogCreate) -> AuditLog:
-        """ذخیره‌سازی پیام دریافتی و اعتبارسنجی شده از صف RabbitMQ در دیتابیس PostgreSQL"""
         async with AsyncSessionLocal() as session:
             try:
-                # استفاده مستقیم از فیلدهای مدل Pydantic
                 new_log = AuditLog(
                     service_name=log_data.service_name,
                     action=log_data.action,
@@ -79,14 +72,6 @@ class LoggingService:
 
     @staticmethod
     async def get_logs(filters: LogFilterRequest) -> LogListResponse:
-        """
-        دریافت و فیلتر لاگ‌ها از دیتابیس PostgreSQL به صورت Async.
-
-        بهینه‌سازی: به‌جای دو کوئری جدا (یکی برای شمارش کل نتایج، یکی برای واکشی
-        صفحه‌ی فعلی) که روی جدولی با میلیون‌ها رکورد دو برابر هزینه‌ی Round-trip و
-        برنامه‌ریزی کوئری دارد، از window function ``count(*) OVER()`` استفاده
-        می‌شود تا تعداد کل نتایج فیلترشده در همان کوئری واکشی صفحه محاسبه شود.
-        """
         async with AsyncSessionLocal() as session:
             total_count_col = func.count().over().label("total_count")
             query = LoggingService._apply_filters(select(AuditLog, total_count_col), filters)
@@ -108,11 +93,6 @@ class LoggingService:
 
     @staticmethod
     async def get_filter_options() -> LogFilterOptionsResponse:
-        """
-        لیست مقادیر یکتای service_name و action برای ساخت فیلترهای پنل ادمین.
-        نتیجه به مدت ۵ دقیقه Cache می‌شود (روی جدولی با میلیون‌ها رکورد،
-        SELECT DISTINCT هر بار اسکن سنگینی است و این مقادیر به‌ندرت تغییر می‌کنند).
-        """
         now = time.monotonic()
         cached = _filter_options_cache
         if cached["data"] is not None and now < cached["expires_at"]:

@@ -35,9 +35,6 @@ def get_location_service(
     return LocationService(repo=repo, broker=broker)
 
 
-# =============================================================================
-# Endpoints: Locations
-# =============================================================================
 @locations_router.post("/campus-with-subsections", response_model=LocationResponse, status_code=status.HTTP_201_CREATED,
                        summary="Create Campus and Subsections")
 async def create_campus_with_subsections(data: CampusWithSubsectionsCreate,
@@ -69,9 +66,6 @@ async def get_locations_flat(
     service: LocationService = Depends(get_location_service),
     current_user = Depends(require_any_user)
 ):
-    """
-    دریافت لیست ساده و تخت از تمام مکان‌ها بدون ساختار درختی و زیرمجموعه‌ها
-    """
     return await service.get_locations_flat(skip=skip, limit=limit)
 
 

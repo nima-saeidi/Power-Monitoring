@@ -1,9 +1,3 @@
-"""
-ارسال هشدارهای سامانه (قطعی فیدر، وضعیت هشدار/بحرانی بار و ...) در دو کانال:
-- نوتیفیکیشن درون‌برنامه‌ای برای همه‌ی کاربران فعال (پنل + وب‌سوکت /notifications/ws)
-- ایمیل برای کاربرانی که ادمین برایشان دریافت هشدار را فعال کرده (sms_notification_enabled)؛
-  طبق تصمیم پروژه به‌جای پیامک، هشدارها با ایمیل ارسال می‌شوند.
-"""
 import asyncio
 from typing import Any, Dict, Optional
 
@@ -29,7 +23,6 @@ async def dispatch_alert(
         metadata: Optional[Dict[str, Any]] = None,
         email_html: Optional[str] = None,
 ) -> None:
-    """ثبت نوتیفیکیشن برای کاربران فعال و (اگر email_html داده شود) ارسال ایمیل هشدار."""
     user_repo = UserRepository(db)
     try:
         user_ids = [u.id for u in await user_repo.get_all() if u.is_active]

@@ -1,9 +1,3 @@
-"""
-محاسبات تحلیلی روی داده‌های InfluxDB: انرژی (انتگرال توان) و پیش‌بینی ساعتی توان.
-
-واحدها: توان در InfluxDB به همان واحدی ذخیره می‌شود که دستگاه می‌دهد (پیش‌فرض kW / kVAR)،
-پس انرژی خروجی kWh / kVARh است.
-"""
 import logging
 import os
 from collections import defaultdict
@@ -17,16 +11,10 @@ from core.database import influx_manager
 logger = logging.getLogger(__name__)
 
 ENERGY_FIELDS = ("active_power", "reactive_power")
-# منطقه‌ی زمانی برای الگوی ساعتی مصرف (ساعت ۸ صبح تهران، نه UTC)
 LOCAL_TZ = ZoneInfo(os.getenv("TZ") or "Asia/Tehran")
 
 
 def flux_location() -> str:
-    """
-    پنجره‌های ساعتی/روزانه‌ی Flux باید با ساعت محلی هم‌تراز باشند؛ تهران UTC+3:30 است و بدون این،
-    هر پنجره‌ی ساعتی نیمی از دو ساعت محلی را مخلوط و پنجره‌ی روزانه ساعت ۳:۳۰ بامداد قطع می‌شد.
-    آفست فعلی در پایتون (tzdata) حساب می‌شود، چون InfluxDB ممکن است پایگاه منطقه‌ی زمانی نداشته باشد.
-    """
     minutes = int(datetime.now(LOCAL_TZ).utcoffset().total_seconds() // 60)
     return f"timezone.fixed(offset: {minutes}m)"
 
@@ -39,10 +27,6 @@ def _feeder_filter(feeder_ids: List[int]) -> str:
 async def get_energy(
         feeder_ids: List[int], start_time: datetime, end_time: datetime, window: Optional[str] = None
 ) -> Dict[int, dict]:
-    """
-    انرژی اکتیو (kWh) و راکتیو (kVARh) هر فیدر در بازه = انتگرال توان بر حسب ساعت.
-    با window (مثلاً 1h یا 1d) سری زمانی انرژی هر بازه هم برگردانده می‌شود.
-    """
     fields = ", ".join(f'"{f}"' for f in ENERGY_FIELDS)
     base = f'''
     import "timezone"
@@ -83,12 +67,6 @@ async def get_energy(
 
 
 async def get_forecast(feeder_id: int, hours: int = 24, history_days: int = 7) -> dict:
-    """
-    پیش‌بینی ساعتی توان اکتیو و راکتیو برای «hours» ساعت آینده با روش میانگین فصلی ساعتی:
-    مقدار هر ساعت = میانگین همان ساعت از شبانه‌روز در «history_days» روز گذشته.
-    (مصرف برق دانشگاه الگوی روزانه‌ی تکرارشونده دارد؛ اگر بعداً API پیش‌بینی خارجی در دسترس
-    قرار گرفت، فقط همین تابع جایگزین می‌شود و قرارداد خروجی ثابت می‌ماند.)
-    """
     fields = ", ".join(f'"{f}"' for f in ENERGY_FIELDS)
     query = f'''
     import "timezone"
@@ -105,7 +83,6 @@ async def get_forecast(feeder_id: int, hours: int = 24, history_days: int = 7) -
             value = record.get_value()
             if value is None:
                 continue
-            # timeSrc: "_start" -> زمان هر رکورد شروع پنجره است (پنجره‌ی ناقص ساعت جاری هم درست حساب می‌شود)
             hour = record.get_time().astimezone(LOCAL_TZ).hour
             profile[record.get_field()][hour].append(float(value))
 

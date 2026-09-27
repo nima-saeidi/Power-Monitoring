@@ -1,4 +1,3 @@
-# test_publisher.py
 import pika
 import json
 from datetime import datetime, timezone
@@ -7,7 +6,7 @@ connection = pika.BlockingConnection(
     pika.ConnectionParameters(
         host='localhost',
         port=5672,
-        credentials=pika.PlainCredentials('guest', 'guest') # یا یوزرنیم/پسورد خودتان
+        credentials=pika.PlainCredentials('guest', 'guest')
     )
 )
 channel = connection.channel()

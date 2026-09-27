@@ -2,7 +2,6 @@ from typing import Optional, List
 from pydantic import BaseModel, ConfigDict, Field
 
 
-# ----------------- Location Schemas -----------------
 class LocationFlatResponse(BaseModel):
     id: int
     campus_name: Optional[str] = Field(default=None, validation_alias="name")

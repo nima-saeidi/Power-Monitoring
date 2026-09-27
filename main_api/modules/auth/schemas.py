@@ -17,7 +17,6 @@ class UserProfileUpdate(BaseModel):
     name: Optional[str] = None
     phone_number: Optional[str] = Field(None, min_length=10, max_length=15)
 
-# اسکماهای تغییر رمز عبور
 class ChangePasswordRequest(BaseModel):
     old_password: str = Field(..., min_length=6, max_length=50, description="رمز عبور فعلی")
     new_password: str = Field(..., min_length=6, max_length=50, description="رمز عبور جدید")
@@ -26,16 +25,15 @@ class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
     user: UserResponse
-    expires_in: int            # مدت زمان اعتبار توکن به ثانیه
-    expires_at: datetime       # زمان دقیق منقضی شدن توکن
+    expires_in: int
+    expires_at: datetime
 
-# برای دریافت ایمیل از کاربر
 class ForgotPasswordRequest(BaseModel):
     email: EmailStr
 
 class ForgotPasswordResponse(BaseModel):
     message: str
-    session_token: str  # توکن موقت حاوی هش کد جهت اعتبارسنجی مرحله بعد
+    session_token: str
 
 class VerifyCodeRequest(BaseModel):
     code: str = Field(..., max_length=10)
@@ -43,7 +41,7 @@ class VerifyCodeRequest(BaseModel):
 
 class VerifyCodeResponse(BaseModel):
     message: str
-    reset_token: str  # توکن مجاز برای تغییر رمز
+    reset_token: str
 
 class ResetPasswordRequest(BaseModel):
     reset_token: str = Field(..., max_length=2048)

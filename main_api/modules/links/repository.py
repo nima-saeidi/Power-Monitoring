@@ -18,17 +18,14 @@ class LinkRepository:
         self.db.add(link)
         await self.db.commit()
         await self.db.refresh(link)
-        # تغییر مهم: لینک را همراه با تمام جزئیات پست‌ها واکشی و برمی‌گردانیم
         return await self.get_link_by_id(link.id)
 
     async def get_all_links(self, skip: int = 0, limit: int = 100, post_id: Optional[int] = None,
                             is_active: Optional[bool] = None, load_status: Optional[str] = None):
         query = select(Link).options(
-            # بارگذاری پست مبدأ به همراه فیدرها و مکان آن
             selectinload(Link.from_post).selectinload(Post.feeders),
             selectinload(Link.from_post).selectinload(Post.location),
 
-            # بارگذاری پست مقصد به همراه فیدرها و مکان آن
             selectinload(Link.to_post).selectinload(Post.feeders),
             selectinload(Link.to_post).selectinload(Post.location)
         )
@@ -45,7 +42,6 @@ class LinkRepository:
 
     async def get_link_by_id(self, link_id: int) -> Optional[Link]:
         query = select(Link).options(
-            # بارگذاری زنجیره‌ای فیلدهای تو در تو
             selectinload(Link.from_post).selectinload(Post.feeders),
             selectinload(Link.from_post).selectinload(Post.location),
 
@@ -62,12 +58,8 @@ class LinkRepository:
             setattr(link, key, value)
         await self.db.commit()
         await self.db.refresh(link)
-        # تغییر مهم: بعد از آپدیت، مجدداً با جزئیات کامل برمی‌گردانیم
         return await self.get_link_by_id(link.id)
 
     async def delete_link(self, link: Link) -> None:
-        """
-        حذف یک لینک از دیتابیس
-        """
         await self.db.delete(link)
         await self.db.commit()

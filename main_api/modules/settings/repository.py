@@ -1,4 +1,3 @@
-# main_api/modules/settings/repository.py
 from typing import Dict, Any
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
@@ -13,7 +12,6 @@ class SettingRepository:
 
     @staticmethod
     async def create_default_settings(db: AsyncSession) -> SystemSetting:
-        # مقادیر پیش‌فرض دقیقاً منطبق بر مدل تنظیم شده‌اند
         settings = SystemSetting(
             critical_threshold=90.0,
             warning_threshold=75.0,

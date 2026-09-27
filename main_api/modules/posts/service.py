@@ -24,10 +24,6 @@ class PostService:
         self.broker = broker
 
     async def _publish(self, entity: str, action: str, data: dict, filters: Optional[dict] = None):
-        """
-        A helper method to publish events to RabbitMQ.
-        Automatically adds routing_key, event_id, timestamp, and entity name.
-        """
         if hasattr(data, 'model_dump'):
             data_dict = data.model_dump()
         elif hasattr(data, '_asdict'):
@@ -49,9 +45,6 @@ class PostService:
         routing_key = f"{entity}.{action}"
         await self.broker.publish_event(routing_key=routing_key, message=event_body)
 
-    # =========================================================
-    # POST SERVICES
-    # =========================================================
     async def create_post(self, data: PostCreate, background_tasks: Optional[BackgroundTasks] = None, username: Optional[str] = None):
         new_post = await self.repo.create_post(data)
         await self._publish("post", "create", data=new_post)

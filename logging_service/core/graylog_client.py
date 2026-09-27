@@ -19,10 +19,8 @@ class GraylogClient:
             limit: int = 100,
             offset: int = 0
     ) -> Dict[str, Any]:
-        """جستجوی لاگ‌ها در بازه زمانی گذشته بر حسب ثانیه"""
         url = f"{self.base_url}/views/search/sync"
 
-        # Graylog Search API v3/v4 format یا جستجوی استاندارد REST
         legacy_url = f"{self.base_url}/search/universal/relative"
         params = {
             "query": query,

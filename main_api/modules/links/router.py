@@ -31,9 +31,6 @@ def get_link_service(
     return LinkService(repo=repo, broker=broker)
 
 
-# =============================================================================
-# Endpoints: Links
-# =============================================================================
 @links_router.post("", response_model=LinkResponse, status_code=status.HTTP_201_CREATED, summary="Create New Link")
 async def create_link(data: LinkCreate, service: LinkService = Depends(get_link_service),
                       current_user=Depends(require_tech_or_admin)):

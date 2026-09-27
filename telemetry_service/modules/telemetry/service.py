@@ -11,13 +11,10 @@ logger = logging.getLogger(__name__)
 class TelemetryService:
     @staticmethod
     async def process_and_store(data: TelemetryCreate, redis_client=None) -> TelemetryResponse:
-        """۱. ذخیره در InfluxDB و ۲. انتشار روی Redis برای اطلاع لحظه‌ای Main API"""
-        # ذخیره در ریپازیتوری
         await TelemetryRepository.write_point(data)
 
         response_data = TelemetryResponse.model_validate(data)
 
-        # انتشار در پاب/ساب ردیس
         if redis_client:
             try:
                 payload = response_data.model_dump(mode="json")
@@ -29,7 +26,6 @@ class TelemetryService:
 
     @staticmethod
     async def get_latest_telemetry(feeder_id: int) -> Optional[TelemetryResponse]:
-        """دریافت آخرین دیتای پایش‌شده فیدر"""
         return await TelemetryRepository.get_latest_by_feeder(feeder_id)
 
     @staticmethod
@@ -39,7 +35,6 @@ class TelemetryService:
         end_time: datetime,
         window_period: str = "1m"
     ) -> List[TelemetryResponse]:
-        """دریافت دیتای تاریخی و گزارش فیدر"""
         return await TelemetryRepository.get_range_report(
             feeder_id=feeder_id,
             start_time=start_time,
@@ -54,8 +49,6 @@ class TelemetryService:
         end_time: datetime,
         window_period: str = "1m"
     ) -> dict:
-        """دریافت داده‌های نمودار جهت نمایش در فرانت‌اند"""
-        # خروجی repository از قبل ساختار استاندارد {"feeder_id": ..., "series": {"voltage": [{"timestamp": ..., "value": ...}], ...}} دارد
         return await TelemetryRepository.get_chart_data(
             feeder_id=feeder_id,
             start_time=start_time,

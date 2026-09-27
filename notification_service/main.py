@@ -26,7 +26,6 @@ async def process_notification(message: aio_pika.IncomingMessage, channel: aio_p
 
             channels_dispatched = []
 
-            # ارسال ایمیل
             if payload.channel in (NotificationChannel.EMAIL, NotificationChannel.ALL):
                 if payload.email_addresses:
                     channels_dispatched.append((
@@ -40,7 +39,6 @@ async def process_notification(message: aio_pika.IncomingMessage, channel: aio_p
                         )
                     ))
 
-            # ارسال پیامک
             if payload.channel in (NotificationChannel.SMS, NotificationChannel.ALL):
                 if payload.phone_numbers:
                     sms_text = f"{payload.title}\n{payload.message}"
@@ -95,23 +93,17 @@ async def process_notification(message: aio_pika.IncomingMessage, channel: aio_p
                 channel, action="NOTIFICATION_INVALID_PAYLOAD",
                 details={"success": False, "severity": "ERROR", "raw_body": message.body.decode("utf-8", errors="ignore")}
             )
-            raise  # nack -> notification_events.dlq (به‌جای گم شدن بی‌صدا)
+            raise
         except Exception as e:
             logger.error(f"Unexpected error while processing message: {e}", exc_info=True)
             await send_service_log(
                 channel, action="NOTIFICATION_PROCESSING_ERROR",
                 details={"success": False, "severity": "CRITICAL", "error_message": str(e)}
             )
-            raise  # nack -> notification_events.dlq
+            raise
 
 
 async def _declare_queue_with_dlq(connection, channel, queue_name: str, prefetch: int = 10):
-    """
-    Declare یک صف با x-dead-letter-exchange (نام‌گذاری ثابت f"{queue}.dlx"/".dlq"
-    تا با declare سمت سایر سرویس‌ها -مثل main_api که به همین صف پابلیش می‌کند-
-    یکسان بماند). اگر صف از قبل با آرگومان متفاوت وجود دارد، بدون DLQ fallback
-    می‌شود تا سرویس کرش نکند (باید صف قدیمی یک‌بار دستی حذف شود تا DLQ فعال شود).
-    """
     dlx_name = f"{queue_name}.dlx"
     dlq_name = f"{queue_name}.dlq"
     try:
@@ -142,14 +134,11 @@ async def main():
 
     queue, channel = await _declare_queue_with_dlq(connection, channel, settings.RABBITMQ_NOTIFICATION_QUEUE)
 
-    # اطمینان از وجود صف لاگ مرکزی برای ثبت نتیجه‌ی ارسال نوتیفیکیشن‌ها
-    # (باید با همان آرگومان‌های DLQ که logging_service declare می‌کند یکسان باشد)
     _, channel = await _declare_queue_with_dlq(connection, channel, "logs_queue")
 
     logger.info(f"🚀 Notification Worker started. Consuming from queue: '{settings.RABBITMQ_NOTIFICATION_QUEUE}'")
     await queue.consume(functools.partial(process_notification, channel=channel))
 
-    # مدیریت خاموش‌سازی تمیز (Graceful Shutdown)
     stop_event = asyncio.Event()
     loop = asyncio.get_running_loop()
     for sig in (signal.SIGINT, signal.SIGTERM):

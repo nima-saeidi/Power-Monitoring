@@ -10,9 +10,6 @@ from main_api.modules.telemetry.ws_manager import ws_manager
 
 logger = logging.getLogger(__name__)
 
-# پیام‌های telemetry_service روی Exchange تله‌متری:
-#   telemetry.metric                -> داده‌ی لحظه‌ای Modbus هر فیدر
-#   telemetry.alert.device_offline  -> عدم پاسخ‌دهی تجهیز
 _EVENT_TYPES = {
     "telemetry.metric": "NEW_TELEMETRY",
     "telemetry.alert.device_offline": "DEVICE_ALERT",
@@ -20,12 +17,6 @@ _EVENT_TYPES = {
 
 
 class TelemetryWebSocketConsumer:
-    """
-    رویدادهای تله‌متری را از RabbitMQ می‌خواند و به کلاینت‌های وب‌سوکت
-    /telemetry/ws می‌فرستد. هر نمونه‌ی main_api صف موقت و اختصاصی خودش را دارد
-    (exclusive + auto_delete) تا همه‌ی نمونه‌ها همه‌ی پیام‌ها را بگیرند و پیامی
-    برای کلاینت‌های قطع‌شده در صف انباشته نشود.
-    """
 
     def __init__(self):
         self.connection: Optional[aio_pika.abc.AbstractRobustConnection] = None
@@ -43,7 +34,6 @@ class TelemetryWebSocketConsumer:
         logger.info(f"✅ Telemetry WebSocket consumer listening on exchange '{settings.TELEMETRY_EXCHANGE}'.")
 
     async def handle_message(self, message: aio_pika.abc.AbstractIncomingMessage):
-        # داده‌ی زنده ارزش ارسال مجدد ندارد؛ پیام خراب هم فقط لاگ و رد می‌شود
         async with message.process(requeue=False):
             event_type = _EVENT_TYPES.get(message.routing_key)
             if not event_type:
@@ -54,8 +44,6 @@ class TelemetryWebSocketConsumer:
                 logger.warning(f"Invalid telemetry payload on '{message.routing_key}'.")
                 return
             if event_type == "NEW_TELEMETRY":
-                # افزودن وضعیت بار (عادی/هشدار/بحرانی) و اعمال تغییر وضعیت‌ها؛ اگر دیتابیس در
-                # دسترس نبود، داده‌ی خام بدون وضعیت ارسال می‌شود تا نمایش زنده قطع نشود
                 try:
                     payload = await live_monitor.on_metric(payload)
                 except Exception as e:

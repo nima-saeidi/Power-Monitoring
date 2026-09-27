@@ -1,4 +1,3 @@
-# main_api/modules/audit_logs/dependencies.py
 
 from fastapi import Depends
 from sqlalchemy.ext.asyncio import AsyncSession

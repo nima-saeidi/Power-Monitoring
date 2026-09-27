@@ -1,14 +1,3 @@
-"""
-فرمان قطع/وصل فیدر با تأیید دومرحله‌ای ایمیلی (به‌جای پیامک):
-
-۱. request: کاربر (ادمین/اپراتور فنی) فرمان را درخواست می‌کند؛ کد ۶ رقمی به ایمیل خودش ارسال
-   و یک challenge_token (JWT کوتاه‌عمر که فقط هش کد را دارد) برگردانده می‌شود.
-۲. confirm: با کد و challenge_token، فرمان به دستگاه ارسال می‌شود.
-
-توکن یک‌بار مصرف است، فقط برای همان کاربر/فیدر/فرمان معتبر است و بعد از ۵ کد اشتباه باطل می‌شود.
-Coil با مقدار True یعنی «وصل» و False یعنی «قطع»؛ اگر دستگاهی برعکس باشد،
-metadata_info فیدر: {"command_inverted": true}
-"""
 import asyncio
 import hashlib
 import hmac
@@ -32,8 +21,6 @@ CODE_TTL_SECONDS = 90
 MAX_CODE_ATTEMPTS = 5
 ACTION_LABELS = {"connect": "وصل", "disconnect": "قطع"}
 
-# وضعیت توکن‌های فعال (فقط در حافظه‌ی همین پروسه؛ main_api با یک worker اجرا می‌شود):
-# jti -> زمان انقضا (برای توکن مصرف‌شده) / تعداد تلاش ناموفق
 _used_challenges: Dict[str, float] = {}
 _failed_attempts: Dict[str, int] = {}
 
@@ -66,7 +53,7 @@ def _resolve_target(feeder) -> dict:
 
 
 async def request_command(feeder, action: str, user) -> dict:
-    _resolve_target(feeder)  # خطای پیکربندی قبل از ارسال کد گزارش شود
+    _resolve_target(feeder)
     jti = uuid.uuid4().hex
     code = f"{secrets.randbelow(1_000_000):06d}"
     expires = datetime.now(timezone.utc) + timedelta(seconds=CODE_TTL_SECONDS)
@@ -95,7 +82,6 @@ async def request_command(feeder, action: str, user) -> dict:
 
 
 async def confirm_command(feeder, data: CommandConfirmRequest, user) -> dict:
-    # ایمپورت محلی: telemetry.service خودش ماژول‌های زیادی را بارگذاری می‌کند
     from main_api.modules.telemetry.service import TelemetryService
 
     _prune()

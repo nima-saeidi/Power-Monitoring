@@ -2,7 +2,6 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from main_api.core.database import get_db
-# اصلاح مسیر ایمپورت بر اساس تغییرات ساختاری سیستم
 from main_api.modules.auth.dependencies import get_current_user, authenticate_websocket
 from main_api.modules.users.models import User
 from main_api.modules.notifications.schemas import (
@@ -25,7 +24,6 @@ async def get_notifications(
         db: AsyncSession = Depends(get_db),
         current_user: User = Depends(get_current_user)
 ):
-    """دریافت لیست نوتیفیکیشن‌های کاربر"""
 
     notifications, total = await NotificationRepository.get_user_notifications(
         db,
@@ -38,7 +36,6 @@ async def get_notifications(
         limit=params.page_size
     )
 
-    # شمارش تعداد خوانده نشده برای نمایش در UI (استفاده از Unpacking استاندارد)
     _, unread_count = await NotificationRepository.get_user_notifications(
         db, user_id=current_user.id, unread_only=True
     )
@@ -58,7 +55,6 @@ async def mark_notifications_as_read(
         db: AsyncSession = Depends(get_db),
         current_user: User = Depends(get_current_user)
 ):
-    """علامت‌گذاری نوتیفیکیشن‌ها به عنوان خوانده شده"""
 
     for n_id in request.notification_ids:
         await NotificationRepository.mark_as_read(db, n_id, current_user.id)
@@ -71,7 +67,6 @@ async def mark_all_as_read(
         db: AsyncSession = Depends(get_db),
         current_user: User = Depends(get_current_user)
 ):
-    """علامت‌گذاری همه به عنوان خوانده شده"""
 
     count = await NotificationRepository.mark_all_as_read(db, current_user.id)
     return {"message": f"{count} notifications marked as read"}
@@ -83,7 +78,6 @@ async def dismiss_notification(
         db: AsyncSession = Depends(get_db),
         current_user: User = Depends(get_current_user)
 ):
-    """نادیده گرفتن یک نوتیفیکیشن"""
 
     success = await NotificationRepository.dismiss(db, notification_id, current_user.id)
 
@@ -98,7 +92,6 @@ async def get_preferences(
         db: AsyncSession = Depends(get_db),
         current_user: User = Depends(get_current_user)
 ):
-    """دریافت تنظیمات نوتیفیکیشن"""
     pref = await NotificationRepository.get_preferences(db, current_user.id)
 
     if not pref:
@@ -113,14 +106,12 @@ async def update_preferences(
         db: AsyncSession = Depends(get_db),
         current_user: User = Depends(get_current_user)
 ):
-    """به‌روزرسانی تنظیمات نوتیفیکیشن"""
 
     pref = await NotificationRepository.get_preferences(db, current_user.id)
 
     if not pref:
         raise HTTPException(status_code=404, detail="Preferences not found")
 
-    # اصلاح برای Pydantic V2 (استفاده از model_dump به جای dict)
     for field, value in request.model_dump(exclude_unset=True).items():
         setattr(pref, field, value)
 
@@ -130,17 +121,9 @@ async def update_preferences(
     return pref
 
 
-# =====================================================================
-#                          مسیرهای وب‌سوکت
-# =====================================================================
 
 @router.websocket("/ws/{user_id}")
 async def websocket_notifications(websocket: WebSocket, user_id: int, token: str | None = Query(default=None)):
-    """
-    وب‌سوکت اختصاصی کاربر برای دریافت زنده نوتیفیکیشن‌ها و هشدارها
-    مسیر اتصال: ws://domain/notifications/ws/{user_id}?token=<access_token>
-    user_id باید همان کاربر صاحب توکن باشد. پیام‌ها: {"type": "NEW_NOTIFICATION", "data": {...}}
-    """
     user = await authenticate_websocket(token)
     if not user or user.id != user_id:
         await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
@@ -149,10 +132,8 @@ async def websocket_notifications(websocket: WebSocket, user_id: int, token: str
     await notifier_manager.connect(websocket, user_id)
     try:
         while True:
-            # کلاینت معمولا شنونده است، اما برای باز ماندن اتصال منتظر می‌مانیم
             data = await websocket.receive_text()
             
-            # در صورت نیاز برای هندل کردن وضعیت زنده ماندن اتصال مرورگر (Keep-Alive)
             if data == "ping":
                 await websocket.send_text("pong")
                 

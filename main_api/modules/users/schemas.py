@@ -13,9 +13,7 @@ class UserCreate(BaseModel):
     password: str = Field(..., min_length=6, max_length=50)
     role: RoleEnum = RoleEnum.USER
     is_active: bool = True
-    # دریافت هشدارها (قطعی، هشدار، بحرانی) با ایمیل؛ نام فیلد برای سازگاری با نسخه‌ی قبل حفظ شده
     sms_notification_enabled: bool = False
-    # صفحه‌های مجاز این حساب (کلیدهای GET /users/pages/list)؛ خالی یعنی همه
     allowed_pages: Optional[List[str]] = None
 
     @field_validator("allowed_pages")

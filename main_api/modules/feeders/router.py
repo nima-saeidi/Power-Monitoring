@@ -21,7 +21,6 @@ from main_api.modules.auth.dependencies import require_any_user, require_tech_or
 
 feeders_router = APIRouter(prefix="/feeders", tags=["Feeders (فیدرها و تجهیزات)"])
 
-# حداکثر حجم فایل اکسل ورودی (جلوگیری از پر شدن RAM با فایل‌های بزرگ)
 MAX_IMPORT_FILE_BYTES = 5 * 1024 * 1024
 
 
@@ -42,9 +41,6 @@ def get_feeder_service(
     return FeederService(repo=repo, broker=broker)
 
 
-# =============================================================================
-# Endpoints: Feeders
-# =============================================================================
 @feeders_router.get("/download-template", summary="Download Excel Template for Hierarchy Import")
 async def download_feeder_excel_template(current_user=Depends(require_any_user)):
     df = pd.DataFrame([TEMPLATE_ROW])
@@ -122,7 +118,6 @@ async def delete_feeder(feeder_id: int, service: FeederService = Depends(get_fee
 @limiter.limit(COMMAND_LIMIT)
 async def request_feeder_command(request: Request, feeder_id: int, data: CommandRequest,
                                  db: AsyncSession = Depends(get_db), current_user=Depends(require_tech_or_admin)):
-    """مرحله‌ی ۱: کد تأیید ۶ رقمی (۹۰ ثانیه اعتبار) به ایمیل کاربر ارسال و challenge_token برگردانده می‌شود."""
     feeder = await FeederRepository(db).get_feeder_by_id(feeder_id)
     if not feeder:
         raise HTTPException(status_code=404, detail="Feeder not found")
@@ -133,7 +128,6 @@ async def request_feeder_command(request: Request, feeder_id: int, data: Command
 @limiter.limit(COMMAND_LIMIT)
 async def confirm_feeder_command(request: Request, feeder_id: int, data: CommandConfirmRequest,
                                  db: AsyncSession = Depends(get_db), current_user=Depends(require_tech_or_admin)):
-    """مرحله‌ی ۲: با کد ایمیل‌شده، فرمان روی دستگاه اجرا می‌شود."""
     feeder = await FeederRepository(db).get_feeder_by_id(feeder_id)
     if not feeder:
         raise HTTPException(status_code=404, detail="Feeder not found")

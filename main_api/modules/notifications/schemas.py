@@ -6,10 +6,8 @@ from enum import Enum
 from main_api.modules.notifications.models import NotificationType, NotificationPriority
 
 
-# ============= Response Schemas =============
 
 class NotificationResponse(BaseModel):
-    """پاسخ نوتیفیکیشن"""
     id: int
     user_id: int
     type: NotificationType
@@ -18,7 +16,6 @@ class NotificationResponse(BaseModel):
     message: str
     source_type: Optional[str]
     source_id: Optional[int]
-    # ستون مدل meta_data است؛ بدون alias مقدار از Base.metadata (شیء SQLAlchemy) خوانده می‌شد
     metadata: Optional[Dict[str, Any]] = Field(None, validation_alias="meta_data")
     is_read: bool
     read_at: Optional[datetime]
@@ -33,7 +30,6 @@ class NotificationResponse(BaseModel):
 
 
 class NotificationListResponse(BaseModel):
-    """پاسخ لیست نوتیفیکیشن‌ها"""
     items: List[NotificationResponse]
     total: int
     page: int
@@ -42,7 +38,6 @@ class NotificationListResponse(BaseModel):
 
 
 class NotificationPreferenceResponse(BaseModel):
-    """پاسخ تنظیمات نوتیفیکیشن"""
     id: int
     user_id: int
     enable_info: bool
@@ -61,10 +56,8 @@ class NotificationPreferenceResponse(BaseModel):
         from_attributes = True
 
 
-# ============= Request Schemas =============
 
 class NotificationCreateRequest(BaseModel):
-    """درخواست ایجاد نوتیفیکیشن"""
     user_id: int = Field(..., gt=0)
     title: str = Field(..., min_length=1, max_length=255)
     message: str = Field(..., min_length=1)
@@ -78,7 +71,6 @@ class NotificationCreateRequest(BaseModel):
 
 
 class NotificationBulkCreateRequest(BaseModel):
-    """درخواست ایجاد دسته‌ای نوتیفیکیشن"""
     user_ids: List[int] = Field(..., min_items=1)
     title: str = Field(..., min_length=1, max_length=255)
     message: str = Field(..., min_length=1)
@@ -92,7 +84,6 @@ class NotificationBulkCreateRequest(BaseModel):
 
 
 class NotificationPreferenceUpdateRequest(BaseModel):
-    """درخواست به‌روزرسانی تنظیمات"""
     enable_info: Optional[bool] = None
     enable_warning: Optional[bool] = None
     enable_error: Optional[bool] = None
@@ -105,14 +96,11 @@ class NotificationPreferenceUpdateRequest(BaseModel):
 
 
 class NotificationMarkReadRequest(BaseModel):
-    """درخواست علامت‌گذاری به عنوان خوانده شده"""
     notification_ids: List[int] = Field(..., min_items=1)
 
 
-# ============= Filter Schemas =============
 
 class NotificationFilterParams(BaseModel):
-    """پارامترهای فیلتر نوتیفیکیشن‌ها"""
     unread_only: bool = False
     include_dismissed: bool = False
     type: Optional[NotificationType] = None

@@ -1,13 +1,7 @@
-"""
-قالب‌های HTML ایمیل. محتوای ساخته‌شده در اینجا به همراه نسخه متنی (plain text)
-به صف notification_events منتشر می‌شود؛ ارسال واقعی ایمیل توسط notification_service
-(از طریق EmailProvider) انجام می‌شود.
-"""
 from html import escape
 
 
 def build_reset_code_email_html(code: str) -> str:
-    """قالب HTML راست‌به‌چین (RTL) ایمیل کد تأیید بازیابی رمز عبور"""
     return f"""
     <!DOCTYPE html>
     <html lang="fa" dir="rtl">
@@ -91,7 +85,6 @@ def build_reset_code_email_html(code: str) -> str:
 
 
 def build_feeder_offline_email_html(feeder_name: str, feeder_id: int, consecutive_failures: int) -> str:
-    """قالب HTML راست‌به‌چین (RTL) ایمیل هشدار قطعی فیدر"""
     return f"""
     <!DOCTYPE html>
     <html lang="fa" dir="rtl">
@@ -185,7 +178,6 @@ def build_feeder_offline_email_html(feeder_name: str, feeder_id: int, consecutiv
 
 
 def _card_email_html(heading: str, color: str, intro: str, badge: str, meta_lines: list, note: str) -> str:
-    """قالب مشترک ایمیل‌های هشدار و کد تأیید (RTL، هم‌سبک با قالب قطعی فیدر)"""
     meta_html = "<br>".join(escape(str(line)) for line in meta_lines)
     return f"""
     <!DOCTYPE html>
@@ -215,7 +207,6 @@ def _card_email_html(heading: str, color: str, intro: str, badge: str, meta_line
 
 def build_load_alert_email_html(entity_label: str, entity_name: str, status_label: str, is_critical: bool,
                                 meta_lines: list) -> str:
-    """ایمیل هشدار بار فیدر/لینک (وضعیت هشدار یا بحرانی نسبت به جریان مجاز)"""
     return _card_email_html(
         heading=f"{'🚨' if is_critical else '⚠️'} وضعیت {status_label} {entity_label}",
         color="#c62828" if is_critical else "#ef6c00",
@@ -227,7 +218,6 @@ def build_load_alert_email_html(entity_label: str, entity_name: str, status_labe
 
 
 def build_command_code_email_html(code: str, feeder_name: str, action_label: str, expires_seconds: int) -> str:
-    """ایمیل کد تأیید فرمان قطع/وصل"""
     return _card_email_html(
         heading="🔐 کد تأیید فرمان",
         color="#1565c0",

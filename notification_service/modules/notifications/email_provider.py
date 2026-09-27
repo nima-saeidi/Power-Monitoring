@@ -32,7 +32,6 @@ class EmailProvider(BaseNotificationProvider):
                 port=settings.SMTP_PORT,
                 username=settings.SMTP_USER,
                 password=settings.SMTP_PASSWORD,
-                # پورت 465 از ابتدا SSL است (implicit TLS)؛ پورت‌های دیگر با STARTTLS
                 use_tls=settings.SMTP_PORT == 465,
                 start_tls=settings.SMTP_USE_TLS and settings.SMTP_PORT != 465,
                 timeout=15.0

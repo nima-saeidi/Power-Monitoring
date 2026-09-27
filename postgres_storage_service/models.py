@@ -6,8 +6,6 @@ import enum
 from sqlalchemy import Column, Integer, String, Boolean, DateTime, Enum as SQLEnum
 from sqlalchemy.sql import func
 
-# ⚠️ بسیار مهم: Base را باید از فایل database.py همین سرویس (postgres_storage_service) ایمپورت کنید
-# به هیچ وجه نباید از main_api چیزی ایمپورت شود.
 from core.database import Base
 
 
@@ -29,9 +27,7 @@ class User(Base):
     role = Column(SQLEnum(RoleEnum), default=RoleEnum.USER, nullable=False)
     is_active = Column(Boolean, default=True)
 
-    # فیلد جدید برای فعال/غیرفعال بودن نوتیفیکیشن پیامکی
     sms_notification_enabled = Column(Boolean, default=False)
-    # صفحه‌هایی که این حساب اجازه‌ی دیدنشان را دارد؛ None یعنی همه‌ی صفحه‌های مجاز برای نقش
     allowed_pages = Column(JSONB, nullable=True)
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())
@@ -42,7 +38,7 @@ class Location(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String(100), index=True, nullable=False)
-    code = Column(String(50), unique=True, nullable=True, index=True)  # کد یکتای مکان
+    code = Column(String(50), unique=True, nullable=True, index=True)
     location_type = Column(String(50), nullable=True)
     description = Column(Text, nullable=True)
     address = Column(String(255), nullable=True)
@@ -61,8 +57,7 @@ class Post(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String(100), index=True, nullable=False)
-    code = Column(String(50), unique=True, nullable=True, index=True)  # کد یکتای پست
-    # نوع پست: consumer (مصرف‌کننده) یا producer (تولیدکننده، مثل پنل خورشیدی)
+    code = Column(String(50), unique=True, nullable=True, index=True)
     post_type = Column(String(20), nullable=True)
 
     supply_source = Column(String(150), nullable=True)
@@ -76,7 +71,6 @@ class Post(Base):
 
     metadata_info = Column("metadata", JSONB, nullable=True)
 
-    # فیلدهایی که این سرویس (کانسومر) معمولاً آپدیت می‌کند:
     is_active = Column(Boolean, default=True)
     last_seen = Column(DateTime, nullable=True)
     consecutive_failures = Column(Integer, default=0)
@@ -108,14 +102,11 @@ class Feeder(Base):
     voltage_register = Column(Integer, nullable=True)
     current_register = Column(Integer, nullable=True)
     power_factor_register = Column(Integer, nullable=True)
-    # آدرس Coil فرمان قطع/وصل این فیدر (برای /feeders/{id}/command)
     control_register = Column(Integer, nullable=True)
-    # وضعیت بار بر اساس جریان نسبت به max_current: normal / warning / critical / unknown
     load_status = Column(String(20), nullable=False, default="unknown", server_default="unknown")
 
     metadata_info = Column("metadata", JSONB, nullable=True)
 
-    # فیلدهایی که این سرویس (کانسومر) معمولاً آپدیت می‌کند:
     is_active = Column(Boolean, default=True)
     consecutive_failures = Column(Integer, default=0)
     last_success = Column(DateTime, nullable=True)
@@ -142,9 +133,7 @@ class Link(Base):
     cable_type = Column(String(50), nullable=True)
     cross_section = Column(Float, nullable=True)
     allowed_current = Column(Float, nullable=True)
-    # فیدری که جریان این لینک را اندازه می‌گیرد (داده‌ی پویای لینک از همین فیدر خوانده می‌شود)
     feeder_id = Column(Integer, ForeignKey("feeders.id", ondelete="SET NULL"), nullable=True)
-    # وضعیت بار لینک بر اساس جریان فیدر اندازه‌گیر نسبت به allowed_current
     load_status = Column(String(20), nullable=False, default="unknown", server_default="unknown")
     length = Column(Float, nullable=True)
 
@@ -162,33 +151,27 @@ class SystemSetting(Base):
 
     id = Column(Integer, primary_key=True, index=True)
 
-    # مقادیر آستانه (جایگزین آلفا و بتا)
     critical_threshold = Column(Float, default=90.0, nullable=False, comment="آستانه بحرانی (Critical Threshold)")
     warning_threshold = Column(Float, default=75.0, nullable=False, comment="آستانه هشدار (Warning Threshold)")
 
-    # تنظیمات احراز هویت
     access_token_expire_minutes = Column(Integer, default=20, nullable=False,
                                          comment="مدت اعتبار Access Token (دقیقه)")
     max_login_attempts = Column(Integer, default=5, nullable=False, comment="حداکثر تلاش ناموفق ورود")
     lockout_duration_minutes = Column(Integer, default=30, nullable=False, comment="مدت قفل شدن حساب (دقیقه)")
     session_timeout_minutes = Column(Integer, default=120, nullable=False, comment="Timeout نشست (دقیقه)")
 
-    # تنظیمات Modbus و تله‌متری
     polling_interval = Column(Integer, default=5, nullable=False, comment="فاصله Polling (ثانیه)")
     max_telemetry_failures = Column(Integer, default=3, nullable=False, comment="حداکثر خطای مجاز تله‌متری")
     modbus_timeout = Column(Integer, default=3, nullable=False, comment="Timeout Modbus (ثانیه)")
     modbus_retry_count = Column(Integer, default=3, nullable=False, comment="تعداد تلاش مجدد Modbus")
 
-    # تنظیمات نوتیفیکیشن
     notification_retry_attempts = Column(Integer, default=3, nullable=False, comment="تعداد تلاش مجدد نوتیفیکیشن")
     notification_cooldown_seconds = Column(Integer, default=300, nullable=False,
                                            comment="فاصله زمانی ارسال مجدد نوتیفیکیشن مشابه (ثانیه)")
 
-    # تنظیمات گزارش‌گیری
     report_generation_timeout = Column(Integer, default=300, nullable=False, comment="Timeout تولید گزارش (ثانیه)")
     max_export_records = Column(Integer, default=10000, nullable=False, comment="حداکثر رکورد در Export")
 
-    # متادیتا
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 

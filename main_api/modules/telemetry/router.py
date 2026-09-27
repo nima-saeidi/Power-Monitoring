@@ -28,9 +28,6 @@ from main_api.modules.telemetry.ws_manager import ws_manager
 
 router = APIRouter(prefix="/telemetry", tags=["Telemetry"])
 
-# --- اندپوینت دریافت لیست فیدرهای فعال برای میکروسرویس تلمتری (Worker) ---
-# احراز هویت با کلید مشترک INTERNAL_API_KEY (هدر X-Internal-API-Key)، چون این لیست
-# شامل IP و پورت تجهیزات است و پورت 8000 از بیرون در دسترس است
 @router.get("/active-feeders", response_model=List[ActiveFeederConfig],
             dependencies=[Depends(verify_internal_api_key)])
 async def get_active_feeders(db: AsyncSession = Depends(get_db)):
@@ -38,8 +35,6 @@ async def get_active_feeders(db: AsyncSession = Depends(get_db)):
     return await service.get_active_feeders()
 
 
-# --- اندپوینت داخلی: گزارش نتیجه Polling هر فیدر توسط telemetry_service ---
-# مانند /active-feeders فقط بین میکروسرویس‌ها و با کلید INTERNAL_API_KEY فراخوانی می‌شود.
 @router.post("/feeder-status", status_code=204, dependencies=[Depends(verify_internal_api_key)])
 async def report_feeder_status(
     data: FeederStatusUpdate,
@@ -48,21 +43,12 @@ async def report_feeder_status(
     service = TelemetryService(db)
     await service.report_feeder_status(data)
 
-# --- WebSocket Endpoint (برای نمودارهای زنده فرانت‌اند) ---
 @router.websocket("/ws")
 async def telemetry_websocket(
     websocket: WebSocket,
     token: str | None = Query(default=None),
     feeder_id: int | None = Query(default=None),
 ):
-    # مرورگر در وب‌سوکت هدر Authorization نمی‌فرستد، پس توکن از query گرفته می‌شود:
-    # ws://host:8000/telemetry/ws?token=<access_token>[&feeder_id=<id>]
-    # بدون feeder_id داده‌ی همه‌ی فیدرها ارسال می‌شود. پیام‌ها:
-    #   {"type": "NEW_TELEMETRY", "data": {feeder_id, post_id, active_power, reactive_power, voltage, current,
-    #                                      power_factor, timestamp, load_status, load_percent, role}}
-    #   {"type": "STATUS_CHANGE", "data": {entity: feeder|link, id, name, feeder_id, old_status, new_status,
-    #                                      load_percent, current}}
-    #   {"type": "DEVICE_ALERT",  "data": {feeder_id, ...}}
     if not await authenticate_websocket(token):
         await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
         return
@@ -74,7 +60,6 @@ async def telemetry_websocket(
     except WebSocketDisconnect:
         ws_manager.disconnect(websocket)
 
-# --- REST Endpoints (پروکسی به میکروسرویس) ---
 @router.get("/latest/{feeder_id}")
 async def get_latest(
     feeder_id: str,
@@ -100,9 +85,6 @@ async def get_chart_data(
     window: str = Query(default="5m", description="Aggregation window, e.g., 1m, 5m, 1h"),
     current_user=Depends(require_page("telemetry"))
 ):
-    """
-    دریافت داده‌های تفکیک‌شده نمودار (سری‌های زمانی + timestamps) پروکسی شده از میکروسرویس تلمتری
-    """
     return await TelemetryService.get_chart_data(feeder_id, start, stop, window)
 
 
@@ -113,7 +95,6 @@ async def get_forecast(
     history_days: int = Query(default=7, ge=1, le=60),
     current_user=Depends(require_page("telemetry"))
 ):
-    """پیش‌بینی ساعتی توان اکتیو و راکتیو (میانگین همان ساعت در روزهای گذشته) برای نمایش کنار داده‌ی واقعی."""
     return await TelemetryService.get_forecast(feeder_id, hours, history_days)
 
 
@@ -127,10 +108,6 @@ async def get_energy(
     db: AsyncSession = Depends(get_db),
     current_user=Depends(require_page("reports"))
 ):
-    """
-    انرژی اکتیو (kWh) و راکتیو (kVARh) هر فیدر + جمع مصرف (فیدرهای مصرف‌کننده) و تولید
-    (فیدرهای تولیدکننده) در بازه. بدون feeder_ids و post_id، همه‌ی فیدرها حساب می‌شوند.
-    """
     feeders = await _load_feeders(db, feeder_ids, post_id)
     energy = await TelemetryService.get_energy([f.id for f in feeders], start, stop, window)
     rows = _energy_rows(feeders, energy)
@@ -141,7 +118,6 @@ async def get_energy(
     return {"start_time": energy["start_time"], "end_time": energy["end_time"], "totals": totals, "feeders": rows}
 
 
-# --- خروجی گزارش (اکسل / PDF) ---
 @router.get("/report/{fmt}", summary="Telemetry report for one or more feeders (Excel/PDF)")
 @limiter.limit(EXPORT_LIMIT)
 async def export_report(
@@ -157,39 +133,8 @@ async def export_report(
     db: AsyncSession = Depends(get_db),
     current_user=Depends(require_page("reports"))
 ):
-    """گزارش بازه‌ی زمانی با دقت و ستون‌های انتخابی برای چند فیدر یا یک پست، به‌همراه خلاصه‌ی انرژی."""
     feeders = await _load_feeders(db, feeder_ids, post_id)
     return await _build_report(fmt, feeders, start, stop, window, columns, include_energy)
-
-
-@router.get("/export/excel/{feeder_id}", summary="Export feeder telemetry report as Excel")
-@limiter.limit(EXPORT_LIMIT)
-async def export_feeder_report_excel(
-    request: Request,
-    feeder_id: int,
-    start: str = Query(default="-24h"),
-    stop: str = Query(default="now()"),
-    window: str = Query(default="5m"),
-    db: AsyncSession = Depends(get_db),
-    current_user=Depends(require_page("reports"))
-):
-    """گزارش اکسل یک فیدر (نسخه‌ی قبلی؛ برای چند فیدر و انتخاب ستون از /telemetry/report/excel استفاده کنید)."""
-    return await _build_report("excel", await _load_feeders(db, [feeder_id], None), start, stop, window, None, True)
-
-
-@router.get("/export/pdf/{feeder_id}", summary="Export feeder telemetry report as PDF")
-@limiter.limit(EXPORT_LIMIT)
-async def export_feeder_report_pdf(
-    request: Request,
-    feeder_id: int,
-    start: str = Query(default="-24h"),
-    stop: str = Query(default="now()"),
-    window: str = Query(default="5m"),
-    db: AsyncSession = Depends(get_db),
-    current_user=Depends(require_page("reports"))
-):
-    """گزارش PDF یک فیدر (نسخه‌ی قبلی؛ برای چند فیدر و انتخاب ستون از /telemetry/report/pdf استفاده کنید)."""
-    return await _build_report("pdf", await _load_feeders(db, [feeder_id], None), start, stop, window, None, True)
 
 
 async def _load_feeders(db: AsyncSession, feeder_ids: Optional[List[int]], post_id: Optional[int]) -> List[Feeder]:
@@ -233,7 +178,6 @@ async def _build_report(fmt: str, feeders: List[Feeder], start: str, stop: str, 
     max_rows = MAX_EXCEL_ROWS if fmt == "excel" else MAX_PDF_ROWS
     sections, total_rows = [], 0
     for feeder in feeders:
-        # timeout بزرگ‌تر از حالت نمایش زنده چون کوئری InfluxDB روی بازه‌های بزرگ طولانی‌تر است
         records = await TelemetryService.get_history(str(feeder.id), start, stop, window, timeout=EXPORT_TIMEOUT_SECONDS)
         total_rows += len(records)
         if total_rows > max_rows:

@@ -25,13 +25,6 @@ from main_api.modules.audit_logs.schemas import (
 
 logger = logging.getLogger(__name__)
 
-# ============================================================================
-#                            RABBITMQ PRODUCERS
-# ============================================================================
-# این تابع مسیر واحد و کانونیِ ارسال هر رویدادی است که باید در سیستم ثبت شود
-# (لاگین/خروج، خطاها، ارسال نوتیفیکیشن، درخواست‌های ناموفق و ...). پیام دقیقاً
-# با ساختار LogCreate سرویس لاگ (logging_service) منتشر می‌شود تا کانسومر آن
-# بتواند بدون خطای اعتبارسنجی، آن را در PostgreSQL ذخیره و به Graylog بفرستد.
 
 LOGS_QUEUE_NAME = "logs_queue"
 
@@ -42,14 +35,6 @@ async def publish_log_to_rabbitmq(
         details: Dict[str, Any],
         user_id: Optional[int] = None,
 ):
-    """
-    انتشار مستقیم یک پیام لاگ (با ساختار منطبق بر LogCreate) به صف logs_queue.
-
-    از کانکشن پایدار سراسری (message_broker) استفاده می‌شود، نه یک کانکشن AMQP
-    جدید به‌ازای هر لاگ. هر عملیات API (لاگین، هر CRUD، هر خطا) یک لاگ ارسال
-    می‌کند؛ باز/بسته کردن کانکشن AMQP به‌ازای هر کدام زیر بار سنگین یا با چند
-    replica از main_api هزینه‌ی محسوسی به هر درخواست تحمیل می‌کرد.
-    """
     message_body = {
         "service_name": service_name,
         "action": action,
@@ -73,25 +58,18 @@ async def send_audit_log(
         service_name: str = "main_api",
         **kwargs
 ):
-    """ارسال لاگ‌های عمومی و امنیتی (ورود، تغییرات سیستم، خطاها، نوتیفیکیشن‌ها و ...)"""
     details = {
         "username": username,
         "user_role": user_role,
         "ip_address": ip_address,
         "success": success,
         "severity": severity.upper(),
-        **kwargs,  # فیلدهایی مثل description, resource_type, old_value, new_value
+        **kwargs,
     }
     await publish_log_to_rabbitmq(service_name=service_name, action=action, details=details, user_id=user_id)
 
 
 def schedule_audit_log(background_tasks: Optional[BackgroundTasks], **kwargs):
-    """
-    ثبت audit log بدون بلاک کردن پاسخ درخواست.
-    اگر BackgroundTasks در دسترس باشد (درخواست موفق و پاسخ در حال آماده شدن است)
-    از آن استفاده می‌شود، در غیر این صورت (مثلاً درست قبل از raise کردن یک خطا)
-    به‌صورت fire-and-forget با asyncio.create_task ارسال می‌شود.
-    """
     if background_tasks is not None:
         background_tasks.add_task(send_audit_log, **kwargs)
     else:
@@ -105,10 +83,9 @@ async def send_command_log(
         service_name: str = "main_api",
         **kwargs
 ):
-    """ارسال لاگ‌های مربوط به دستورات مدباس"""
     details = {
         "success": success,
-        **kwargs,  # فیلدهایی مثل post_id, feeder_id, command_data, error_message
+        **kwargs,
     }
     await publish_log_to_rabbitmq(
         service_name=service_name, action=f"COMMAND_{command_type.upper()}", details=details, user_id=user_id
@@ -121,29 +98,18 @@ async def send_device_test_log(
         service_name: str = "main_api",
         **kwargs
 ):
-    """ارسال لاگ‌های تست دستگاه‌ها"""
     details = {
         "success": success,
-        **kwargs,  # فیلدهایی مثل device_id, test_result, latency, error_message
+        **kwargs,
     }
     await publish_log_to_rabbitmq(
         service_name=service_name, action=f"DEVICE_TEST_{test_type.upper()}", details=details
     )
 
 
-# ============================================================================
-#                               SERVICES (Read Side)
-# ============================================================================
-# نکته‌ی معماری مهم: خواندن لاگ‌ها دیگر از یک جدول محلی در main_api انجام
-# نمی‌شود (آن جدول هیچ‌وقت پر نمی‌شد چون نوشتن همیشه از طریق RabbitMQ به
-# logging_service انجام می‌گیرد). به‌جای آن AuditLogService به‌عنوان یک پروکسی
-# نازک روی API واقعی logging_service عمل می‌کند تا پنل ادمین همیشه داده‌ی واقعی
-# و به‌روز ببیند.
 
 class AuditLogService:
     def __init__(self, db: AsyncSession):
-        # db برای این سرویس دیگر لازم نیست (منبع داده logging_service است) اما
-        # برای سازگاری با امضای قبلی dependency نگه داشته شده.
         self.db = db
         self.base_url = settings.LOGGING_SERVICE_URL.rstrip("/")
 

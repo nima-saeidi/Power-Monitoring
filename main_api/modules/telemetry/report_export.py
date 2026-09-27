@@ -1,19 +1,3 @@
-"""
-ساخت خروجی گزارش تله‌متری (اکسل / PDF) از داده‌های تاریخی یک فیدر.
-داده‌ی ورودی همان ساختاری است که TelemetryService.get_history برمی‌گرداند
-(لیستی از رکوردهای TelemetryResponse: feeder_id, voltage, current, active_power,
-reactive_power, power_factor, frequency, timestamp).
-
-نکته‌ی کارایی: فیدرهایی که مدت طولانی پایش شده‌اند می‌توانند میلیون‌ها رکورد
-تله‌متری داشته باشند. به همین دلیل:
-- خروجی اکسل با حالت streaming (openpyxl write_only) ساخته می‌شود تا کل داده در
-  حافظه به‌صورت اشیاء Cell/Row نگه داشته نشود (بر خلاف pandas.to_excel که تمام
-  DataFrame + تمام سلول‌های استایل‌دار را قبل از نوشتن در حافظه می‌سازد).
-- خروجی PDF (که بر خلاف اکسل برای نمایش/چاپ است، نه پردازش داده‌ی خام) با سقف
-  MAX_PDF_ROWS محدود می‌شود؛ رندر چند صدهزار ردیف در یک جدول PDF عملاً غیرقابل
-  استفاده و بسیار کند/پرمصرف حافظه است. برای داده‌ی خام بزرگ باید از اکسل
-  استفاده شود.
-"""
 import re
 from dataclasses import dataclass
 from datetime import datetime
@@ -27,16 +11,11 @@ from reportlab.lib.units import cm
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
 from reportlab.lib.styles import getSampleStyleSheet
 
-# timeout (ثانیه) درخواست به میکروسرویس تله‌متری مخصوص گزارش‌گیری؛ بزرگ‌تر از
-# timeout حالت نمایش زنده (chart/history) چون کوئری InfluxDB روی بازه‌های بزرگ کندتر است
 EXPORT_TIMEOUT_SECONDS = 60.0
 
-# سقف تعداد ردیف قابل خروجی گرفتن در هر فرمت (محافظت در برابر درخواست‌های
-# سنگین/پاتولوژیک که می‌توانند حافظه/CPU سرور را قفل کنند)
 MAX_EXCEL_ROWS = 500_000
 MAX_PDF_ROWS = 5_000
 
-# ترتیب و عنوان ستون‌ها برای هر دو خروجی
 COLUMNS: List[tuple] = [
     ("timestamp", "Timestamp"),
     ("voltage", "Voltage (V)"),
@@ -59,13 +38,11 @@ ENERGY_COLUMNS: List[tuple] = [
 
 @dataclass
 class ReportSection:
-    """داده‌ی یک فیدر در گزارش"""
     title: str
     records: List[Dict[str, Any]]
 
     @property
     def sheet_title(self) -> str:
-        # نام شیت اکسل حداکثر ۳۱ کاراکتر و بدون این کاراکترهاست
         return re.sub(r"[\\/*?:\[\]]", "_", self.title)[:31]
 
 
@@ -76,7 +53,6 @@ def _clean_timestamp(ts: Any) -> str:
 
 
 def resolve_columns(requested: Optional[Sequence[str]]) -> List[tuple]:
-    """ستون‌های انتخابی کاربر (timestamp همیشه اول)؛ خالی یعنی همه‌ی ستون‌ها."""
     if not requested:
         return COLUMNS
     unknown = [c for c in requested if c not in COLUMN_KEYS]
@@ -92,10 +68,6 @@ def _cell(row: Dict[str, Any], key: str) -> Any:
 
 def build_excel_report(sections: List[ReportSection], columns: List[tuple] = COLUMNS,
                        energy: Optional[List[Dict[str, Any]]] = None) -> BytesIO:
-    """
-    ساخت فایل اکسل (.xlsx) با حالت streaming (write_only): یک شیت برای هر فیدر و در صورت
-    وجود، شیت «Energy Summary» با انرژی مصرفی/تولیدی (kWh) هر فیدر در بازه.
-    """
     workbook = Workbook(write_only=True)
     if energy:
         summary = workbook.create_sheet(title="Energy Summary")
@@ -117,7 +89,6 @@ def build_excel_report(sections: List[ReportSection], columns: List[tuple] = COL
 
 def build_pdf_report(sections: List[ReportSection], start: str, stop: str, columns: List[tuple] = COLUMNS,
                      energy: Optional[List[Dict[str, Any]]] = None) -> BytesIO:
-    """ساخت فایل PDF: خلاصه‌ی انرژی + جدول هر فیدر. سقف کل ردیف‌ها: MAX_PDF_ROWS"""
     output = BytesIO()
     doc = SimpleDocTemplate(
         output,

@@ -4,7 +4,6 @@ from pydantic import BaseModel, ConfigDict
 from main_api.modules.posts.schemas import PostResponse
 
 
-# ----------------- Link Schemas -----------------
 class LinkBase(BaseModel):
     name: Optional[str] = None
     from_post_id: int
@@ -13,7 +12,6 @@ class LinkBase(BaseModel):
     cross_section: Optional[float] = None
     allowed_current: Optional[float] = None
     length: Optional[float] = None
-    # فیدری که جریان این لینک را اندازه می‌گیرد
     feeder_id: Optional[int] = None
     metadata_info: Optional[Dict[str, Any]] = None
     is_active: bool = True
@@ -36,9 +34,7 @@ class LinkUpdate(BaseModel):
 
 class LinkResponse(LinkBase):
     id: int
-    # normal / warning / critical / unknown
     load_status: str = "unknown"
-    # اضافه‌کردن روابط برای نمایش اطلاعات کامل پست مبدأ و مقصد
     from_post: Optional[PostResponse] = None
     to_post: Optional[PostResponse] = None
 

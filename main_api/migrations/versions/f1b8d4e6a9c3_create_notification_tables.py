@@ -1,14 +1,3 @@
-"""create notification tables (never created by earlier migrations)
-
-جداول notifications / notification_preferences / notification_templates در هیچ migration
-قبلی ساخته نمی‌شدند؛ روی سرور جدید بخش نوتیفیکیشن کار نمی‌کرد. روی دیتابیسی که این جداول
-را از قبل (دستی) دارد، این migration کاری انجام نمی‌دهد.
-
-Revision ID: f1b8d4e6a9c3
-Revises: e7a3c9d2f4b1
-Create Date: 2026-09-26 00:00:00.000000
-
-"""
 from typing import Sequence, Union
 
 from alembic import op
@@ -16,13 +5,11 @@ import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
 
-# revision identifiers, used by Alembic.
 revision: str = 'f1b8d4e6a9c3'
 down_revision: Union[str, Sequence[str], None] = 'e7a3c9d2f4b1'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
-# مقادیر enum همان نام اعضای NotificationType / NotificationPriority است (پیش‌فرض SQLAlchemy)
 notification_type = postgresql.ENUM('INFO', 'WARNING', 'ERROR', 'SUCCESS', 'ALERT',
                                     name='notificationtype', create_type=False)
 notification_priority = postgresql.ENUM('LOW', 'MEDIUM', 'HIGH', 'CRITICAL',
@@ -30,7 +17,6 @@ notification_priority = postgresql.ENUM('LOW', 'MEDIUM', 'HIGH', 'CRITICAL',
 
 
 def upgrade() -> None:
-    """Upgrade schema."""
     bind = op.get_bind()
     notification_type.create(bind, checkfirst=True)
     notification_priority.create(bind, checkfirst=True)
@@ -99,7 +85,6 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    """Downgrade schema."""
     op.drop_table('notification_preferences')
     op.drop_table('notification_templates')
     op.drop_table('notifications')

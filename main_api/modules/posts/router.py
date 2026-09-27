@@ -31,9 +31,6 @@ def get_post_service(
     return PostService(repo=repo, broker=broker)
 
 
-# =============================================================================
-# Endpoints: Posts
-# =============================================================================
 @posts_router.post("", response_model=PostResponse, status_code=status.HTTP_201_CREATED, summary="Create New Post")
 async def create_post(data: PostCreate, service: PostService = Depends(get_post_service),
                       current_user=Depends(require_tech_or_admin)):

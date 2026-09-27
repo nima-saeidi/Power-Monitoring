@@ -13,9 +13,6 @@ class LocationRepository:
     def __init__(self, db: AsyncSession):
         self.db = db
 
-    # =========================================================
-    # CREATE LOCATION
-    # =========================================================
 
     async def create_location(self, data: LocationCreate) -> Location:
         location_data = data.model_dump(
@@ -29,9 +26,6 @@ class LocationRepository:
         await self.db.refresh(location)
 
         return location
-    # =========================================================
-    # GET FLAT LOCATIONS (بدون ساختار درختی)
-    # =========================================================
     async def get_all_locations_flat(self, skip: int = 0, limit: int = 100) -> List[Location]:
         stmt = (
             select(Location)
@@ -42,9 +36,6 @@ class LocationRepository:
         result = await self.db.execute(stmt)
         return list(result.scalars().all())
 
-    # =========================================================
-    # GET ALL LOCATIONS AS TREE
-    # =========================================================
 
     async def get_all_locations(self, skip: int = 0, limit: int = 100):
         stmt = select(Location).order_by(Location.id)
@@ -74,16 +65,11 @@ class LocationRepository:
                 if parent_node:
                     parent_node["sub_locations"].append(node)
 
-        # اعمال pagination روی ریشه‌های دیتابیس
         paginated_roots = db_roots[skip: skip + limit]
 
-        # اصلاح: خود لیست را برگردانید، نه داخل یک براکت دیگر
         return paginated_roots
 
 
-    # =========================================================
-    # GET ROOT LOCATIONS
-    # =========================================================
 
     async def get_root_locations(self):
         stmt = select(Location).order_by(Location.id)
@@ -99,7 +85,7 @@ class LocationRepository:
                 "location_type": location.location_type,
                 "parent_id": location.parent_id,
                 "description": location.description,
-                "address": location.address,  # فیلد جدید
+                "address": location.address,
                 "sub_locations": []
             }
 
@@ -115,12 +101,8 @@ class LocationRepository:
 
         return roots
 
-    # =========================================================
-    # GET LOCATION BY ID
-    # =========================================================
 
     async def get_location_by_id(self, location_id: int) -> Optional[dict]:
-        # زنجیره selectinload برای واکشی تا ۴ سطح تو در تو
         stmt = (
             select(Location)
             .options(
@@ -136,7 +118,6 @@ class LocationRepository:
         if not location:
             return None
 
-        # تابع بازگشتی برای فرمت کردن خروجی
         def format_location(loc):
             sub_locations = []
             if 'children' in loc.__dict__:
@@ -148,15 +129,12 @@ class LocationRepository:
                 "location_type": loc.location_type,
                 "parent_id": loc.parent_id,
                 "description": loc.description,
-                "address": loc.address,  # فیلد جدید
+                "address": loc.address,
                 "sub_locations": sub_locations
             }
 
         return format_location(location)
 
-    # =========================================================
-    # UPDATE LOCATION
-    # =========================================================
 
     async def update_location(
             self,
@@ -181,9 +159,6 @@ class LocationRepository:
 
         return location_obj
 
-    # =========================================================
-    # DELETE LOCATION
-    # =========================================================
 
     async def delete_location(self, location_id: int) -> bool:
         query = select(Location).where(Location.id == location_id)
@@ -202,8 +177,8 @@ class LocationRepository:
             select(Post)
             .where(Post.location_id == location_id)
             .options(
-                selectinload(Post.location),  # اضافه شدن لودِ لوکیشن برای رفع خطای MissingGreenlet
-                selectinload(Post.feeders)    # اگر فیدرها هم در PostResponse هستند، این هم لازم است
+                selectinload(Post.location),
+                selectinload(Post.feeders)
             )
         )
         result = await self.db.execute(stmt)

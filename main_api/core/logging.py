@@ -5,7 +5,6 @@ from pathlib import Path
 from logging.handlers import RotatingFileHandler, TimedRotatingFileHandler
 from main_api.core.config import settings
 
-# بررسی و ایمپورت کتابخانه graypy جهت ارسال مستقیم به Graylog
 try:
     import graypy
 
@@ -47,7 +46,7 @@ def setup_logging(
         enable_graylog: bool = True,
         graylog_host: str = None,
         graylog_port: int = 12201,
-        max_bytes: int = 10 * 1024 * 1024,  # 10MB
+        max_bytes: int = 10 * 1024 * 1024,
         backup_count: int = 5
 ) -> logging.Logger:
     log_path = Path(log_dir)
@@ -62,14 +61,12 @@ def setup_logging(
         datefmt="%Y-%m-%d %H:%M:%S"
     )
 
-    # 1. Console Handler
     if enable_console:
         console_handler = logging.StreamHandler(sys.stdout)
         console_handler.setLevel(logging.DEBUG)
         console_handler.setFormatter(CustomFormatter())
         logger.addHandler(console_handler)
 
-    # 2. File Handlers (Rotating + Daily)
     if enable_file:
         general_log_file = log_path / f"{app_name}.log"
         file_handler = RotatingFileHandler(
@@ -106,7 +103,6 @@ def setup_logging(
         daily_handler.suffix = "%Y-%m-%d"
         logger.addHandler(daily_handler)
 
-    # 3. Graylog Handler (GELF UDP)
     if enable_graylog:
         if GRAYPY_AVAILABLE:
             target_host = graylog_host or getattr(settings, "GRAYLOG_HOST", os.getenv("GRAYLOG_HOST", "graylog"))
@@ -128,7 +124,6 @@ def setup_logging(
     return logger
 
 
-# مقداردهی اولیه Logger اصلی
 app_logger = setup_logging(
     log_level=getattr(settings, "LOG_LEVEL", "INFO"),
     log_dir=getattr(settings, "LOG_DIR", "logs"),
@@ -140,11 +135,9 @@ app_logger = setup_logging(
 
 
 def get_logger(name: str) -> logging.Logger:
-    """دریافت Logger اختصاصی برای هر ماژول که به عنوان فرزند logger اصلی عمل می‌کند"""
     return logging.getLogger(f"power_monitoring.{name}")
 
 
-# ماژول لاگرها
 modbus_logger = get_logger("modbus")
 api_logger = get_logger("api")
 auth_logger = get_logger("auth")

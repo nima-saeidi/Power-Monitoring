@@ -18,10 +18,8 @@ from main_api.modules.notifications.schemas import (
     NotificationResponse,
 )
 
-# ایمپورت سیستم لاگینگ متمرکز
 from main_api.modules.audit_logs.services import send_audit_log
 
-# ایمپورت‌های مربوط به RabbitMQ (در صورت نیاز مسیر را اصلاح کنید)
 try:
     from main_api.core.rabbitmq_publisher import send_notification as send_rabbitmq_notification
     from main_api.schemas.notification import NotificationPayload
@@ -31,7 +29,6 @@ except ImportError:
 
 
 class NotificationService:
-    """سرویس مدیریت نوتیفیکیشن‌ها با قابلیت ثبت لاگ حسابرسی (Audit Log)"""
 
     @staticmethod
     async def send_notification(
@@ -40,14 +37,12 @@ class NotificationService:
             background_tasks: Optional[BackgroundTasks] = None,
             username: Optional[str] = None
     ):
-        """ارسال نوتیفیکیشن به یک کاربر با ثبت لاگ"""
 
         preferences = await NotificationRepository.get_preferences(db, request.user_id)
 
         if not NotificationService._should_send(preferences, request.type, request.priority):
             api_logger.info(f"Notification for user {request.user_id} blocked by preferences.")
 
-            # ثبت لاگ برای نوتیفیکیشن مسدود شده
             log_coroutine = send_audit_log(
                 action="NOTIFICATION_BLOCKED", username=username, success=False, severity="INFO",
                 description=f"نوتیفیکیشن '{request.title}' برای کاربر {request.user_id} بر اساس تنظیمات شخصی مسدود شد."
@@ -62,7 +57,6 @@ class NotificationService:
         notification = await NotificationRepository.create(db=db, **request.dict())
         await NotificationService._push_live(notification)
 
-        # ثبت لاگ برای ارسال موفق نوتیفیکیشن
         log_coroutine = send_audit_log(
             action="SEND_NOTIFICATION", username=username, success=True, severity="INFO",
             description=f"نوتیفیکیشن '{notification.title}' برای کاربر {notification.user_id} با موفقیت در دیتابیس ثبت شد."
@@ -81,7 +75,6 @@ class NotificationService:
             background_tasks: Optional[BackgroundTasks] = None,
             username: Optional[str] = None
     ) -> Dict[str, Any]:
-        """ارسال گروهی نوتیفیکیشن با ثبت لاگ"""
         sent_count, blocked_count = 0, 0
 
         for user_id in request.user_ids:
@@ -96,7 +89,6 @@ class NotificationService:
             await NotificationService._push_live(notification)
             sent_count += 1
 
-        # ثبت لاگ برای عملیات ارسال گروهی
         log_coroutine = send_audit_log(
             action="SEND_BULK_NOTIFICATION", username=username, success=True, severity="INFO",
             description=(f"ارسال گروهی نوتیفیکیشن '{request.title}': "
@@ -120,14 +112,12 @@ class NotificationService:
             background_tasks: Optional[BackgroundTasks] = None,
             username: Optional[str] = "System"
     ):
-        """ارسال هشدار سیستمی با ثبت لاگ"""
         request = NotificationCreateRequest(
             user_id=user_id, title=title, message=message, type=NotificationType.ALERT,
             priority=priority, source_type=source_type, source_id=source_id,
             action_url=action_url, metadata=metadata
         )
 
-        # پیش از ارسال، لاگ صدور هشدار را ثبت می‌کنیم
         log_coroutine = send_audit_log(
             action="SYSTEM_ALERT_ISSUED", username=username, success=True, severity="WARNING",
             description=f"هشدار سیستمی با عنوان '{title}' برای کاربر {user_id} صادر شد."
@@ -146,17 +136,14 @@ class NotificationService:
             feeder_name: Optional[str] = None,
             username: Optional[str] = "System"
     ):
-        """نوتیفیکیشن قطعی برق با ثبت لاگ CRITICAL"""
         title = f"قطعی برق - {post_name}" + (f" / {feeder_name}" if feeder_name else "")
         message = f"پست {post_name}" + (f" و فیدر {feeder_name}" if feeder_name else "") + " دچار قطعی برق شده است."
 
-        # ۱. ثبت لاگ حسابرسی حیاتی (CRITICAL)
         background_tasks.add_task(
             send_audit_log, action="POWER_OUTAGE_ALERT", username=username, success=True, severity="CRITICAL",
             description=f"قطعی برق شناسایی شد: پست '{post_name}'" + (f", فیدر '{feeder_name}'." if feeder_name else ".")
         )
 
-        # ۲. ذخیره در دیتابیس
         request = NotificationBulkCreateRequest(
             user_ids=user_ids, title=title, message=message, type=NotificationType.ALERT,
             priority=NotificationPriority.CRITICAL, source_type="post", source_id=post_id,
@@ -165,7 +152,6 @@ class NotificationService:
         )
         await NotificationService.send_bulk_notification(db, request, background_tasks, username)
 
-        # ۳. ارسال به RabbitMQ برای کانال‌های خارجی (SMS/Email)
         if send_rabbitmq_notification and NotificationPayload:
             payload = NotificationPayload(provider="sms", recipient="managers_group", message=message)
             background_tasks.add_task(send_rabbitmq_notification, payload)
@@ -179,18 +165,15 @@ class NotificationService:
             background_tasks: BackgroundTasks, unit: str = "",
             username: Optional[str] = "System"
     ):
-        """نوتیفیکیشن عبور از آستانه با ثبت لاگ WARNING"""
         title = f"هشدار ⚠️: {parameter_name} غیرمجاز"
         message = (f"در پست {post_name}، مقدار {parameter_name} به {current_value}{unit} "
                    f"رسیده که از حد مجاز ({threshold}{unit}) فراتر است.")
 
-        # ۱. ثبت لاگ حسابرسی هشدار (WARNING)
         background_tasks.add_task(
             send_audit_log, action="THRESHOLD_EXCEEDED_ALERT", username=username, success=True, severity="WARNING",
             description=f"هشدار عبور از آستانه برای {parameter_name} در پست '{post_name}': مقدار فعلی {current_value}, حد مجاز {threshold}."
         )
 
-        # ۲. ذخیره در دیتابیس
         request = NotificationBulkCreateRequest(
             user_ids=user_ids, title=title, message=message, type=NotificationType.WARNING,
             priority=NotificationPriority.HIGH, source_type="post", source_id=post_id,
@@ -200,7 +183,6 @@ class NotificationService:
         )
         await NotificationService.send_bulk_notification(db, request, background_tasks, username)
 
-        # ۳. ارسال به RabbitMQ
         if send_rabbitmq_notification and NotificationPayload:
             payload = NotificationPayload(provider="sms", recipient="technical_team", message=message)
             background_tasks.add_task(send_rabbitmq_notification, payload)
@@ -209,10 +191,6 @@ class NotificationService:
 
     @staticmethod
     async def _push_live(notification) -> None:
-        """
-        ارسال زنده‌ی نوتیفیکیشن ثبت‌شده به وب‌سوکت /notifications/ws کاربر (اگر آنلاین باشد).
-        پیام: {"type": "NEW_NOTIFICATION", "data": <NotificationResponse>}
-        """
         payload = NotificationResponse.model_validate(notification).model_dump(mode="json")
         await notifier_manager.send_personal_message(
             {"type": "NEW_NOTIFICATION", "data": payload}, notification.user_id
@@ -220,8 +198,7 @@ class NotificationService:
 
     @staticmethod
     def _should_send(pref: NotificationPreference, n_type: NotificationType, priority: NotificationPriority) -> bool:
-        """بررسی تنظیمات کاربر برای ارسال نوتیفیکیشن"""
-        if not pref: return True  # اگر تنظیماتی وجود نداشت، همیشه ارسال کن
+        if not pref: return True
         type_mapping = {
             NotificationType.INFO: pref.enable_info, NotificationType.WARNING: pref.enable_warning,
             NotificationType.ERROR: pref.enable_error, NotificationType.SUCCESS: pref.enable_success,

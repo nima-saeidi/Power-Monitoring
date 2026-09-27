@@ -5,8 +5,6 @@ logger = logging.getLogger(__name__)
 
 
 async def handle_telemetry_metric(payload: dict):
-    """دریافت پیام، استخراج داده‌ها و ارسال به InfluxDB"""
-    # پشتیبانی همزمان از ساختار تخت یا تودرتو (data wrapper)
     data = payload.get("data", payload)
 
     feeder_id = data.get("feeder_id") or payload.get("feeder_id")

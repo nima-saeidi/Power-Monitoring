@@ -1,10 +1,3 @@
-"""monitoring requirements: codes, post type, load status, link feeder, page access, command register
-
-Revision ID: e7a3c9d2f4b1
-Revises: d5e8f2a4c1b7
-Create Date: 2026-09-26 00:00:00.000000
-
-"""
 from typing import Sequence, Union
 
 from alembic import op
@@ -12,7 +5,6 @@ import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
 
-# revision identifiers, used by Alembic.
 revision: str = 'e7a3c9d2f4b1'
 down_revision: Union[str, Sequence[str], None] = 'd5e8f2a4c1b7'
 branch_labels: Union[str, Sequence[str], None] = None
@@ -20,7 +12,6 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    """Upgrade schema."""
     op.add_column('locations', sa.Column('code', sa.String(length=50), nullable=True))
     op.create_index(op.f('ix_locations_code'), 'locations', ['code'], unique=True)
 
@@ -39,7 +30,6 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    """Downgrade schema."""
     op.drop_column('users', 'allowed_pages')
     op.drop_column('links', 'load_status')
     op.drop_constraint('fk_links_feeder_id_feeders', 'links', type_='foreignkey')

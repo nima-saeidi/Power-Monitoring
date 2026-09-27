@@ -16,12 +16,6 @@ async def send_service_log(
         user_id: Optional[int] = None,
         service_name: str = "notification_service",
 ) -> None:
-    """
-    ارسال یک رویداد لاگ به صف logs_queue با همان ساختار LogCreate که
-    logging_service مصرف می‌کند (سرویس لاگ مرکزی). این تابع از همان کانال
-    فعال RabbitMQ که ورکر نوتیفیکیشن برای مصرف پیام‌ها استفاده می‌کند بهره
-    می‌برد تا اتصال جدیدی باز نشود.
-    """
     try:
         message_body = {
             "service_name": service_name,

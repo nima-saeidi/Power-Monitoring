@@ -1,7 +1,3 @@
-"""
-Module: modules/base.py
-توضیحات: تعاریف کلاس‌های پایه (Abstract Base Class) و مدل‌های اعتبارسنجی (Pydantic Models)
-"""
 
 from abc import ABC, abstractmethod
 from enum import Enum
@@ -9,9 +5,6 @@ from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, EmailStr, Field
 
 
-# =====================================================================
-# 1. انوع کانال‌های ارسال اعلان (Enums)
-# =====================================================================
 class NotificationChannel(str, Enum):
     SMS = "sms"
     EMAIL = "email"
@@ -25,13 +18,7 @@ class NotificationPriority(str, Enum):
     CRITICAL = "critical"
 
 
-# =====================================================================
-# 2. طرح‌واره و ساختار پیام دریافتی از صف (Pydantic Schema)
-# =====================================================================
 class NotificationPayload(BaseModel):
-    """
-    اسکیمای پیام استاندارد که از صف RabbitMQ دریافت می‌شود.
-    """
     channel: NotificationChannel = Field(
         default=NotificationChannel.ALL,
         description="کانال ارسال (sms, email, all)"
@@ -82,19 +69,8 @@ class NotificationPayload(BaseModel):
         }
 
 
-# =====================================================================
-# 3. کلاس پایه انتزاعی ارائه‌دهنده‌ها (Abstract Base Provider)
-# =====================================================================
 class BaseNotificationProvider(ABC):
-    """
-    کلاس پایه انتزاعی؛ تمامی سرویس‌های ارسال (ایمیل، پیامک و ...)
-    باید از این کلاس ارث‌بری کرده و متد send را پیاده‌سازی کنند.
-    """
 
     @abstractmethod
     async def send(self, *args: Any, **kwargs: Any) -> bool:
-        """
-        ارسال اعلان به صورت Async.
-        در صورت موفقیت باید True و در صورت بروز خطا False برگرداند.
-        """
         pass

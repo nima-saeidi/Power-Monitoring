@@ -6,7 +6,6 @@ from core.config import settings
 logger = logging.getLogger(__name__)
 
 def _safe_float(val, default=0.0) -> float:
-    """تبدیل ایمن مقادیر با پشتیبانی از مقادیر None یا رشته‌های خراب"""
     if val is None:
         return float(default)
     try:
@@ -29,7 +28,6 @@ class TimeSeriesDB:
         logger.info(" Connected to InfluxDB Async Client.")
 
     async def write_telemetry(self, feeder_id: int, data: dict, timestamp=None):
-        """ثبت ۵ پارامتر الکتریکی به صورت Point در InfluxDB"""
         point = (
             Point("feeder_telemetry")
             .tag("feeder_id", str(feeder_id))

@@ -1,4 +1,3 @@
-# telemetry_service/core/database.py
 from influxdb_client.client.influxdb_client_async import InfluxDBClientAsync
 from core.config import settings
 
@@ -24,7 +23,6 @@ influx_manager = InfluxDBManager()
 
 
 async def get_influx_write_api():
-    """Dependency برای دریافت Write API جهت ثبت داده‌ها"""
     client = influx_manager.get_client()
     return client.write_api()
 

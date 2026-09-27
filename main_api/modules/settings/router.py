@@ -1,4 +1,3 @@
-# main_api/modules/settings/router.py
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from .schemas import SettingUpdate, SettingResponse
@@ -6,13 +5,11 @@ from .service import SettingService
 from main_api.core.database import get_db
 from main_api.core.rabbitmq import get_rabbitmq_publisher, RabbitMQPublisher
 
-# Import access control dependencies
 from main_api.modules.auth.dependencies import require_any_user, require_tech_or_admin
 from main_api.modules.users.models import RoleEnum
 
 router = APIRouter(prefix="/settings", tags=["System Settings"])
 
-# تنظیمات امنیتی احراز هویت فقط توسط ادمین قابل تغییر است (نه اپراتور فنی)
 ADMIN_ONLY_FIELDS = {
     "access_token_expire_minutes",
     "max_login_attempts",
@@ -28,7 +25,7 @@ ADMIN_ONLY_FIELDS = {
 )
 async def get_system_settings(
     db: AsyncSession = Depends(get_db),
-    current_user=Depends(require_any_user)  # Only authenticated users with valid roles
+    current_user=Depends(require_any_user)
 ):
     return await SettingService.get_or_create_settings(db)
 
@@ -37,9 +34,8 @@ async def get_system_settings(
 async def update_system_settings(
     data: SettingUpdate,
     db: AsyncSession = Depends(get_db),
-    # ✅ پرانتزهای تابع get_rabbitmq_publisher برداشته شد:
     broker: RabbitMQPublisher = Depends(get_rabbitmq_publisher),
-    current_user=Depends(require_tech_or_admin)  # ادمین و اپراتور فنی مجاز به تغییر تنظیمات سیستم هستند
+    current_user=Depends(require_tech_or_admin)
 ):
     restricted = ADMIN_ONLY_FIELDS & data.model_dump(exclude_unset=True).keys()
     if restricted and current_user.role != RoleEnum.ADMIN:

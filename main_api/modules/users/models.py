@@ -1,4 +1,3 @@
-# main_api/modules/users/models.py
 from sqlalchemy import Column, Integer, String, Boolean, DateTime, Enum as SQLEnum
 from sqlalchemy.sql import func
 from sqlalchemy.dialects.postgresql import JSONB
@@ -24,7 +23,6 @@ class User(Base):
     role = Column(SQLEnum(RoleEnum), default=RoleEnum.USER, nullable=False)
     is_active = Column(Boolean, default=True)
     sms_notification_enabled = Column(Boolean, default=False)
-    # صفحه‌هایی که این حساب اجازه‌ی دیدنشان را دارد؛ None یعنی همه‌ی صفحه‌های مجاز برای نقش
     allowed_pages = Column(JSONB, nullable=True)
 
     failed_login_attempts = Column(Integer, default=0, nullable=False)

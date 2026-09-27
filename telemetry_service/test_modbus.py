@@ -7,7 +7,6 @@ if client.connect():
     print("اتصال به شبیه‌ساز با موفقیت انجام شد!\n")
     
     for i in range(5):
-        # فقط address را می‌شود مستقیم داد، بقیه باید با نام (count, slave) باشند
         response = client.read_holding_registers(address=2, count=1)
         
         if not response.isError():

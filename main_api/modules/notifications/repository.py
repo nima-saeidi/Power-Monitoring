@@ -3,7 +3,6 @@ from datetime import datetime, timedelta
 from sqlalchemy import select, func, and_, or_, desc
 from sqlalchemy.ext.asyncio import AsyncSession
 
-# فرض بر این است که این ماژول‌ها در پروژه شما وجود دارند
 from main_api.modules.notifications.models import (
     Notification,
     NotificationTemplate,
@@ -15,7 +14,6 @@ from main_api.core.logging import api_logger
 
 
 class NotificationRepository:
-    """Repository برای مدیریت نوتیفیکیشن‌ها"""
     
     @staticmethod
     async def create(
@@ -31,7 +29,6 @@ class NotificationRepository:
         action_url: Optional[str] = None,
         expires_at: Optional[datetime] = None
     ) -> Notification:
-        """ایجاد نوتیفیکیشن جدید"""
         
         notification = Notification(
             user_id=user_id,
@@ -59,7 +56,6 @@ class NotificationRepository:
     
     @staticmethod
     async def get_by_id(db: AsyncSession, notification_id: int) -> Optional[Notification]:
-        """دریافت نوتیفیکیشن با ID"""
         result = await db.execute(
             select(Notification).where(Notification.id == notification_id)
         )
@@ -76,11 +72,9 @@ class NotificationRepository:
         skip: int = 0,
         limit: int = 50
     ) -> Tuple[List[Notification], int]:
-        """دریافت نوتیفیکیشن‌های یک کاربر"""
         
         query = select(Notification).where(Notification.user_id == user_id)
         
-        # فیلترها
         if unread_only:
             query = query.where(Notification.is_read == False)
         
@@ -93,7 +87,6 @@ class NotificationRepository:
         if priority_filter:
             query = query.where(Notification.priority == priority_filter)
         
-        # حذف نوتیفیکیشن‌های منقضی شده
         query = query.where(
             or_(
                 Notification.expires_at.is_(None),
@@ -101,12 +94,10 @@ class NotificationRepository:
             )
         )
         
-        # شمارش کل
         count_query = select(func.count()).select_from(query.subquery())
         total_result = await db.execute(count_query)
         total = total_result.scalar()
         
-        # مرتب‌سازی و صفحه‌بندی
         query = query.order_by(desc(Notification.created_at))
         query = query.offset(skip).limit(limit)
         
@@ -121,7 +112,6 @@ class NotificationRepository:
         notification_id: int,
         user_id: Optional[int] = None
     ) -> bool:
-        """علامت‌گذاری نوتیفیکیشن به عنوان خوانده شده"""
         
         query = select(Notification).where(Notification.id == notification_id)
         
@@ -142,7 +132,6 @@ class NotificationRepository:
     
     @staticmethod
     async def mark_all_as_read(db: AsyncSession, user_id: int) -> int:
-        """علامت‌گذاری همه نوتیفیکیشن‌های کاربر به عنوان خوانده شده"""
         
         result = await db.execute(
             select(Notification).where(
@@ -165,7 +154,6 @@ class NotificationRepository:
 
     @staticmethod
     async def dismiss(db: AsyncSession, notification_id: int, user_id: int) -> bool:
-        """نادیده گرفتن نوتیفیکیشن"""
         
         result = await db.execute(
             select(Notification).where(
@@ -190,7 +178,6 @@ class NotificationRepository:
 
     @staticmethod
     async def get_preferences(db: AsyncSession, user_id: int) -> NotificationPreference:
-        """دریافت تنظیمات نوتیفیکیشن کاربر"""
         
         result = await db.execute(
             select(NotificationPreference).where(NotificationPreference.user_id == user_id)
@@ -199,7 +186,6 @@ class NotificationRepository:
         pref = result.scalar_one_or_none()
 
         if not pref:
-            # ایجاد تنظیمات پیش‌فرض در صورت نبودن
             pref = NotificationPreference(user_id=user_id)
             db.add(pref)
             await db.commit()

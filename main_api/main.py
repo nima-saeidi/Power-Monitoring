@@ -10,21 +10,16 @@ from fastapi.middleware.cors import CORSMiddleware
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
-# ================= Rate Limiting =================
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 
-# محدودکننده در main_api/core/rate_limit.py تعریف شده تا روترها هم بتوانند از آن استفاده کنند
 from main_api.core.rate_limit import limiter
 from main_api.core.config import settings
-# =================================================
 
-# هسته لاگینگ و بروکر پیام
 from main_api.core.logging import setup_logging
 from main_api.core.broker import message_broker, send_log_to_rabbitmq
 from main_api.modules.telemetry.consumer import telemetry_ws_consumer
 
-# ماژول‌های برنامه و روترها
 from main_api.modules.auth.router import auth_router
 from main_api.modules.users.router import user_router
 from main_api.modules.locations.router import locations_router
@@ -41,20 +36,14 @@ from main_api.modules.audit_logs.router import (
     test_log_router as test_logs_router,
 )
 
-# پیکربندی اولیه لاگر
 setup_logging(service_name="main_api")
 logger = logging.getLogger("main_api")
 
 
-# =======================================================
-# مدیریت چرخه حیات برنامه (Lifespan Events)
-# =======================================================
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # -------- Startup --------
     logger.info("🚀 Main API is starting up...")
 
-    # اتصال به RabbitMQ جهت ارسال لاگ‌ها و انتشار رویدادهای CQRS
     try:
         await message_broker.connect()
         logger.info("✅ Connected to RabbitMQ message broker successfully.")
@@ -72,20 +61,17 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.error(f"❌ Failed to connect to RabbitMQ broker on startup: {e}", exc_info=True)
 
-    # دریافت داده‌ی زنده‌ی Modbus از RabbitMQ و ارسال به وب‌سوکت /telemetry/ws
     try:
         await telemetry_ws_consumer.start()
     except Exception as e:
         logger.error(f"❌ Failed to start telemetry WebSocket consumer: {e}", exc_info=True)
 
-    yield  # برنامه در حال سرویس‌دهی است
+    yield
 
-    # -------- Shutdown --------
     logger.info("🛑 Main API is shutting down...")
 
     await telemetry_ws_consumer.stop()
 
-    # بستن ایمن ارتباط با RabbitMQ
     try:
         try:
             await send_log_to_rabbitmq(
@@ -103,9 +89,6 @@ async def lifespan(app: FastAPI):
         logger.error(f"❌ Error while closing RabbitMQ connection: {e}", exc_info=True)
 
 
-# =======================================================
-# نمونه‌سازی FastAPI و میدلورها
-# =======================================================
 app = FastAPI(
     title="سامانه جامع مانیتورینگ و مدیریت شبکه توزیع برق دانشگاه",
     description="سرویس مرکزی API برای مدیریت تجهیزات، کاربران و انتشار رویدادهای مانیتورینگ به RabbitMQ",
@@ -116,12 +99,9 @@ app = FastAPI(
     openapi_url="/openapi.json" if settings.ENABLE_DOCS else None,
 )
 
-# اتصال Limiter
 app.state.limiter = limiter
 app.add_middleware(SlowAPIMiddleware)
 
-# تنظیمات CORS: originهای مجاز از CORS_ORIGINS در .env خوانده می‌شوند (با کاما جدا).
-# احراز هویت با هدر Bearer است نه کوکی، پس برای "*" نیازی به allow_credentials نیست.
 _cors_origins = [o.strip() for o in settings.CORS_ORIGINS.split(",") if o.strip()]
 _cors_allow_all = "*" in _cors_origins
 app.add_middleware(
@@ -133,7 +113,6 @@ app.add_middleware(
 )
 
 
-# هدرهای امنیتی پایه روی همه‌ی پاسخ‌ها
 @app.middleware("http")
 async def security_headers_middleware(request: Request, call_next):
     response = await call_next(request)
@@ -143,11 +122,7 @@ async def security_headers_middleware(request: Request, call_next):
     return response
 
 
-# =======================================================
-# مدیریت سراسری خطاهای API (Exception Handlers)
-# =======================================================
 
-# ۰. مدیریت خطای Rate Limit (کد 429)
 @app.exception_handler(RateLimitExceeded)
 async def custom_rate_limit_handler(request: Request, exc: RateLimitExceeded):
     client_ip = request.client.host if request.client else "unknown"
@@ -162,7 +137,6 @@ async def custom_rate_limit_handler(request: Request, exc: RateLimitExceeded):
     )
 
 
-# ۱. مدیریت خطاهای اعتبارسنجی Pydantic (کد 422)
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
     persian_errors = []
@@ -171,7 +145,6 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
         field = " -> ".join(str(loc) for loc in error.get("loc", []) if loc != "body")
         msg = error.get("msg", "")
 
-        # ترجمه و شفاف‌سازی خطاهای رایج Pydantic
         if "Field required" in msg:
             persian_msg = "ارسال این فیلد الزامی است."
         elif "value is not a valid integer" in msg:
@@ -198,10 +171,8 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
     )
 
 
-# ۲. مدیریت خطاهای استاندارد HTTP
 @app.exception_handler(StarletteHTTPException)
 async def http_exception_handler(request: Request, exc: StarletteHTTPException):
-    # ثبت درخواست‌های ناموفق (احراز هویت، دسترسی، ۴۰۴، ۵xx و ...) در سیستم لاگ
     if exc.status_code >= 400:
         severity = "ERROR" if exc.status_code >= 500 else (
             "WARNING" if exc.status_code in (401, 403, 429) else "INFO"
@@ -225,11 +196,10 @@ async def http_exception_handler(request: Request, exc: StarletteHTTPException):
             "message": exc.detail,
             "error_code": f"HTTP_{exc.status_code}"
         },
-        headers=getattr(exc, "headers", None)  # اضافه شدن حفظ هدرها
+        headers=getattr(exc, "headers", None)
     )
 
 
-# ۳. مدیریت خطاهای یکپارچگی پایگاه داده (IntegrityError)
 @app.exception_handler(IntegrityError)
 async def sqlalchemy_integrity_error_handler(request: Request, exc: IntegrityError):
     orig_error = str(exc.orig) if hasattr(exc, "orig") else str(exc)
@@ -255,7 +225,6 @@ async def sqlalchemy_integrity_error_handler(request: Request, exc: IntegrityErr
     )
 
 
-# ۴. مدیریت سایر خطاهای دیتابیس (SQLAlchemyError)
 @app.exception_handler(SQLAlchemyError)
 async def sqlalchemy_general_error_handler(request: Request, exc: SQLAlchemyError):
     logger.error(f"Database Error on {request.url.path}: {str(exc)}", exc_info=True)
@@ -269,7 +238,6 @@ async def sqlalchemy_general_error_handler(request: Request, exc: SQLAlchemyErro
     )
 
 
-# ۵. مدیریت خطاهای پیش‌بینی‌نشده سیستمی (Unhandled 500)
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
     logger.error(f"Unhandled Exception on {request.url.path}: {str(exc)}", exc_info=True)
@@ -294,29 +262,21 @@ async def global_exception_handler(request: Request, exc: Exception):
     )
 
 
-# =======================================================
-# ثبت روترها (Include Routers)
-# =======================================================
 
-# احراز هویت و مدیریت کاربران
 app.include_router(auth_router)
 app.include_router(user_router)
 
-# تجهیزات و ساختار شبکه توزیع
 app.include_router(locations_router)
 app.include_router(posts_router)
 app.include_router(feeders_router)
 app.include_router(links_router)
 
-# تله‌متری و داده‌های مانیتورینگ
 app.include_router(telemetry_router)
 app.include_router(dashboard_router)
 
-# نوتیفیکیشن‌ها و تنظیمات سامانه
 app.include_router(notifications_router)
 app.include_router(settings_router)
 
-# لاگ‌های حسابرسی (پنل ادمین) - پروکسی روی logging_service
 app.include_router(audit_logs_router)
 app.include_router(command_logs_router)
 app.include_router(test_logs_router)

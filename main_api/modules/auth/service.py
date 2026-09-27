@@ -32,7 +32,6 @@ from main_api.modules.settings.service import SettingService
 from main_api.core.broker import RabbitMQPublisher, send_notification_to_queue
 from main_api.core.email_templates import build_reset_code_email_html
 
-# ایمپورت تابع ارسال لاگ
 from main_api.modules.audit_logs.services import send_audit_log, schedule_audit_log
 
 
@@ -42,18 +41,14 @@ _FORGOT_PASSWORD_MESSAGE = "اگر ایمیل در سیستم موجود باش�
 
 
 def _otp_digest(email: str, code: str) -> str:
-    """هش HMAC کد OTP؛ خود کد هرگز داخل توکن (که برای کلاینت قابل خواندن است) قرار نمی‌گیرد."""
     return hmac.new(settings.SECRET_KEY.encode(), f"otp:{email}:{code}".encode(), hashlib.sha256).hexdigest()
 
 
 def _password_fingerprint(hashed_password: str) -> str:
-    """اثر انگشت رمز فعلی؛ بعد از تغییر رمز، reset_token قبلی دیگر معتبر نیست (یک‌بار مصرف)."""
     return hmac.new(settings.SECRET_KEY.encode(), f"pwf:{hashed_password}".encode(), hashlib.sha256).hexdigest()[:32]
 
 
 class AuthService:
-    """احراز هویت: لاگین، پروفایل شخصی، تغییر/بازیابی رمز عبور و ثبت‌نام ادمین اولیه.
-    برای مدیریت کاربران توسط ادمین (CRUD) به main_api.modules.users.service.UserService مراجعه کنید."""
 
     def __init__(self, repository: UserRepository, publisher: RabbitMQPublisher, db: AsyncSession):
         self.repo = repository
@@ -62,7 +57,6 @@ class AuthService:
         self.db_routing_key = "db.users.write"
 
     async def _publish(self, payload: dict):
-        """ارسال رویدادهای استاندارد تغییر وضعیت کاربر به صف RabbitMQ (CQRS)"""
         event_payload = {
             "event_id": str(uuid.uuid4()),
             "entity": payload.get("entity", "user"),
@@ -74,25 +68,17 @@ class AuthService:
             message=event_payload
         )
 
-    # ==========================================
-    # متدهای خواندنی و لاگین (Direct DB + Cache)
-    # ==========================================
 
     async def login(self, data: LoginRequest, background_tasks: Optional[BackgroundTasks] = None) -> TokenResponse:
         user = await self.repo.get_by_email(data.email)
         if not user:
-            # ارسال لاگ خطا قبل از توقف ریکوئست
             asyncio.create_task(send_audit_log(
                 action="USER_LOGIN_FAILED", username=data.email, success=False,
                 severity="WARNING", description="کاربری با این ایمیل یافت نشد."
             ))
-            # هش ساختگی تا زمان پاسخ با حالت «رمز اشتباه» یکسان باشد و پیام هم یکی باشد
-            # (جلوگیری از کشف ایمیل‌های ثبت‌شده)
             verify_password(data.password, _DUMMY_PASSWORD_HASH)
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=_INVALID_CREDENTIALS)
 
-        # تنظیمات سیستم یک‌بار در ابتدا خوانده می‌شود تا هم در بررسی قفل حساب و
-        # هم در محاسبه‌ی مدت اعتبار توکن از همان مقادیر به‌روز استفاده شود.
         db_settings = await SettingService.get_or_create_settings(self.db)
 
         self._ensure_account_not_locked(user)
@@ -108,20 +94,17 @@ class AuthService:
             ))
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="حساب کاربری غیرفعال است.")
 
-        # ورود موفق: هر شمارنده‌ی تلاش ناموفق قبلی پاک می‌شود
         await self._reset_login_attempts(user)
 
         now = datetime.now(timezone.utc).replace(microsecond=0)
         expires_delta = timedelta(minutes=db_settings.access_token_expire_minutes)
         expire_time = now + expires_delta
 
-        # اصلاح ساختار توکن که به هم ریخته بود
         access_token = create_access_token(
             data={"sub": str(user.id), "email": user.email, "role": user.role, "type": "access"},
             expires_delta=expires_delta
         )
 
-        # ارسال لاگ موفقیت آمیز در پس‌زمینه
         schedule_audit_log(
             background_tasks,
             action="USER_LOGIN",
@@ -141,13 +124,8 @@ class AuthService:
             user=UserResponse.model_validate(user)
         )
 
-    # ==========================================
-    # قفل حساب بر اساس max_login_attempts / lockout_duration_minutes
-    # (تنظیمات سیستم -> main_api/modules/settings)
-    # ==========================================
 
     def _ensure_account_not_locked(self, user) -> None:
-        """اگر حساب هنوز طبق lockout_duration_minutes قفل است، درخواست را متوقف می‌کند."""
         if not user.locked_until:
             return
 
@@ -169,7 +147,6 @@ class AuthService:
             )
 
     async def _register_failed_login(self, user, db_settings) -> None:
-        """افزایش شمارنده‌ی تلاش ناموفق و قفل کردن حساب در صورت رسیدن به max_login_attempts."""
         new_attempts = (user.failed_login_attempts or 0) + 1
         should_lock = new_attempts >= db_settings.max_login_attempts
 
@@ -200,7 +177,6 @@ class AuthService:
             ))
 
     async def _reset_login_attempts(self, user) -> None:
-        """پس از ورود موفق، شمارنده‌ی تلاش ناموفق و قفل احتمالی حساب را پاک می‌کند."""
         if user.failed_login_attempts or user.locked_until:
             await self.repo.update_login_state(user, failed_attempts=0, locked_until=None)
 
@@ -210,8 +186,6 @@ class AuthService:
         code = f"{secrets.randbelow(1_000_000):06d}"
         expire = datetime.now(timezone.utc) + timedelta(minutes=5)
 
-        # برای ایمیل ناموجود هم یک session_token (با کدی که به کسی ارسال نمی‌شود) برمی‌گردد
-        # تا پاسخ دو حالت یکسان باشد و نشود ایمیل‌های ثبت‌شده را کشف کرد
         token = jwt.encode(
             {"sub": data.email, "code_hash": _otp_digest(data.email, code), "type": "otp_session", "exp": expire},
             settings.SECRET_KEY,
@@ -225,8 +199,6 @@ class AuthService:
             ))
             return {"message": _FORGOT_PASSWORD_MESSAGE, "session_token": token}
 
-        # ارسال ایمیل دیگر در main_api انجام نمی‌شود؛ فقط رویداد به صف notification_events
-        # منتشر می‌شود تا notification_service آن را از طریق EmailProvider ارسال کند.
         background_tasks.add_task(
             send_notification_to_queue,
             title="کد تأیید بازیابی رمز عبور",
@@ -294,9 +266,6 @@ class AuthService:
 
         return {"message": "کد تایید شد.", "reset_token": reset_token}
 
-    # ==========================================
-    # متدهای نوشتنی (Event-Driven)
-    # ==========================================
 
     async def register_admin(self, data: AdminRegisterRequest, background_tasks: Optional[BackgroundTasks] = None):
         if await self.repo.get_by_email(data.email):
@@ -390,7 +359,6 @@ class AuthService:
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="توکن منقضی شده یا نامعتبر است.")
 
         user = await self.repo.get_by_email(email)
-        # توکن فقط تا وقتی رمز عوض نشده معتبر است (استفاده‌ی مجدد از همان توکن رد می‌شود)
         if not user or not hmac.compare_digest(
                 str(payload.get("pwf", "")), _password_fingerprint(user.hashed_password)):
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="توکن منقضی شده یا نامعتبر است.")

@@ -9,12 +9,10 @@ from main_api.modules.users.repository import UserRepository
 from main_api.modules.users.schemas import UserResponse, UserCreate, UserUpdate
 from main_api.core.broker import RabbitMQPublisher
 
-# ایمپورت تابع ارسال لاگ
 from main_api.modules.audit_logs.services import send_audit_log, schedule_audit_log
 
 
 class UserService:
-    """مدیریت کاربران (CRUD) توسط ادمین. برای عملیات احراز هویت/رمز عبور به AuthService مراجعه کنید."""
 
     def __init__(self, repository: UserRepository, publisher: RabbitMQPublisher, db: AsyncSession):
         self.repo = repository
@@ -23,7 +21,6 @@ class UserService:
         self.db_routing_key = "db.users.write"
 
     async def _publish(self, payload: dict):
-        """ارسال رویدادهای استاندارد تغییر وضعیت کاربر به صف RabbitMQ (CQRS)"""
         event_payload = {
             "event_id": str(uuid.uuid4()),
             "entity": payload.get("entity", "user"),

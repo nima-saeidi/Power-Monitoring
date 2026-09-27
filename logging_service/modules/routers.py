@@ -25,7 +25,6 @@ async def fetch_logs(
     limit: int = Query(default=50, ge=1, le=1000, description="Items per page"),
     offset: int = Query(default=0, ge=0, description="Page offset")
 ):
-    """دریافت لاگ‌ها از دیتابیس PostgreSQL با امکان فیلتر و صفحه‌بندی"""
     try:
         filters = LogFilterRequest(
             service_name=service_name,
@@ -49,13 +48,11 @@ async def fetch_logs(
 
 @router.get("/meta/filters", response_model=LogFilterOptionsResponse)
 async def fetch_filter_options():
-    """لیست مقادیر یکتای service_name/action برای ساخت فیلترهای پنل ادمین"""
     return await logging_service_instance.get_filter_options()
 
 
 @router.get("/{log_id}", response_model=LogItem)
 async def fetch_log_by_id(log_id: int):
-    """دریافت یک رکورد لاگ مشخص با شناسه"""
     log = await logging_service_instance.get_log_by_id(log_id)
     if not log:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Log not found")

@@ -7,11 +7,9 @@ from main_api.modules.feeders.schemas import FeederResponse
 from main_api.modules.locations.schemas import LocationResponse
 
 
-# ----------------- Post Schemas -----------------
 class PostBase(BaseModel):
     name: str
     code: Optional[str] = Field(None, max_length=50)
-    # consumer (مصرف‌کننده) یا producer (تولیدکننده)
     post_type: Optional[str] = None
     supply_source: Optional[str] = None
     location_id: Optional[int] = None

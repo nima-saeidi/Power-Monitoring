@@ -16,10 +16,6 @@ from modules.telemetry.service import TelemetryService
 
 
 async def verify_internal_api_key(x_internal_api_key: Optional[str] = Header(default=None)):
-    """
-    این سرویس فقط از main_api فراخوانی می‌شود (پورت 8001 در docker-compose بیرون باز است)،
-    پس همه‌ی اندپوینت‌ها کلید مشترک INTERNAL_API_KEY را می‌خواهند.
-    """
     expected = settings.INTERNAL_API_KEY
     if not expected or not x_internal_api_key or not hmac.compare_digest(x_internal_api_key, expected):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
@@ -27,7 +23,6 @@ async def verify_internal_api_key(x_internal_api_key: Optional[str] = Header(def
 
 router = APIRouter(prefix="/telemetry", tags=["Telemetry"], dependencies=[Depends(verify_internal_api_key)])
 
-# حداکثر انتظار برای پاسخ دستگاه به فرمان قطع/وصل (ثانیه)
 COMMAND_TIMEOUT_SECONDS = 3
 
 
@@ -46,7 +41,6 @@ async def get_energy(
     end_time: Optional[datetime] = Query(default=None),
     window: Optional[str] = Query(default=None, pattern="^(1h|1d|1w|1mo)$", description="سری انرژی به تفکیک بازه"),
 ):
-    """انرژی اکتیو (kWh) و راکتیو (kVARh) هر فیدر = انتگرال توان در بازه."""
     start_time, end_time = _resolve_range(start_time, end_time)
     energy = await analytics.get_energy(feeder_ids, start_time, end_time, window)
     return {"start_time": start_time, "end_time": end_time, "feeders": list(energy.values())}
@@ -58,7 +52,6 @@ async def get_forecast(
     hours: int = Query(default=24, ge=1, le=168),
     history_days: int = Query(default=7, ge=1, le=60),
 ):
-    """پیش‌بینی ساعتی توان اکتیو و راکتیو (میانگین همان ساعت در روزهای گذشته)."""
     return await analytics.get_forecast(feeder_id, hours, history_days)
 
 
@@ -72,7 +65,6 @@ class CoilWriteRequest(BaseModel):
 
 @router.post("/command")
 async def write_coil(data: CoilWriteRequest):
-    """اجرای فرمان قطع/وصل روی دستگاه (نوشتن Coil). تأیید دومرحله‌ای در main_api انجام می‌شود."""
     reader = ModbusReader(host=data.ip_address, port=data.port, timeout=COMMAND_TIMEOUT_SECONDS, retries=2)
     try:
         ok = await reader.write_coil(data.register_address, data.value, slave=data.slave_id)
@@ -85,9 +77,6 @@ async def write_coil(data: CoilWriteRequest):
 
 
 def parse_time_param(time_str: Optional[str], default_delta: Optional[timedelta] = None) -> datetime:
-    """
-    پارس کردن تاریخ هم به صورت عبارات نسبی (-24h, -30d, now()) و هم استاندارد ISO
-    """
     now = datetime.now(timezone.utc)
 
     if not time_str or time_str.strip() in ("", "now", "now()"):
@@ -97,7 +86,6 @@ def parse_time_param(time_str: Optional[str], default_delta: Optional[timedelta]
 
     time_str = time_str.strip()
 
-    # بررسی فرمت‌های نسبی مانند -24h, -30d, -15m, -60s
     relative_match = re.match(r"^-(\d+)([smhd])$", time_str)
     if relative_match:
         value, unit = int(relative_match.group(1)), relative_match.group(2)
@@ -110,10 +98,8 @@ def parse_time_param(time_str: Optional[str], default_delta: Optional[timedelta]
         elif unit == "d":
             return now - timedelta(days=value)
 
-    # بررسی و تبدیل رشته استاندارد ISO
     try:
         dt = datetime.fromisoformat(time_str.replace("Z", "+00:00"))
-        # اطمینان از داشتن timezone
         if dt.tzinfo is None:
             dt = dt.replace(tzinfo=timezone.utc)
         return dt
@@ -126,9 +112,6 @@ def parse_time_param(time_str: Optional[str], default_delta: Optional[timedelta]
 
 @router.post("/", response_model=TelemetryResponse, status_code=status.HTTP_201_CREATED)
 async def create_telemetry_entry(data: TelemetryCreate):
-    """
-    ثبت دستی تله‌متری (یا دریافت از سنسورها/ایجنت‌ها)
-    """
     try:
         result = await TelemetryService.process_and_store(data)
         return result
@@ -141,9 +124,6 @@ async def create_telemetry_entry(data: TelemetryCreate):
 
 @router.get("/latest/{feeder_id}", response_model=TelemetryResponse)
 async def get_feeder_latest_telemetry(feeder_id: int):
-    """
-    دریافت آخرین وضعیت و ۵ پارامتر الکتریکی فیدر
-    """
     record = await TelemetryService.get_latest_telemetry(feeder_id)
     if not record:
         raise HTTPException(
@@ -170,9 +150,6 @@ async def get_feeder_history(
         description="دوره فشرده‌سازی/میانگین داده‌ها"
     )
 ):
-    """
-    دریافت داده‌های تاریخی فیدر جهت رسم نمودارهای داشبورد و گزارش‌گیری
-    """
     now = datetime.now(timezone.utc)
     if not end_time:
         end_time = now
@@ -206,10 +183,6 @@ async def get_telemetry_chart(
     start_time: Optional[datetime] = Query(default=None, description="زمان دقیق شروع (main_api این را می‌فرستد)"),
     end_time: Optional[datetime] = Query(default=None, description="زمان دقیق پایان"),
 ):
-    """
-    دریافت داده‌های ساختاریافته برای رسم نمودارهای تله‌متری.
-    start_time/end_time (اگر داده شوند) بر start/stop اولویت دارند.
-    """
     start_time = start_time or parse_time_param(start, default_delta=timedelta(days=1))
     end_time = end_time or parse_time_param(stop)
 

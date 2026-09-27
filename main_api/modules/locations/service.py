@@ -28,10 +28,6 @@ class LocationService:
         self.broker = broker
 
     async def _publish(self, entity: str, action: str, data: dict, filters: Optional[dict] = None):
-        """
-        A helper method to publish events to RabbitMQ.
-        Automatically adds routing_key, event_id, timestamp, and entity name.
-        """
         if hasattr(data, 'model_dump'):
             data_dict = data.model_dump()
         elif hasattr(data, '_asdict'):
@@ -53,12 +49,8 @@ class LocationService:
         routing_key = f"{entity}.{action}"
         await self.broker.publish_event(routing_key=routing_key, message=event_body)
 
-    # =========================================================
-    # LOCATION SERVICES
-    # =========================================================
     async def create_location(self, data: LocationCreate, background_tasks: Optional[BackgroundTasks] = None,
                               username: Optional[str] = None):
-        # بررسی وجود والد در صورت ارسال parent_id
         if data.parent_id:
             parent = await self.repo.get_location_by_id(data.parent_id)
             if not parent:
@@ -72,12 +64,10 @@ class LocationService:
                 )
 
         new_location_obj = await self.repo.create_location(data)
-        # دریافت شیء کامل جهت انتشار رویداد
         full_new_location = await self.repo.get_location_by_id(new_location_obj.id)
 
         await self._publish("location", "create", data=full_new_location)
 
-        # لاگ موفقیت‌آمیز
         schedule_audit_log(
             background_tasks, action="CREATE_LOCATION", username=username, success=True, severity="INFO",
             description=f"مکان جدید '{getattr(data, 'name', 'نامشخص')}' ایجاد شد."
@@ -171,15 +161,11 @@ class LocationService:
     async def get_posts_by_location(self, location_id: int):
         return await self.repo.get_posts_by_location(location_id)
 
-    # =========================================================
-    # CAMPUS / BULK SERVICES
-    # =========================================================
     async def create_campus_with_subsections(self, data: CampusWithSubsectionsCreate, background_tasks: Optional[BackgroundTasks] = None,
                                              username: Optional[str] = None):
         try:
             new_campus = await self.repo.create_campus_with_subsections(data)
 
-            # انتشار رویداد برای ایجاد پردیس به همراه تمامی بخش‌های داخلی آن
             await self._publish("campus", "create", data=new_campus)
 
             background_tasks.add_task(
@@ -197,15 +183,10 @@ class LocationService:
                 detail="Failed to create campus with subsections."
             )
 
-    # =========================================================
-    # EXPORT SERVICES (Pandas integration for Reporting)
-    # =========================================================
     async def export_devices_to_excel(self, background_tasks: Optional[BackgroundTasks] = None, username: Optional[str] = None):
         try:
-            # دریافت داده‌ها برای تهیه گزارش (به‌عنوان نمونه)
             locations = await self.repo.get_all_locations(skip=0, limit=10000)
 
-            # پردازش و ساخت دیتافریم با Pandas (صرفاً بخش لاجیک؛ تبدیل نهایی در Router انجام می‌شود)
             data_list = [{"ID": loc.id, "Name": loc.name, "Type": loc.type, "Parent_ID": loc.parent_id} for loc in
                          locations]
             df = pd.DataFrame(data_list)
@@ -215,7 +196,6 @@ class LocationService:
                 description="خروجی اکسل دستگاه‌ها و مکان‌ها با موفقیت ایجاد شد."
             )
 
-            # بازگرداندن داده پردازش شده (عملیات I/O نهایی برای ساخت فایل اکسل می‌تواند در Router یا یک Utility باشد)
             return df
         except Exception as e:
             asyncio.create_task(send_audit_log(
