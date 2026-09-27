@@ -1,10 +1,12 @@
 import hmac
+import logging
 import re
 from datetime import datetime, timezone, timedelta
 from typing import List, Optional
-from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
+from fastapi import APIRouter, Depends, Header, Query, status
 from pydantic import BaseModel, Field
 from core.config import settings
+from core.errors import api_error
 from modules.telemetry import analytics
 from modules.telemetry.modbus_client import ModbusReader
 from modules.telemetry.schemas import (
@@ -14,11 +16,13 @@ from modules.telemetry.schemas import (
 )
 from modules.telemetry.service import TelemetryService
 
+logger = logging.getLogger("telemetry_service")
+
 
 async def verify_internal_api_key(x_internal_api_key: Optional[str] = Header(default=None)):
     expected = settings.INTERNAL_API_KEY
     if not expected or not x_internal_api_key or not hmac.compare_digest(x_internal_api_key, expected):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
+        raise api_error(status.HTTP_403_FORBIDDEN, "FORBIDDEN", "Invalid or missing internal API key.")
 
 
 router = APIRouter(prefix="/telemetry", tags=["Telemetry"], dependencies=[Depends(verify_internal_api_key)])
@@ -30,7 +34,7 @@ def _resolve_range(start_time: Optional[datetime], end_time: Optional[datetime])
     end_time = end_time or datetime.now(timezone.utc)
     start_time = start_time or end_time - timedelta(hours=24)
     if start_time >= end_time:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="start_time must be before end_time")
+        raise api_error(status.HTTP_400_BAD_REQUEST, "INVALID_TIME_RANGE", "start_time must be before end_time")
     return start_time, end_time
 
 
@@ -71,7 +75,10 @@ async def write_coil(data: CoilWriteRequest):
     finally:
         await reader.close()
     if not ok:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="Device did not accept the command.")
+        raise api_error(
+            status.HTTP_502_BAD_GATEWAY, "DEVICE_UNREACHABLE",
+            f"Device at {data.ip_address}:{data.port} did not accept the command."
+        )
     return {"success": True, "register_address": data.register_address, "value": data.value}
 
 
@@ -104,9 +111,9 @@ def parse_time_param(time_str: Optional[str], default_delta: Optional[timedelta]
             dt = dt.replace(tzinfo=timezone.utc)
         return dt
     except ValueError:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"فرمت زمان نامعتبر است: '{time_str}'. از عبارات نسبی مانند -24h, -30d یا استاندارد ISO استفاده کنید."
+        raise api_error(
+            status.HTTP_400_BAD_REQUEST, "INVALID_TIME_FORMAT",
+            f"فرمت زمان نامعتبر است: '{time_str}'. از عبارات نسبی مانند -24h, -30d یا استاندارد ISO استفاده کنید."
         )
 
 
@@ -116,9 +123,10 @@ async def create_telemetry_entry(data: TelemetryCreate):
         result = await TelemetryService.process_and_store(data)
         return result
     except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to process telemetry: {str(e)}"
+        logger.error(f"Failed to process telemetry for feeder {data.feeder_id}: {e}", exc_info=True)
+        raise api_error(
+            status.HTTP_500_INTERNAL_SERVER_ERROR, "TELEMETRY_INGESTION_FAILED",
+            f"ثبت داده‌ی تله‌متری فیدر {data.feeder_id} با خطا مواجه شد."
         )
 
 
@@ -126,9 +134,9 @@ async def create_telemetry_entry(data: TelemetryCreate):
 async def get_feeder_latest_telemetry(feeder_id: int):
     record = await TelemetryService.get_latest_telemetry(feeder_id)
     if not record:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"No telemetry data found for feeder {feeder_id}"
+        raise api_error(
+            status.HTTP_404_NOT_FOUND, "TELEMETRY_NOT_FOUND",
+            f"No telemetry data found for feeder {feeder_id}"
         )
     return record
 
@@ -157,10 +165,7 @@ async def get_feeder_history(
         start_time = end_time - timedelta(hours=24)
 
     if start_time >= end_time:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="start_time must be before end_time"
-        )
+        raise api_error(status.HTTP_400_BAD_REQUEST, "INVALID_TIME_RANGE", "start_time must be before end_time")
 
     records = await TelemetryService.get_telemetry_history(
         feeder_id=feeder_id,
@@ -187,9 +192,9 @@ async def get_telemetry_chart(
     end_time = end_time or parse_time_param(stop)
 
     if start_time >= end_time:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="زمان شروع (start) باید قبل از زمان پایان (stop) باشد."
+        raise api_error(
+            status.HTTP_400_BAD_REQUEST, "INVALID_TIME_RANGE",
+            "زمان شروع (start) باید قبل از زمان پایان (stop) باشد."
         )
 
     return await TelemetryService.get_chart_data(

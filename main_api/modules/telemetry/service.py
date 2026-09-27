@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from main_api.core.config import settings
 from main_api.core.email_templates import build_feeder_offline_email_html
+from main_api.core.errors import api_error
 from main_api.modules.telemetry.repository import TelemetryRepository
 from main_api.modules.telemetry.schemas import (
     TelemetryCreate, TelemetryResponse, ActiveFeederConfig, FeederStatusUpdate,
@@ -34,12 +35,34 @@ def parse_time(value: str, now: Optional[datetime] = None) -> datetime:
     try:
         parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
     except ValueError:
-        raise HTTPException(status_code=400, detail=f"قالب زمان نامعتبر است: {value} (مثال: -24h، now() یا ISO)")
+        raise api_error(
+            status.HTTP_400_BAD_REQUEST, "INVALID_TIME_FORMAT",
+            f"قالب زمان نامعتبر است: {value} (مثال: -24h، now() یا ISO)"
+        )
     return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
 
 
 def internal_headers() -> Dict[str, str]:
     return {"X-Internal-API-Key": settings.INTERNAL_API_KEY}
+
+
+def _forward_microservice_error(response: httpx.Response) -> HTTPException:
+    """Re-raise a failed microservice response as-is when it already carries a
+    structured {error_code, message} body, so the frontend sees the real cause
+    (e.g. DEVICE_UNREACHABLE) instead of a generic HTTP_502. Falls back to a
+    generic code only for responses the microservice didn't shape itself
+    (e.g. a raw 502 from an unreachable container, not from its app code)."""
+    try:
+        body = response.json()
+    except ValueError:
+        body = None
+    if isinstance(body, dict) and isinstance(body.get("detail"), dict) and "message" in body["detail"]:
+        return HTTPException(status_code=response.status_code, detail=body["detail"])
+    message = (body or {}).get("detail") if isinstance(body, dict) else response.text
+    return api_error(
+        response.status_code, "TELEMETRY_SERVICE_ERROR",
+        message or "خطای نامشخص از میکروسرویس تله‌متری"
+    )
 
 
 async def telemetry_request(method: str, path: str, *, params=None, json=None, timeout: float = 10.0) -> Any:
@@ -48,14 +71,12 @@ async def telemetry_request(method: str, path: str, *, params=None, json=None, t
         async with httpx.AsyncClient(timeout=timeout) as client:
             response = await client.request(method, url, params=params, json=json, headers=internal_headers())
     except httpx.RequestError as exc:
-        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                            detail=f"ارتباط با میکروسرویس تله‌متری برقرار نشد: {exc}")
+        raise api_error(
+            status.HTTP_503_SERVICE_UNAVAILABLE, "TELEMETRY_SERVICE_UNAVAILABLE",
+            f"ارتباط با میکروسرویس تله‌متری برقرار نشد: {exc}"
+        )
     if response.status_code >= 400:
-        try:
-            detail = response.json().get("detail", response.text)
-        except ValueError:
-            detail = response.text
-        raise HTTPException(status_code=response.status_code, detail=detail or "خطای میکروسرویس تله‌متری")
+        raise _forward_microservice_error(response)
     return response.json()
 
 
@@ -63,7 +84,7 @@ def time_range_params(start: str, stop: str, window: str) -> Dict[str, str]:
     now = datetime.now(timezone.utc)
     start_dt, stop_dt = parse_time(start, now), parse_time(stop, now)
     if start_dt >= stop_dt:
-        raise HTTPException(status_code=400, detail="زمان شروع باید قبل از زمان پایان باشد.")
+        raise api_error(status.HTTP_400_BAD_REQUEST, "INVALID_TIME_RANGE", "زمان شروع باید قبل از زمان پایان باشد.")
     return {"start_time": start_dt.isoformat(), "end_time": stop_dt.isoformat(), "window": window}
 
 
@@ -180,33 +201,35 @@ class TelemetryService:
             raise
 
     @staticmethod
-    async def get_latest_telemetry(feeder_id: str) -> Dict[str, Any]:
-        url = f"{settings.TELEMETRY_SERVICE_URL.rstrip('/')}/telemetry/latest/{feeder_id}"
-
-        async with httpx.AsyncClient(timeout=5.0) as client:
-            try:
-                response = await client.get(url, headers=internal_headers())
-                if response.status_code == status.HTTP_200_OK:
-                    return response.json()
-                raise HTTPException(
-                    status_code=response.status_code,
-                    detail=response.text or "خطا در دریافت داده از میکروسرویس تلمتری"
-                )
-            except httpx.RequestError as exc:
-                error_msg = f"ارتباط با میکروسرویس تلمتری برقرار نشد: {str(exc)}"
-
+    async def _proxy_get(path: str, *, params=None, timeout: float,
+                         unavailable_action: str, unavailable_description: str,
+                         severity: str = "ERROR") -> Any:
+        """Shared GET-and-forward logic for the three read-only telemetry_service
+        proxies below: on a genuine connectivity failure (service down/unreachable)
+        it fires the same TELEMETRY_MICROSERVICE_UNAVAILABLE audit log they each
+        used to duplicate; any app-level error the microservice itself returned
+        (4xx/5xx with a structured body) is forwarded to the caller unchanged via
+        telemetry_request(), so its real error_code/message survive intact."""
+        try:
+            return await telemetry_request("GET", path, params=params, timeout=timeout)
+        except HTTPException as exc:
+            if isinstance(exc.detail, dict) and exc.detail.get("error_code") == "TELEMETRY_SERVICE_UNAVAILABLE":
                 asyncio.create_task(send_audit_log(
-                    action="TELEMETRY_MICROSERVICE_UNAVAILABLE",
+                    action=unavailable_action,
                     username="System",
                     success=False,
-                    severity="CRITICAL",
-                    description=f"عدم دسترسی به میکروسرویس تلمتری برای دریافت آخرین داده فیدر {feeder_id}. {error_msg}"
+                    severity=severity,
+                    description=f"{unavailable_description} {exc.detail.get('message')}"
                 ))
+            raise
 
-                raise HTTPException(
-                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                    detail=error_msg
-                )
+    @staticmethod
+    async def get_latest_telemetry(feeder_id: str) -> Dict[str, Any]:
+        return await TelemetryService._proxy_get(
+            f"/telemetry/latest/{feeder_id}", timeout=5.0,
+            unavailable_action="TELEMETRY_MICROSERVICE_UNAVAILABLE", severity="CRITICAL",
+            unavailable_description=f"عدم دسترسی به میکروسرویس تلمتری برای دریافت آخرین داده فیدر {feeder_id}.",
+        )
 
     @staticmethod
     async def get_history(
@@ -216,33 +239,12 @@ class TelemetryService:
             window: str = "1m",
             timeout: float = 10.0
     ) -> List[Dict[str, Any]]:
-        url = f"{settings.TELEMETRY_SERVICE_URL.rstrip('/')}/telemetry/history/{feeder_id}"
         params = time_range_params(start, stop, window)
-
-        async with httpx.AsyncClient(timeout=timeout) as client:
-            try:
-                response = await client.get(url, params=params, headers=internal_headers())
-                if response.status_code == status.HTTP_200_OK:
-                    return response.json()
-                raise HTTPException(
-                    status_code=response.status_code,
-                    detail=response.text or "خطا در دریافت تاریخچه از میکروسرویس تلمتری"
-                )
-            except httpx.RequestError as exc:
-                error_msg = f"عدم پاسخگویی میکروسرویس تلمتری در واکشی تاریخچه: {str(exc)}"
-
-                asyncio.create_task(send_audit_log(
-                    action="TELEMETRY_MICROSERVICE_UNAVAILABLE",
-                    username="System",
-                    success=False,
-                    severity="ERROR",
-                    description=f"دریافت تاریخچه برای فیدر {feeder_id} با خطا مواجه شد. {error_msg}"
-                ))
-
-                raise HTTPException(
-                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                    detail=error_msg
-                )
+        return await TelemetryService._proxy_get(
+            f"/telemetry/history/{feeder_id}", params=params, timeout=timeout,
+            unavailable_action="TELEMETRY_MICROSERVICE_UNAVAILABLE",
+            unavailable_description=f"دریافت تاریخچه برای فیدر {feeder_id} با خطا مواجه شد.",
+        )
 
     @staticmethod
     async def get_chart_data(
@@ -251,33 +253,12 @@ class TelemetryService:
             stop: str = "now()",
             window: str = "5m"
     ) -> Dict[str, Any]:
-        url = f"{settings.TELEMETRY_SERVICE_URL.rstrip('/')}/telemetry/chart/{feeder_id}"
         params = time_range_params(start, stop, window)
-
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            try:
-                response = await client.get(url, params=params, headers=internal_headers())
-                if response.status_code == status.HTTP_200_OK:
-                    return response.json()
-                raise HTTPException(
-                    status_code=response.status_code,
-                    detail=response.text or "خطا در دریافت داده‌های نمودار از میکروسرویس تلمتری"
-                )
-            except httpx.RequestError as exc:
-                error_msg = f"عدم پاسخگویی میکروسرویس تلمتری در واکشی داده‌های نمودار: {str(exc)}"
-
-                asyncio.create_task(send_audit_log(
-                    action="TELEMETRY_MICROSERVICE_UNAVAILABLE",
-                    username="System",
-                    success=False,
-                    severity="ERROR",
-                    description=f"دریافت داده‌های چارت برای فیدر {feeder_id} شکست خورد. {error_msg}"
-                ))
-
-                raise HTTPException(
-                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                    detail=error_msg
-                )
+        return await TelemetryService._proxy_get(
+            f"/telemetry/chart/{feeder_id}", params=params, timeout=10.0,
+            unavailable_action="TELEMETRY_MICROSERVICE_UNAVAILABLE",
+            unavailable_description=f"دریافت داده‌های چارت برای فیدر {feeder_id} شکست خورد.",
+        )
 
     @staticmethod
     async def get_energy(feeder_ids: List[int], start: str, stop: str, window: Optional[str] = None,

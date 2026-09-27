@@ -1,6 +1,8 @@
+import logging
 from datetime import datetime
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, Query, status
 from typing import Optional
+from core.errors import api_error
 from modules.schemas import (
     LogFilterRequest,
     LogListResponse,
@@ -9,6 +11,7 @@ from modules.schemas import (
 )
 from modules.services import logging_service_instance
 
+logger = logging.getLogger("logging_service")
 router = APIRouter(prefix="/logs", tags=["Logs & Audits"])
 
 
@@ -40,9 +43,10 @@ async def fetch_logs(
         )
         return await logging_service_instance.get_logs(filters)
     except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error fetching logs from database: {str(e)}"
+        logger.error(f"Error fetching logs from database: {e}", exc_info=True)
+        raise api_error(
+            status.HTTP_500_INTERNAL_SERVER_ERROR, "LOG_QUERY_FAILED",
+            "Could not fetch logs from the database."
         )
 
 
@@ -55,5 +59,5 @@ async def fetch_filter_options():
 async def fetch_log_by_id(log_id: int):
     log = await logging_service_instance.get_log_by_id(log_id)
     if not log:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Log not found")
+        raise api_error(status.HTTP_404_NOT_FOUND, "LOG_NOT_FOUND", f"No log found with id {log_id}.")
     return log

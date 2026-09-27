@@ -1,3 +1,4 @@
+import logging
 from fastapi import APIRouter, Depends, Request, status, Query, UploadFile, File, HTTPException, Body
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -6,8 +7,11 @@ import pandas as pd
 from io import BytesIO
 
 from main_api.core.database import get_db
+from main_api.core.errors import api_error
 from main_api.core.rate_limit import limiter, IMPORT_LIMIT, COMMAND_LIMIT
 from main_api.core.broker import RabbitMQPublisher
+
+logger = logging.getLogger("main_api")
 
 from main_api.modules.feeders.repository import FeederRepository
 from main_api.modules.feeders.service import FeederService
@@ -63,8 +67,12 @@ async def import_feeders_from_excel(request: Request, file: UploadFile = File(..
         raise HTTPException(status_code=413, detail="Excel file is too large (max 5 MB).")
     try:
         df = pd.read_excel(BytesIO(contents))
-    except Exception:
-        raise HTTPException(status_code=400, detail="Error reading the Excel file: the file is invalid or corrupted.")
+    except Exception as e:
+        logger.warning(f"Rejected Excel import '{file.filename}' from {current_user.email}: {e}")
+        raise api_error(
+            status.HTTP_400_BAD_REQUEST, "EXCEL_PARSE_ERROR",
+            "Error reading the Excel file: the file is invalid or corrupted."
+        )
     return await service.import_feeders_from_excel(df, username=current_user.email)
 
 

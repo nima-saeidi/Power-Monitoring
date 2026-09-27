@@ -15,6 +15,7 @@ from slowapi.middleware import SlowAPIMiddleware
 
 from main_api.core.rate_limit import limiter
 from main_api.core.config import settings
+from main_api.core.errors import error_code_of, message_of
 
 from main_api.core.logging import setup_logging
 from main_api.core.broker import message_broker, send_log_to_rabbitmq
@@ -173,6 +174,9 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
 
 @app.exception_handler(StarletteHTTPException)
 async def http_exception_handler(request: Request, exc: StarletteHTTPException):
+    message = message_of(exc)
+    error_code = error_code_of(exc)
+
     if exc.status_code >= 400:
         severity = "ERROR" if exc.status_code >= 500 else (
             "WARNING" if exc.status_code in (401, 403, 429) else "INFO"
@@ -180,21 +184,22 @@ async def http_exception_handler(request: Request, exc: StarletteHTTPException):
         client_ip = request.client.host if request.client else None
         asyncio.create_task(send_log_to_rabbitmq(
             level=severity,
-            message=f"HTTP {exc.status_code} on {request.method} {request.url.path}: {exc.detail}",
+            message=f"HTTP {exc.status_code} [{error_code}] on {request.method} {request.url.path}: {message}",
             service="main_api",
             action="REQUEST_FAILED",
             ip_address=client_ip,
             path=request.url.path,
             method=request.method,
             status_code=exc.status_code,
+            error_code=error_code,
         ))
 
     return JSONResponse(
         status_code=exc.status_code,
         content={
             "success": False,
-            "message": exc.detail,
-            "error_code": f"HTTP_{exc.status_code}"
+            "message": message,
+            "error_code": error_code,
         },
         headers=getattr(exc, "headers", None)
     )

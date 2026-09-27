@@ -9,6 +9,7 @@ from fastapi import HTTPException, status, BackgroundTasks
 
 from main_api.core.config import settings
 from main_api.core.broker import message_broker
+from main_api.core.errors import api_error
 from main_api.modules.audit_logs.repository import (
     CommandLogRepository,
     DeviceTestLogRepository
@@ -119,18 +120,26 @@ class AuditLogService:
         try:
             async with httpx.AsyncClient(timeout=10.0) as client:
                 response = await client.get(url, params=params)
-            if response.status_code == status.HTTP_404_NOT_FOUND:
-                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Log not found")
-            response.raise_for_status()
-            return response.json()
         except httpx.RequestError as exc:
             logger.error(f"Cannot reach logging_service at {url}: {exc}")
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail=f"سرویس لاگ در دسترس نیست: {exc}"
+            raise api_error(
+                status.HTTP_503_SERVICE_UNAVAILABLE, "LOGGING_SERVICE_UNAVAILABLE",
+                f"سرویس لاگ در دسترس نیست: {exc}"
             )
-        except httpx.HTTPStatusError as exc:
-            raise HTTPException(status_code=exc.response.status_code, detail=exc.response.text)
+        if response.status_code >= 400:
+            try:
+                body = response.json()
+            except ValueError:
+                body = None
+            detail = body.get("detail") if isinstance(body, dict) else None
+            if isinstance(detail, dict) and "message" in detail:
+                raise HTTPException(status_code=response.status_code, detail=detail)
+            message = detail if isinstance(detail, str) else response.text
+            raise api_error(
+                response.status_code, "LOGGING_SERVICE_ERROR",
+                message or "خطای نامشخص از سرویس لاگ"
+            )
+        return response.json()
 
     @staticmethod
     def _paginate(total: int, page: int, page_size: int) -> Dict[str, int]:

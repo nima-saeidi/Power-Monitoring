@@ -3,6 +3,7 @@ import logging
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from core.errors import install_error_handlers
 from modules.telemetry.router import router as telemetry_router
 from modules.telemetry.scheduler import TelemetryScheduler
 
@@ -43,5 +44,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+install_error_handlers(app, logger)
 
 app.include_router(telemetry_router)

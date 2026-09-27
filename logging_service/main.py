@@ -7,6 +7,7 @@ from sqlalchemy import text
 
 from core.config import settings
 from core.consumer import start_consumer
+from core.errors import install_error_handlers
 from modules.routers import router as logs_router
 
 from core.database import engine, Base
@@ -72,6 +73,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+install_error_handlers(app, logger)
 
 app.include_router(logs_router, prefix="/api/v1")
 
