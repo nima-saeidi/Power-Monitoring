@@ -1,4 +1,4 @@
-import asyncio
+from main_api.core.tasks import fire_and_forget
 from typing import List, Optional, Dict, Any
 from datetime import datetime, timedelta
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -48,9 +48,9 @@ class NotificationService:
                 description=f"نوتیفیکیشن '{request.title}' برای کاربر {request.user_id} بر اساس تنظیمات شخصی مسدود شد."
             )
             if background_tasks:
-                background_tasks.add_task(lambda: asyncio.create_task(log_coroutine))
+                background_tasks.add_task(lambda: fire_and_forget(log_coroutine))
             else:
-                asyncio.create_task(log_coroutine)
+                fire_and_forget(log_coroutine)
 
             return None
 
@@ -62,9 +62,9 @@ class NotificationService:
             description=f"نوتیفیکیشن '{notification.title}' برای کاربر {notification.user_id} با موفقیت در دیتابیس ثبت شد."
         )
         if background_tasks:
-            background_tasks.add_task(lambda: asyncio.create_task(log_coroutine))
+            background_tasks.add_task(lambda: fire_and_forget(log_coroutine))
         else:
-            asyncio.create_task(log_coroutine)
+            fire_and_forget(log_coroutine)
 
         return notification
 
@@ -95,9 +95,9 @@ class NotificationService:
                          f"{sent_count} ارسال موفق، {blocked_count} مسدود شده از مجموع {len(request.user_ids)} کاربر.")
         )
         if background_tasks:
-            background_tasks.add_task(lambda: asyncio.create_task(log_coroutine))
+            background_tasks.add_task(lambda: fire_and_forget(log_coroutine))
         else:
-            asyncio.create_task(log_coroutine)
+            fire_and_forget(log_coroutine)
 
         return {"sent": sent_count, "blocked": blocked_count, "total": len(request.user_ids)}
 
@@ -123,9 +123,9 @@ class NotificationService:
             description=f"هشدار سیستمی با عنوان '{title}' برای کاربر {user_id} صادر شد."
         )
         if background_tasks:
-            background_tasks.add_task(lambda: asyncio.create_task(log_coroutine))
+            background_tasks.add_task(lambda: fire_and_forget(log_coroutine))
         else:
-            asyncio.create_task(log_coroutine)
+            fire_and_forget(log_coroutine)
 
         return await NotificationService.send_notification(db, request, background_tasks, username)
 

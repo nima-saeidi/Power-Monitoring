@@ -52,7 +52,14 @@ def setup_logging(
     log_path = Path(log_dir)
     log_path.mkdir(exist_ok=True)
 
-    logger = logging.getLogger(app_name)
+    # Attach to the ROOT logger, not a named "power_monitoring" one: almost
+    # every module in this codebase calls logging.getLogger(__name__) or
+    # logging.getLogger("main_api"), and neither propagates to a logger named
+    # "power_monitoring" - only to their own dotted-name ancestors, which
+    # bottom out at root. Handlers on a non-root "power_monitoring" logger
+    # were silently only ever catching the handful of loggers built via
+    # get_logger() below, never the app's real operational logs.
+    logger = logging.getLogger()
     logger.setLevel(getattr(logging, log_level.upper(), logging.INFO))
     logger.handlers.clear()
 

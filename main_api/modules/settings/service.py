@@ -1,4 +1,4 @@
-import asyncio
+from main_api.core.tasks import fire_and_forget
 from typing import Optional
 from fastapi import BackgroundTasks
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -26,7 +26,7 @@ class SettingService:
         if not settings:
             settings = await SettingRepository.create_default_settings(db)
 
-            asyncio.create_task(send_audit_log(
+            fire_and_forget(send_audit_log(
                 action="INITIALIZE_SYSTEM_SETTINGS",
                 username="System",
                 success=True,
@@ -67,9 +67,9 @@ class SettingService:
                 description=f"تنظیمات سیستم ویرایش شد. فیلدهای تغییر یافته: {changed_fields}"
             )
             if background_tasks:
-                background_tasks.add_task(lambda: asyncio.create_task(log_coroutine))
+                background_tasks.add_task(lambda: fire_and_forget(log_coroutine))
             else:
-                asyncio.create_task(log_coroutine)
+                fire_and_forget(log_coroutine)
 
         settings_dict = SettingResponse.model_validate(updated_settings).model_dump(mode="json")
 

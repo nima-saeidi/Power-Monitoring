@@ -1,4 +1,4 @@
-import asyncio
+from main_api.core.tasks import fire_and_forget
 from typing import Any, Dict, Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -49,7 +49,7 @@ async def dispatch_alert(
                     metadata=metadata,
                 )
     except Exception as e:
-        asyncio.create_task(send_audit_log(
+        fire_and_forget(send_audit_log(
             action="ALERT_DISPATCH_FAILED",
             username="System",
             success=False,

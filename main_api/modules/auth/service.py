@@ -2,7 +2,7 @@ import hashlib
 import hmac
 import secrets
 import uuid
-import asyncio
+from main_api.core.tasks import fire_and_forget
 from math import ceil
 from typing import Optional
 from datetime import datetime, timedelta, timezone
@@ -72,7 +72,7 @@ class AuthService:
     async def login(self, data: LoginRequest, background_tasks: Optional[BackgroundTasks] = None) -> TokenResponse:
         user = await self.repo.get_by_email(data.email)
         if not user:
-            asyncio.create_task(send_audit_log(
+            fire_and_forget(send_audit_log(
                 action="USER_LOGIN_FAILED", username=data.email, success=False,
                 severity="WARNING", description="کاربری با این ایمیل یافت نشد."
             ))
@@ -88,7 +88,7 @@ class AuthService:
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=_INVALID_CREDENTIALS)
 
         if not user.is_active:
-            asyncio.create_task(send_audit_log(
+            fire_and_forget(send_audit_log(
                 action="USER_LOGIN_FAILED", user_id=user.id, username=user.email, user_role=user.role,
                 success=False, severity="WARNING", description="حساب کاربری غیرفعال است."
             ))
@@ -136,7 +136,7 @@ class AuthService:
 
         if locked_until > now:
             remaining_minutes = max(1, ceil((locked_until - now).total_seconds() / 60))
-            asyncio.create_task(send_audit_log(
+            fire_and_forget(send_audit_log(
                 action="USER_LOGIN_BLOCKED_LOCKED", user_id=user.id, username=user.email, user_role=user.role,
                 success=False, severity="WARNING",
                 description=f"تلاش برای ورود به حساب قفل‌شده. {remaining_minutes} دقیقه تا باز شدن قفل باقی مانده."
@@ -161,7 +161,7 @@ class AuthService:
         )
 
         if should_lock:
-            asyncio.create_task(send_audit_log(
+            fire_and_forget(send_audit_log(
                 action="USER_ACCOUNT_LOCKED", user_id=user.id, username=user.email, user_role=user.role,
                 success=False, severity="CRITICAL",
                 description=(
@@ -170,7 +170,7 @@ class AuthService:
                 )
             ))
         else:
-            asyncio.create_task(send_audit_log(
+            fire_and_forget(send_audit_log(
                 action="USER_LOGIN_FAILED", user_id=user.id, username=user.email, user_role=user.role,
                 success=False, severity="WARNING",
                 description=f"رمز عبور اشتباه است. تلاش {new_attempts} از {db_settings.max_login_attempts}."
@@ -193,7 +193,7 @@ class AuthService:
         )
 
         if not user:
-            asyncio.create_task(send_audit_log(
+            fire_and_forget(send_audit_log(
                 action="PASSWORD_RESET_REQUEST_FAILED", username=data.email,
                 success=False, severity="WARNING", description="درخواست فراموشی رمز برای ایمیل ناموجود"
             ))
@@ -232,13 +232,13 @@ class AuthService:
             token_type: str = payload.get("type")
 
             if not email or not expected_hash or token_type != "otp_session":
-                asyncio.create_task(send_audit_log(
+                fire_and_forget(send_audit_log(
                     action="PASSWORD_RESET_VERIFY_FAILED", success=False, severity="WARNING",
                     description="توکن جلسه نامعتبر است."
                 ))
                 raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="توکن جلسه نامعتبر است.")
         except JWTError:
-            asyncio.create_task(send_audit_log(
+            fire_and_forget(send_audit_log(
                 action="PASSWORD_RESET_VERIFY_FAILED", success=False, severity="WARNING",
                 description="توکن جلسه منقضی شده یا نامعتبر است."
             ))
@@ -246,7 +246,7 @@ class AuthService:
 
         user = await self.repo.get_by_email(email)
         if not user or not hmac.compare_digest(_otp_digest(email, str(data.code).strip()), expected_hash):
-            asyncio.create_task(send_audit_log(
+            fire_and_forget(send_audit_log(
                 action="PASSWORD_RESET_VERIFY_FAILED", username=email, success=False, severity="WARNING",
                 description="کد تایید اشتباه است."
             ))
@@ -322,7 +322,7 @@ class AuthService:
             raise HTTPException(status_code=404, detail="کاربر یافت نشد.")
 
         if not verify_password(data.old_password, user.hashed_password):
-            asyncio.create_task(send_audit_log(
+            fire_and_forget(send_audit_log(
                 action="CHANGE_PASSWORD_FAILED", user_id=user.id, username=user.email, user_role=user.role,
                 success=False, severity="WARNING", description="رمز عبور فعلی اشتباه است."
             ))
@@ -352,7 +352,7 @@ class AuthService:
             if not email or payload.get("type") != "password_reset":
                 raise JWTError
         except JWTError:
-            asyncio.create_task(send_audit_log(
+            fire_and_forget(send_audit_log(
                 action="RESET_PASSWORD_FAILED", success=False, severity="WARNING",
                 description="توکن منقضی شده یا نامعتبر"
             ))

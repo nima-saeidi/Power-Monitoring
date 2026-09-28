@@ -1,4 +1,4 @@
-import asyncio
+from main_api.core.tasks import fire_and_forget
 import logging
 import uvicorn
 from contextlib import asynccontextmanager
@@ -45,8 +45,8 @@ logger = logging.getLogger("main_api")
 async def lifespan(app: FastAPI):
     logger.info("🚀 Main API is starting up...")
 
-    try:
-        await message_broker.connect()
+    await message_broker.start_with_retry()
+    if message_broker.is_connected:
         logger.info("✅ Connected to RabbitMQ message broker successfully.")
 
         try:
@@ -58,9 +58,12 @@ async def lifespan(app: FastAPI):
             )
         except Exception as log_err:
             logger.warning(f"⚠️ Failed to send startup log to RabbitMQ: {log_err}")
-
-    except Exception as e:
-        logger.error(f"❌ Failed to connect to RabbitMQ broker on startup: {e}", exc_info=True)
+    else:
+        logger.error(
+            "❌ RabbitMQ not connected at startup; will keep retrying in the "
+            "background. Audit logs, notifications and alerts will be dropped "
+            "until it reconnects."
+        )
 
     try:
         await telemetry_ws_consumer.start()
@@ -182,7 +185,7 @@ async def http_exception_handler(request: Request, exc: StarletteHTTPException):
             "WARNING" if exc.status_code in (401, 403, 429) else "INFO"
         )
         client_ip = request.client.host if request.client else None
-        asyncio.create_task(send_log_to_rabbitmq(
+        fire_and_forget(send_log_to_rabbitmq(
             level=severity,
             message=f"HTTP {exc.status_code} [{error_code}] on {request.method} {request.url.path}: {message}",
             service="main_api",

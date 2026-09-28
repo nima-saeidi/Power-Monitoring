@@ -1,5 +1,5 @@
 import uuid
-import asyncio
+from main_api.core.tasks import fire_and_forget
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -54,7 +54,7 @@ class LocationService:
         if data.parent_id:
             parent = await self.repo.get_location_by_id(data.parent_id)
             if not parent:
-                asyncio.create_task(send_audit_log(
+                fire_and_forget(send_audit_log(
                     action="CREATE_LOCATION_FAILED", username=username, success=False, severity="WARNING",
                     description=f"والد با شناسه {data.parent_id} برای ایجاد مکان جدید یافت نشد."
                 ))
@@ -79,7 +79,7 @@ class LocationService:
                               username: Optional[str] = None):
         existing_location = await self.repo.get_location_by_id(location_id)
         if not existing_location:
-            asyncio.create_task(send_audit_log(
+            fire_and_forget(send_audit_log(
                 action="UPDATE_LOCATION_FAILED", username=username, success=False, severity="WARNING",
                 description=f"تلاش برای ویرایش مکان ناموجود با شناسه {location_id}."
             ))
@@ -90,7 +90,7 @@ class LocationService:
 
         if data.parent_id is not None:
             if data.parent_id == location_id:
-                asyncio.create_task(send_audit_log(
+                fire_and_forget(send_audit_log(
                     action="UPDATE_LOCATION_FAILED", username=username, success=False, severity="WARNING",
                     description=f"تلاش ناموفق: مکان با شناسه {location_id} نمی‌تواند والد خودش باشد."
                 ))
@@ -100,7 +100,7 @@ class LocationService:
                 )
             parent = await self.repo.get_location_by_id(data.parent_id)
             if not parent:
-                asyncio.create_task(send_audit_log(
+                fire_and_forget(send_audit_log(
                     action="UPDATE_LOCATION_FAILED", username=username, success=False, severity="WARNING",
                     description=f"والد تعیین شده با شناسه {data.parent_id} برای مکان {location_id} یافت نشد."
                 ))
@@ -111,7 +111,7 @@ class LocationService:
 
         updated_location = await self.repo.update_location(location_id, data)
         if not updated_location:
-            asyncio.create_task(send_audit_log(
+            fire_and_forget(send_audit_log(
                 action="UPDATE_LOCATION_FAILED", username=username, success=False, severity="ERROR",
                 description=f"خطای داخلی در بروزرسانی مکان با شناسه {location_id}."
             ))
@@ -131,7 +131,7 @@ class LocationService:
                               username: Optional[str] = None):
         is_deleted = await self.repo.delete_location(location_id)
         if not is_deleted:
-            asyncio.create_task(send_audit_log(
+            fire_and_forget(send_audit_log(
                 action="DELETE_LOCATION_FAILED", username=username, success=False, severity="WARNING",
                 description=f"تلاش برای حذف مکان ناموجود با شناسه {location_id}."
             ))
@@ -174,7 +174,7 @@ class LocationService:
             )
             return new_campus
         except Exception as e:
-            asyncio.create_task(send_audit_log(
+            fire_and_forget(send_audit_log(
                 action="CREATE_CAMPUS_FAILED", username=username, success=False, severity="ERROR",
                 description=f"خطا در ایجاد پردیس یکپارچه: {str(e)}"
             ))
@@ -198,7 +198,7 @@ class LocationService:
 
             return df
         except Exception as e:
-            asyncio.create_task(send_audit_log(
+            fire_and_forget(send_audit_log(
                 action="EXPORT_DEVICES_FAILED", username=username, success=False, severity="ERROR",
                 description=f"خطا در ایجاد گزارش اکسل: {str(e)}"
             ))

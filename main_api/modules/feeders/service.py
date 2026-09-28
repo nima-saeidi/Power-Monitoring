@@ -1,5 +1,5 @@
 import uuid
-import asyncio
+from main_api.core.tasks import fire_and_forget
 from datetime import datetime, timezone
 from typing import List, Optional, Union
 
@@ -71,7 +71,7 @@ class FeederService:
                             username: Optional[str] = None):
         feeder = await self.repo.get_feeder_by_id(feeder_id)
         if not feeder:
-            asyncio.create_task(send_audit_log(
+            fire_and_forget(send_audit_log(
                 action="UPDATE_FEEDER_FAILED", username=username, success=False, severity="WARNING",
                 description=f"تلاش برای ویرایش فیدر ناموجود با شناسه {feeder_id}."
             ))
@@ -91,7 +91,7 @@ class FeederService:
     async def delete_feeder(self, feeder_id: int, background_tasks: Optional[BackgroundTasks] = None, username: Optional[str] = None):
         feeder = await self.repo.get_feeder_by_id(feeder_id)
         if not feeder:
-            asyncio.create_task(send_audit_log(
+            fire_and_forget(send_audit_log(
                 action="DELETE_FEEDER_FAILED", username=username, success=False, severity="WARNING",
                 description=f"تلاش برای حذف فیدر ناموجود با شناسه {feeder_id}."
             ))

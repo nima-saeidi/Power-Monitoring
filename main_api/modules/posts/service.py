@@ -1,5 +1,5 @@
 import uuid
-import asyncio
+from main_api.core.tasks import fire_and_forget
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -60,7 +60,7 @@ class PostService:
                           username: Optional[str] = None):
         post = await self.repo.get_post_by_id(post_id)
         if not post:
-            asyncio.create_task(send_audit_log(
+            fire_and_forget(send_audit_log(
                 action="UPDATE_POST_FAILED", username=username, success=False, severity="WARNING",
                 description=f"تلاش برای ویرایش پست ناموجود با شناسه {post_id}."
             ))
@@ -80,7 +80,7 @@ class PostService:
     async def delete_post(self, post_id: int, background_tasks: Optional[BackgroundTasks] = None, username: Optional[str] = None):
         post = await self.repo.get_post_by_id(post_id)
         if not post:
-            asyncio.create_task(send_audit_log(
+            fire_and_forget(send_audit_log(
                 action="DELETE_POST_FAILED", username=username, success=False, severity="WARNING",
                 description=f"تلاش برای حذف پست ناموجود با شناسه {post_id}."
             ))

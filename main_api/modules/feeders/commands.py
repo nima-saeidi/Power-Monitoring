@@ -1,4 +1,4 @@
-import asyncio
+from main_api.core.tasks import fire_and_forget
 import hashlib
 import hmac
 import secrets
@@ -73,7 +73,7 @@ async def request_command(feeder, action: str, user) -> dict:
         priority="high",
         metadata={"event_type": "command_code", "feeder_id": feeder.id, "user_id": user.id},
     )
-    asyncio.create_task(send_audit_log(
+    fire_and_forget(send_audit_log(
         action="FEEDER_COMMAND_REQUESTED", user_id=user.id, username=user.email, user_role=user.role,
         success=True, severity="WARNING", feeder_id=feeder.id,
         description=f"درخواست فرمان «{action_label}» برای فیدر «{feeder.name}»؛ کد تأیید ایمیل شد.",
@@ -112,13 +112,13 @@ async def confirm_command(feeder, data: CommandConfirmRequest, user) -> dict:
     try:
         result = await TelemetryService.send_coil_command(value=value, **target)
     except HTTPException as e:
-        asyncio.create_task(send_audit_log(
+        fire_and_forget(send_audit_log(
             action="FEEDER_COMMAND_FAILED", user_id=user.id, username=user.email, user_role=user.role,
             success=False, severity="CRITICAL", feeder_id=feeder.id,
             description=f"اجرای فرمان «{action_label}» فیدر «{feeder.name}» ناموفق بود: {e.detail}",
         ))
         raise
-    asyncio.create_task(send_audit_log(
+    fire_and_forget(send_audit_log(
         action="FEEDER_COMMAND_EXECUTED", user_id=user.id, username=user.email, user_role=user.role,
         success=True, severity="CRITICAL", feeder_id=feeder.id,
         description=f"فرمان «{action_label}» فیدر «{feeder.name}» اجرا شد.",

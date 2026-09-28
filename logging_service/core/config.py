@@ -1,3 +1,4 @@
+import logging
 from pydantic_settings import BaseSettings
 
 
@@ -22,3 +23,26 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - [%(levelname)s] - %(name)s - %(message)s",
+)
+
+# Ship every logger's records to Graylog (root logger, not just this one) -
+# ops has no server access, only the Graylog port. Note: this is separate
+# from GraylogClient (which *reads* Graylog's search API) - this is what
+# actually gets this service's own logs *into* Graylog in the first place.
+# Never fatal on failure.
+try:
+    import graypy
+    _gelf_handler = graypy.GELFUDPHandler(
+        settings.GRAYLOG_HOST,
+        settings.GRAYLOG_PORT,
+        debugging_fields=True,
+        extra_fields=True,
+    )
+    _gelf_handler.setLevel(logging.INFO)
+    logging.getLogger().addHandler(_gelf_handler)
+except Exception as _graylog_err:
+    logging.getLogger(__name__).warning(f"Could not attach Graylog handler: {_graylog_err}")

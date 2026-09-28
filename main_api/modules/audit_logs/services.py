@@ -1,5 +1,5 @@
 import logging
-import asyncio
+from main_api.core.tasks import fire_and_forget
 import httpx
 from typing import Optional, Dict, Any
 from datetime import datetime, timedelta
@@ -74,7 +74,7 @@ def schedule_audit_log(background_tasks: Optional[BackgroundTasks], **kwargs):
     if background_tasks is not None:
         background_tasks.add_task(send_audit_log, **kwargs)
     else:
-        asyncio.create_task(send_audit_log(**kwargs))
+        fire_and_forget(send_audit_log(**kwargs))
 
 
 async def send_command_log(

@@ -1,6 +1,7 @@
 import asyncio
 import json
 import logging
+import os
 import sys
 from pathlib import Path
 import aio_pika
@@ -14,6 +15,21 @@ from core.telemetry import handle_telemetry_metric
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 logger = logging.getLogger("timeseries_storage_service")
+
+# Ship every logger's records to Graylog (root logger, not just this one) -
+# ops has no server access, only the Graylog port. Never fatal on failure.
+try:
+    import graypy
+    _gelf_handler = graypy.GELFUDPHandler(
+        os.getenv("GRAYLOG_HOST", "graylog"),
+        int(os.getenv("GRAYLOG_PORT", "12201")),
+        debugging_fields=True,
+        extra_fields=True,
+    )
+    _gelf_handler.setLevel(logging.INFO)
+    logging.getLogger().addHandler(_gelf_handler)
+except Exception as _graylog_err:
+    logger.warning(f"Could not attach Graylog handler: {_graylog_err}")
 
 async def process_message(message: aio_pika.IncomingMessage):
     async with message.process(requeue=False):
@@ -37,7 +53,7 @@ async def _declare_main_queue_with_dlq(connection, channel, queue_name: str):
         )
         return queue, channel
     except aio_pika.exceptions.ChannelClosed:
-        logger.warning(
+        logger.error(
             f"Queue '{queue_name}' already exists with incompatible arguments. "
             "Falling back WITHOUT dead-letter support; delete the queue manually once to enable DLQ."
         )

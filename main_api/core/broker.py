@@ -1,3 +1,4 @@
+import asyncio
 import json
 import logging
 from typing import Any, Dict, Optional
@@ -13,6 +14,8 @@ class RabbitMQPublisher:
         self.channel: Optional[aio_pika.RobustChannel] = None
         self.exchange: Optional[aio_pika.RobustExchange] = None
         self._declared_queues: set = set()
+        self._reconnect_task: Optional[asyncio.Task] = None
+        self._closing = False
 
     @property
     def is_connected(self) -> bool:
@@ -43,7 +46,47 @@ class RabbitMQPublisher:
             self.channel = None
             self.exchange = None
 
+    async def start_with_retry(self, max_initial_attempts: int = 5, initial_delay: float = 2.0):
+        """Connect with a bounded backoff at startup, then - if RabbitMQ is still
+        unreachable - keep retrying in the background instead of leaving the
+        publisher permanently disconnected until someone restarts the process.
+        Without this, a RabbitMQ that comes up a few seconds after main_api (a
+        common docker-compose race) silently drops every event forever."""
+        self._closing = False
+        delay = initial_delay
+        for attempt in range(1, max_initial_attempts + 1):
+            await self.connect()
+            if self.is_connected:
+                return
+            if attempt < max_initial_attempts:
+                logger.warning(
+                    f"RabbitMQ connect attempt {attempt}/{max_initial_attempts} failed; "
+                    f"retrying in {delay:.0f}s..."
+                )
+                await asyncio.sleep(delay)
+                delay = min(delay * 2, 30)
+
+        logger.error(
+            "Could not connect to RabbitMQ after initial retries. Events will be "
+            "dropped until a connection is established; retrying in the background."
+        )
+        self._reconnect_task = asyncio.create_task(self._background_reconnect_loop())
+
+    async def _background_reconnect_loop(self, interval: float = 15.0):
+        while not self._closing and not self.is_connected:
+            await asyncio.sleep(interval)
+            if self._closing:
+                return
+            logger.info("Retrying RabbitMQ connection...")
+            await self.connect()
+            if self.is_connected:
+                logger.info("✅ Reconnected to RabbitMQ.")
+                return
+
     async def close(self):
+        self._closing = True
+        if self._reconnect_task and not self._reconnect_task.done():
+            self._reconnect_task.cancel()
         if self.connection and not self.connection.is_closed:
             await self.connection.close()
             logger.info("RabbitMQ connection closed.")
@@ -98,7 +141,7 @@ class RabbitMQPublisher:
             )
             self._declared_queues.add(queue_name)
         except aio_pika.exceptions.ChannelClosed:
-            logger.warning(
+            logger.error(
                 f"Queue '{queue_name}' already exists with incompatible arguments. "
                 "Falling back WITHOUT dead-letter support for it; delete the queue manually once to enable DLQ."
             )

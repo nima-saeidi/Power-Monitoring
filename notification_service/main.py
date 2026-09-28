@@ -17,6 +17,14 @@ email_provider = EmailProvider()
 sms_provider = SMSProvider()
 
 
+class NotificationDeliveryError(Exception):
+    """Raised when every dispatched channel for a notification failed to send,
+    even after the provider's own internal retries. Without this, a transient
+    SMTP/SMS outage would be logged as *_FAILED and the message would still be
+    ack'd away for good - the DLQ (and scripts/dlq_tool.py replay) only ever
+    catches processing crashes, never delivery failures, unless this is raised."""
+
+
 async def process_notification(message: aio_pika.IncomingMessage, channel: aio_pika.abc.AbstractChannel) -> None:
     async with message.process(requeue=False):
         try:
@@ -55,6 +63,7 @@ async def process_notification(message: aio_pika.IncomingMessage, channel: aio_p
                 results = await asyncio.gather(
                     *(task for _, _, task in channels_dispatched), return_exceptions=True
                 )
+                failed_channels = []
                 for (channel_name, recipients, _), res in zip(channels_dispatched, results):
                     if isinstance(res, Exception):
                         logger.error(f"Error during {channel_name} notification execution: {res}")
@@ -66,6 +75,7 @@ async def process_notification(message: aio_pika.IncomingMessage, channel: aio_p
                                 "error_message": str(res),
                             }
                         )
+                        failed_channels.append(channel_name)
                     else:
                         success = bool(res)
                         await send_service_log(
@@ -77,6 +87,16 @@ async def process_notification(message: aio_pika.IncomingMessage, channel: aio_p
                                 "title": payload.title, "recipients": recipients,
                             }
                         )
+                        if not success:
+                            failed_channels.append(channel_name)
+
+                if failed_channels:
+                    # Every *_FAILED log above is already written - raise so
+                    # message.process(requeue=False) dead-letters this message
+                    # instead of ack-ing a failed delivery away for good.
+                    raise NotificationDeliveryError(
+                        f"Delivery failed on: {', '.join(failed_channels)}"
+                    )
             else:
                 logger.warning("No destinations matched for payload.")
                 await send_service_log(
@@ -93,6 +113,9 @@ async def process_notification(message: aio_pika.IncomingMessage, channel: aio_p
                 channel, action="NOTIFICATION_INVALID_PAYLOAD",
                 details={"success": False, "severity": "ERROR", "raw_body": message.body.decode("utf-8", errors="ignore")}
             )
+            raise
+        except NotificationDeliveryError:
+            # Per-channel failure already logged above; just dead-letter.
             raise
         except Exception as e:
             logger.error(f"Unexpected error while processing message: {e}", exc_info=True)
@@ -115,7 +138,7 @@ async def _declare_queue_with_dlq(connection, channel, queue_name: str, prefetch
         )
         return queue, channel
     except aio_pika.exceptions.ChannelClosed:
-        logger.warning(
+        logger.error(
             f"Queue '{queue_name}' already exists with incompatible arguments. "
             "Falling back WITHOUT dead-letter support; delete the queue manually once to enable DLQ."
         )
@@ -126,6 +149,14 @@ async def _declare_queue_with_dlq(connection, channel, queue_name: str, prefetch
 
 
 async def main():
+    # Fail loud at boot rather than silent on the first real alert: a bad
+    # SMTP password or unreachable host would otherwise only ever show up as
+    # a per-message WARNING buried in the logs, indistinguishable from "no
+    # emails were queued yet".
+    await email_provider.check_connection()
+    if not settings.SMS_API_KEY:
+        logger.warning("⚠️ SMS_API_KEY is not configured. All outgoing SMS will be silently skipped.")
+
     logger.info("Connecting to RabbitMQ...")
     connection = await aio_pika.connect_robust(settings.RABBITMQ_URL)
 

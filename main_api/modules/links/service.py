@@ -1,5 +1,5 @@
 import uuid
-import asyncio
+from main_api.core.tasks import fire_and_forget
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -60,7 +60,7 @@ class LinkService:
                           username: Optional[str] = None):
         link = await self.repo.get_link_by_id(link_id)
         if not link:
-            asyncio.create_task(send_audit_log(
+            fire_and_forget(send_audit_log(
                 action="UPDATE_LINK_FAILED", username=username, success=False, severity="WARNING",
                 description=f"تلاش برای ویرایش لینک ناموجود با شناسه {link_id}."
             ))
@@ -80,7 +80,7 @@ class LinkService:
     async def delete_link(self, link_id: int, background_tasks: Optional[BackgroundTasks] = None, username: Optional[str] = None):
         link = await self.repo.get_link_by_id(link_id)
         if not link:
-            asyncio.create_task(send_audit_log(
+            fire_and_forget(send_audit_log(
                 action="DELETE_LINK_FAILED", username=username, success=False, severity="WARNING",
                 description=f"تلاش برای حذف لینک ناموجود با شناسه {link_id}."
             ))

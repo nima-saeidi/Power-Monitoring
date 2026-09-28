@@ -1,4 +1,4 @@
-import asyncio
+from main_api.core.tasks import fire_and_forget
 import re
 from datetime import datetime, timedelta, timezone
 import httpx
@@ -103,7 +103,7 @@ class TelemetryService:
         try:
             return await self.repo.get_active_feeders()
         except Exception as e:
-            asyncio.create_task(send_audit_log(
+            fire_and_forget(send_audit_log(
                 action="GET_ACTIVE_FEEDERS_ERROR",
                 username="System",
                 success=False,
@@ -133,7 +133,7 @@ class TelemetryService:
                 f"فیدر «{feeder.name}» (ID={feeder.id}) پس از {data.consecutive_failures} بار عدم پاسخ، "
                 f"آفلاین علامت‌گذاری شد."
             )
-            asyncio.create_task(send_audit_log(
+            fire_and_forget(send_audit_log(
                 action=action,
                 username="System",
                 service_name="telemetry_service",
@@ -191,7 +191,7 @@ class TelemetryService:
             return record
         except Exception as e:
             feeder_id = data.feeder_id if hasattr(data, 'feeder_id') else 'نامشخص'
-            asyncio.create_task(send_audit_log(
+            fire_and_forget(send_audit_log(
                 action="TELEMETRY_INGESTION_ERROR",
                 username="System",
                 success=False,
@@ -214,7 +214,7 @@ class TelemetryService:
             return await telemetry_request("GET", path, params=params, timeout=timeout)
         except HTTPException as exc:
             if isinstance(exc.detail, dict) and exc.detail.get("error_code") == "TELEMETRY_SERVICE_UNAVAILABLE":
-                asyncio.create_task(send_audit_log(
+                fire_and_forget(send_audit_log(
                     action=unavailable_action,
                     username="System",
                     success=False,

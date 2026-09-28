@@ -80,7 +80,7 @@ async def _declare_logs_queue_with_dlq(connection, channel):
         )
         return queue, channel
     except aio_pika.exceptions.ChannelClosed:
-        logger.warning(
+        logger.error(
             f"Queue '{queue_name}' already exists with incompatible arguments. "
             "Falling back WITHOUT dead-letter support; delete the queue manually once to enable DLQ."
         )

@@ -1,6 +1,7 @@
 import asyncio
 import json
 import logging
+import os
 from datetime import datetime, timezone
 import httpx
 import aio_pika
@@ -10,6 +11,21 @@ from modules.telemetry.modbus_client import ModbusReader
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 logger = logging.getLogger("telemetry_scheduler")
+
+# Ship every logger's records to Graylog (root logger, not just this one) -
+# ops has no server access, only the Graylog port. Never fatal on failure.
+try:
+    import graypy
+    _gelf_handler = graypy.GELFUDPHandler(
+        os.getenv("GRAYLOG_HOST", "graylog"),
+        int(os.getenv("GRAYLOG_PORT", "12201")),
+        debugging_fields=True,
+        extra_fields=True,
+    )
+    _gelf_handler.setLevel(logging.INFO)
+    logging.getLogger().addHandler(_gelf_handler)
+except Exception as _graylog_err:
+    logger.warning(f"Could not attach Graylog handler: {_graylog_err}")
 
 
 def apply_register_config(raw: dict, scales: dict, signed: list) -> dict:
