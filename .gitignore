@@ -15,3 +15,7 @@ alembic.ini
 
 # ویدیوها و فایل‌های حجیم (GitHub فایل بالای ۱۰۰ مگابایت را رد می‌کند)
 *.mp4
+
+# Logs go to Graylog + database only, never to files
+logs/
+*.log

@@ -1,8 +1,6 @@
 import logging
 import sys
 import os
-from pathlib import Path
-from logging.handlers import RotatingFileHandler, TimedRotatingFileHandler
 from main_api.core.config import settings
 
 try:
@@ -39,19 +37,11 @@ class CustomFormatter(logging.Formatter):
 def setup_logging(
         log_level: str = "INFO",
         service_name: str = "main_api",
-        log_dir: str = "logs",
-        app_name: str = "power_monitoring",
         enable_console: bool = True,
-        enable_file: bool = True,
         enable_graylog: bool = True,
         graylog_host: str = None,
-        graylog_port: int = 12201,
-        max_bytes: int = 10 * 1024 * 1024,
-        backup_count: int = 5
+        graylog_port: int = 12201
 ) -> logging.Logger:
-    log_path = Path(log_dir)
-    log_path.mkdir(exist_ok=True)
-
     # Attach to the ROOT logger, not a named "power_monitoring" one: almost
     # every module in this codebase calls logging.getLogger(__name__) or
     # logging.getLogger("main_api"), and neither propagates to a logger named
@@ -63,52 +53,11 @@ def setup_logging(
     logger.setLevel(getattr(logging, log_level.upper(), logging.INFO))
     logger.handlers.clear()
 
-    file_formatter = logging.Formatter(
-        "%(asctime)s - %(name)s - %(levelname)s - %(funcName)s:%(lineno)d - %(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S"
-    )
-
     if enable_console:
         console_handler = logging.StreamHandler(sys.stdout)
         console_handler.setLevel(logging.DEBUG)
         console_handler.setFormatter(CustomFormatter())
         logger.addHandler(console_handler)
-
-    if enable_file:
-        general_log_file = log_path / f"{app_name}.log"
-        file_handler = RotatingFileHandler(
-            general_log_file,
-            maxBytes=max_bytes,
-            backupCount=backup_count,
-            encoding="utf-8"
-        )
-        file_handler.setLevel(logging.INFO)
-        file_handler.setFormatter(file_formatter)
-        logger.addHandler(file_handler)
-
-        error_log_file = log_path / f"{app_name}_error.log"
-        error_handler = RotatingFileHandler(
-            error_log_file,
-            maxBytes=max_bytes,
-            backupCount=backup_count,
-            encoding="utf-8"
-        )
-        error_handler.setLevel(logging.ERROR)
-        error_handler.setFormatter(file_formatter)
-        logger.addHandler(error_handler)
-
-        daily_log_file = log_path / f"{app_name}_daily.log"
-        daily_handler = TimedRotatingFileHandler(
-            daily_log_file,
-            when="midnight",
-            interval=1,
-            backupCount=30,
-            encoding="utf-8"
-        )
-        daily_handler.setLevel(logging.INFO)
-        daily_handler.setFormatter(file_formatter)
-        daily_handler.suffix = "%Y-%m-%d"
-        logger.addHandler(daily_handler)
 
     if enable_graylog:
         if GRAYPY_AVAILABLE:
@@ -133,10 +82,7 @@ def setup_logging(
 
 app_logger = setup_logging(
     log_level=getattr(settings, "LOG_LEVEL", "INFO"),
-    log_dir=getattr(settings, "LOG_DIR", "logs"),
-    app_name="power_monitoring",
     enable_console=True,
-    enable_file=True,
     enable_graylog=getattr(settings, "GRAYLOG_ENABLED", True)
 )
 
