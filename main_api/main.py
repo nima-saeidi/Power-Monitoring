@@ -18,6 +18,7 @@ from main_api.core.config import settings
 from main_api.core.errors import error_code_of, message_of
 
 from main_api.core.logging import setup_logging
+from main_api.core.ws_docs import setup_ws_docs
 from main_api.core.broker import message_broker, send_log_to_rabbitmq
 from main_api.modules.telemetry.consumer import telemetry_ws_consumer
 
@@ -288,6 +289,8 @@ app.include_router(settings_router)
 app.include_router(audit_logs_router)
 app.include_router(command_logs_router)
 app.include_router(test_logs_router)
+
+setup_ws_docs(app)
 
 if __name__ == "__main__":
     uvicorn.run("main_api.main:app", host="0.0.0.0", port=8000, reload=True)
