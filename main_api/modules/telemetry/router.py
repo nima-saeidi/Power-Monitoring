@@ -98,17 +98,16 @@ async def get_forecast(
     return await TelemetryService.get_forecast(feeder_id, hours, history_days)
 
 
-@router.get("/energy", summary="Consumed/produced energy (kWh) per feeder, post, or type")
+@router.get("/energy", summary="Consumed/produced energy (kWh) per feeder")
 async def get_energy(
-    feeder_ids: Optional[List[int]] = Query(default=None, description="یک یا چند فیدر"),
-    post_id: Optional[int] = Query(default=None, description="همه‌ی فیدرهای این پست"),
+    feeder_ids: List[int] = Query(..., min_length=1, description="شناسه‌ی یک یا چند فیدر (feeder_id)"),
     start: str = Query(default="-24h"),
     stop: str = Query(default="now()"),
     window: Optional[str] = Query(default=None, pattern="^(1h|1d|1w|1mo)$", description="سری انرژی به تفکیک بازه"),
     db: AsyncSession = Depends(get_db),
     current_user=Depends(require_page("reports"))
 ):
-    feeders = await _load_feeders(db, feeder_ids, post_id)
+    feeders = await _load_feeders(db, feeder_ids)
     energy = await TelemetryService.get_energy([f.id for f in feeders], start, stop, window)
     rows = _energy_rows(feeders, energy)
     totals = {"consumption_kwh": 0.0, "production_kwh": 0.0, "unclassified_kwh": 0.0}
@@ -123,8 +122,7 @@ async def get_energy(
 async def export_report(
     request: Request,
     fmt: Literal["excel", "pdf"],
-    feeder_ids: Optional[List[int]] = Query(default=None, description="یک یا چند فیدر"),
-    post_id: Optional[int] = Query(default=None, description="همه‌ی فیدرهای این پست"),
+    feeder_ids: List[int] = Query(..., min_length=1, description="شناسه‌ی یک یا چند فیدر (feeder_id)"),
     start: str = Query(default="-24h", description="زمان نسبی (-1h، -7d)، now() یا ISO"),
     stop: str = Query(default="now()", description="زمان نسبی، now() یا ISO"),
     window: str = Query(default="5m", description="دقت داده: 10s, 30s, 1m, 5m, 15m, 1h, 1d"),
@@ -133,20 +131,16 @@ async def export_report(
     db: AsyncSession = Depends(get_db),
     current_user=Depends(require_page("reports"))
 ):
-    feeders = await _load_feeders(db, feeder_ids, post_id)
+    feeders = await _load_feeders(db, feeder_ids)
     return await _build_report(fmt, feeders, start, stop, window, columns, include_energy)
 
 
-async def _load_feeders(db: AsyncSession, feeder_ids: Optional[List[int]], post_id: Optional[int]) -> List[Feeder]:
-    query = select(Feeder).options(selectinload(Feeder.post)).order_by(Feeder.id)
-    if feeder_ids:
-        query = query.where(Feeder.id.in_(feeder_ids))
-    if post_id is not None:
-        query = query.where(Feeder.post_id == post_id)
+async def _load_feeders(db: AsyncSession, feeder_ids: List[int]) -> List[Feeder]:
+    query = select(Feeder).options(selectinload(Feeder.post)).where(Feeder.id.in_(feeder_ids)).order_by(Feeder.id)
     feeders = list((await db.execute(query)).scalars().all())
     if not feeders:
         raise HTTPException(status_code=404, detail="هیچ فیدری با این مشخصات پیدا نشد.")
-    if feeder_ids and len(feeders) != len(set(feeder_ids)):
+    if len(feeders) != len(set(feeder_ids)):
         missing = sorted(set(feeder_ids) - {f.id for f in feeders})
         raise HTTPException(status_code=404, detail=f"فیدر(های) {missing} پیدا نشد.")
     return feeders
@@ -158,7 +152,6 @@ def _energy_rows(feeders: List[Feeder], energy: dict) -> List[dict]:
         {
             "feeder_id": f.id,
             "feeder_name": f.name,
-            "post_id": f.post_id,
             "role": role_of(f),
             "active_energy_kwh": by_id.get(f.id, {}).get("active_energy_kwh", 0.0),
             "reactive_energy_kvarh": by_id.get(f.id, {}).get("reactive_energy_kvarh", 0.0),
