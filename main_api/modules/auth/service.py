@@ -302,6 +302,10 @@ class AuthService:
                 raise HTTPException(status_code=400, detail="این شماره تلفن قبلاً ثبت شده است.")
 
         update_data = data.model_dump(exclude_unset=True)
+        if "phone_number" in update_data and update_data["phone_number"] != user.phone_number:
+            # SMS alert approval is for the number the admin reviewed; a
+            # self-changed number must be re-approved by an admin.
+            update_data["sms_notification_enabled"] = False
         if update_data:
             await self._publish({
                 "entity": "user",

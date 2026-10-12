@@ -24,9 +24,15 @@ class Settings(BaseSettings):
     SMTP_FROM_EMAIL: str = ""
     SMTP_USE_TLS: bool = True
 
-    SMS_API_URL: str = "https://api.sms-provider.com/v1/send"
+    # SMS_PROVIDER selects the panel adapter in sms_gateways.py. "log" is a
+    # dry-run (nothing is sent, only logged) until the real panel is wired in.
+    SMS_ENABLED: bool = True
+    SMS_PROVIDER: str = "log"
+    SMS_API_URL: str = ""
     SMS_API_KEY: str = ""
     SMS_LINE_NUMBER: str = ""
+    SMS_MAX_LENGTH: int = 500
+    SMS_SEND_CONCURRENCY: int = 5
 
     model_config = SettingsConfigDict(
         env_file=".env",

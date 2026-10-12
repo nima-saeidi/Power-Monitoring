@@ -37,6 +37,19 @@ class UserRepository:
         )
         return [row[0] for row in result.all()]
 
+    async def get_sms_alert_phone_numbers(self) -> list[str]:
+        """Phones of active users the admin has approved for SMS alerts
+        (sms_notification_enabled is only settable by an admin)."""
+        result = await self.db.execute(
+            select(User.phone_number).where(
+                User.sms_notification_enabled == True,  # noqa: E712
+                User.is_active == True,  # noqa: E712
+                User.phone_number.isnot(None),
+                User.phone_number != "",
+            )
+        )
+        return [row[0] for row in result.all()]
+
     async def update_login_state(
         self, user: User, failed_attempts: int, locked_until: Optional[datetime]
     ) -> User:

@@ -171,6 +171,7 @@ class TelemetryService:
             n_type=NotificationType.ALERT, priority=NotificationPriority.HIGH,
             source_type="feeder", source_id=feeder.id, metadata=metadata,
             email_html=build_feeder_offline_email_html(feeder.name, feeder.id, data.consecutive_failures),
+            sms=True,
         )
 
     async def add_telemetry_data(self, data: TelemetryCreate) -> TelemetryResponse:

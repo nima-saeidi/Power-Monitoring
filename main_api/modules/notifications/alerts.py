@@ -22,7 +22,13 @@ async def dispatch_alert(
         source_id: int,
         metadata: Optional[Dict[str, Any]] = None,
         email_html: Optional[str] = None,
+        sms: Optional[bool] = None,
 ) -> None:
+    """`sms=None` means "SMS only for CRITICAL priority"; callers pass
+    `sms=True` for events that must always reach phones (e.g. feeder outage)."""
+    if sms is None:
+        sms = priority == NotificationPriority.CRITICAL
+
     user_repo = UserRepository(db)
     try:
         user_ids = [u.id for u in await user_repo.get_all() if u.is_active]
@@ -36,6 +42,8 @@ async def dispatch_alert(
                 username="System",
             )
 
+        queue_priority = "high" if priority in (NotificationPriority.HIGH, NotificationPriority.CRITICAL) else "normal"
+
         if email_html:
             emails = await user_repo.get_notification_enabled_emails()
             if emails:
@@ -45,7 +53,22 @@ async def dispatch_alert(
                     html_message=email_html,
                     channel="email",
                     email_addresses=emails,
-                    priority="high" if priority in (NotificationPriority.HIGH, NotificationPriority.CRITICAL) else "normal",
+                    priority=queue_priority,
+                    metadata=metadata,
+                )
+
+        # Published as its own message (not channel="all") so an SMS-panel
+        # failure dead-letters only the SMS, and a DLQ replay never re-sends
+        # the email.
+        if sms:
+            phones = await user_repo.get_sms_alert_phone_numbers()
+            if phones:
+                await send_notification_to_queue(
+                    title=title,
+                    message=message,
+                    channel="sms",
+                    phone_numbers=phones,
+                    priority=queue_priority,
                     metadata=metadata,
                 )
     except Exception as e:

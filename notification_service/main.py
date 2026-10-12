@@ -154,8 +154,14 @@ async def main():
     # a per-message WARNING buried in the logs, indistinguishable from "no
     # emails were queued yet".
     await email_provider.check_connection()
-    if not settings.SMS_API_KEY:
-        logger.warning("⚠️ SMS_API_KEY is not configured. All outgoing SMS will be silently skipped.")
+    if not settings.SMS_ENABLED:
+        logger.warning("⚠️ SMS_ENABLED=false. All outgoing SMS will be skipped.")
+    elif not sms_provider.is_ready():
+        logger.error(
+            f"❌ SMS gateway '{sms_provider.gateway.name}' is not configured. Outgoing SMS will fail until this is fixed."
+        )
+    else:
+        logger.info(f"📱 SMS gateway: '{sms_provider.gateway.name}'")
 
     logger.info("Connecting to RabbitMQ...")
     connection = await aio_pika.connect_robust(settings.RABBITMQ_URL)
