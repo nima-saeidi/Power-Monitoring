@@ -7,8 +7,8 @@ from main_api.core.broker import RabbitMQPublisher
 
 from main_api.modules.links.repository import LinkRepository
 from main_api.modules.links.service import LinkService
-from main_api.modules.links.schemas import LinkCreate, LinkUpdate, LinkResponse
-from main_api.modules.auth.dependencies import require_any_user, require_tech_or_admin
+from main_api.modules.links.schemas import ActiveLinkSource, LinkCreate, LinkUpdate, LinkResponse
+from main_api.modules.auth.dependencies import require_any_user, require_tech_or_admin, verify_internal_api_key
 
 
 links_router = APIRouter(prefix="/links", tags=["Links (اتصالات شبکه)"])
@@ -45,6 +45,30 @@ async def get_links(skip: int = Query(0, ge=0), limit: int = Query(100, ge=1),
                     service: LinkService = Depends(get_link_service), current_user=Depends(require_any_user)):
     return await service.get_links(skip=skip, limit=limit, post_id=post_id, is_active=is_active,
                                    load_status=load_status)
+
+
+@links_router.get("/internal/active-sources", response_model=List[ActiveLinkSource],
+                  dependencies=[Depends(verify_internal_api_key)], include_in_schema=False)
+async def get_active_link_sources(db: AsyncSession = Depends(get_db)):
+    """Links with an `external_source` in their metadata, polled by link_ingestion_service."""
+    links = await LinkRepository(db).get_active_links_with_source()
+    sources = []
+    for link in links:
+        cfg = (link.metadata_info or {}).get("external_source") or {}
+        if not isinstance(cfg, dict) or not cfg.get("provider") or not cfg.get("external_id"):
+            continue
+        sources.append(ActiveLinkSource(
+            link_id=link.id,
+            name=link.name,
+            feeder_id=link.feeder_id,
+            allowed_current=link.allowed_current,
+            provider=cfg["provider"],
+            external_id=str(cfg["external_id"]),
+            interval=cfg.get("interval"),
+            field_map=cfg.get("field_map") or {},
+            options=cfg.get("options") or {},
+        ))
+    return sources
 
 
 @links_router.get("/{link_id}", response_model=LinkResponse, summary="Get Specific Link")

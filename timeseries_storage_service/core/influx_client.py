@@ -45,6 +45,28 @@ class TimeSeriesDB:
             record=point
         )
 
+    async def write_link_telemetry(self, link_id: int, values: dict, timestamp=None,
+                                   feeder_id=None, provider=None):
+        point = Point("link_telemetry").tag("link_id", str(link_id))
+        if feeder_id is not None:
+            point.tag("feeder_id", str(feeder_id))
+        if provider:
+            point.tag("provider", str(provider))
+
+        has_field = False
+        for name, value in values.items():
+            if isinstance(value, bool) or not isinstance(value, (int, float)):
+                continue
+            point.field(str(name), float(value))
+            has_field = True
+        if not has_field:
+            return False
+        if timestamp:
+            point.time(timestamp)
+
+        await self.write_api.write(bucket=settings.INFLUXDB_BUCKET, record=point)
+        return True
+
     async def close(self):
         if self.client:
             await self.client.close()

@@ -39,3 +39,22 @@ class LinkResponse(LinkBase):
     to_post: Optional[PostResponse] = None
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class ActiveLinkSource(BaseModel):
+    """Internal contract for link_ingestion_service.
+
+    The external source of a link is configured in its metadata under the
+    `external_source` key, e.g.:
+        {"external_source": {"provider": "http", "external_id": "LNK-17",
+                             "interval": 60, "field_map": {"current": "data.i"}}}
+    """
+    link_id: int
+    name: Optional[str] = None
+    feeder_id: Optional[int] = None
+    allowed_current: Optional[float] = None
+    provider: str
+    external_id: str
+    interval: Optional[int] = None
+    field_map: Dict[str, str] = {}
+    options: Dict[str, Any] = {}

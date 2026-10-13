@@ -11,7 +11,7 @@ sys.path.insert(0, str(CURRENT_DIR))
 
 from core.config import settings
 from core.influx_client import db_client
-from core.telemetry import handle_telemetry_metric
+from core.telemetry import handle_link_metric, handle_telemetry_metric
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 logger = logging.getLogger("timeseries_storage_service")
@@ -35,7 +35,10 @@ async def process_message(message: aio_pika.IncomingMessage):
     async with message.process(requeue=False):
         try:
             payload = json.loads(message.body.decode())
-            await handle_telemetry_metric(payload)
+            if message.routing_key == settings.LINK_ROUTING_KEY:
+                await handle_link_metric(payload)
+            else:
+                await handle_telemetry_metric(payload)
         except Exception as e:
             logger.error(f"❌ Error processing message: {e}", exc_info=True)
             raise
@@ -81,6 +84,7 @@ async def main():
     )
 
     await queue.bind(exchange, routing_key=settings.ROUTING_KEY)
+    await queue.bind(exchange, routing_key=settings.LINK_ROUTING_KEY)
 
     await queue.consume(process_message)
     logger.info(f"🚀 TimeSeries Storage Service is listening on queue: {settings.TIMESERIES_QUEUE}")

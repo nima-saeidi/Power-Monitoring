@@ -258,7 +258,24 @@ services:
     networks:
       - power_net
 
-  # 12. Notification Service (RabbitMQ Consumer / Email & SMS Sender)
+  # 12. Link Ingestion Service (External link APIs -> RabbitMQ link.metric -> timeseries_storage)
+  link_ingestion:
+    build:
+      context: ./link_ingestion_service
+      dockerfile: Dockerfile
+    container_name: power_monitoring_link_ingestion
+    restart: unless-stopped
+    command: python main.py
+    env_file: .env
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      api:
+        condition: service_started
+    networks:
+      - power_net
+
+  # 13. Notification Service (RabbitMQ Consumer / Email & SMS Sender)
   notification:
     build:
       context: ./notification_service

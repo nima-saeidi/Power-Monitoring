@@ -12,6 +12,7 @@ class Settings(BaseSettings):
     TELEMETRY_EXCHANGE: str = "telemetry_events"
     TIMESERIES_QUEUE: str = "telemetry_timeseries_queue"
     ROUTING_KEY: str = "telemetry.*"
+    LINK_ROUTING_KEY: str = "link.metric"
 
     INFLUXDB_URL: str = Field("http://influxdb:8086", validation_alias=AliasChoices("INFLUXDB_URL", "INFLUX_URL"))
     INFLUXDB_TOKEN: str = Field("my-super-secret-auth-token", validation_alias=AliasChoices("INFLUXDB_TOKEN", "INFLUX_TOKEN"))

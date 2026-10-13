@@ -52,6 +52,15 @@ class LinkRepository:
         result = await self.db.execute(query)
         return result.scalar_one_or_none()
 
+    async def get_active_links_with_source(self) -> List[Link]:
+        query = (
+            select(Link)
+            .where(Link.is_active.is_(True), Link.metadata_info.has_key("external_source"))
+            .order_by(Link.id)
+        )
+        result = await self.db.execute(query)
+        return list(result.scalars().all())
+
     async def update_link(self, link: Link, data: LinkUpdate) -> Link:
         update_data = data.model_dump(exclude_unset=True)
         for key, value in update_data.items():
