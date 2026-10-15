@@ -46,6 +46,11 @@ class UserUpdate(BaseModel):
             raise ValueError(f"صفحه‌ی نامعتبر: {', '.join(unknown)}")
         return list(dict.fromkeys(value))
 
+class UserQueuedResponse(BaseModel):
+    status: str
+    message: str
+
+
 class UserResponse(BaseModel):
     id: int
     name: str

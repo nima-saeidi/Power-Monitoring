@@ -52,3 +52,14 @@ class Feeder(Base):
     __table_args__ = (
         Index('idx_feeder_post', 'post_id'),
     )
+
+
+class CommandChallenge(Base):
+    """Server-side state of a connect/disconnect confirmation code, so a code
+    stays single-use across API restarts and multiple workers."""
+    __tablename__ = "command_challenges"
+
+    jti = Column(String(32), primary_key=True)
+    failed_attempts = Column(Integer, nullable=False, default=0, server_default="0")
+    consumed = Column(Boolean, nullable=False, default=False, server_default="false")
+    expires_at = Column(DateTime(timezone=True), nullable=False, index=True)

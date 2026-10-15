@@ -2,38 +2,68 @@ from main_api.core.tasks import fire_and_forget
 import hashlib
 import hmac
 import secrets
-import time
 import uuid
 from datetime import datetime, timedelta, timezone
-from typing import Dict
 
 import jwt
 from fastapi import HTTPException, status
 from jwt.exceptions import PyJWTError
+from sqlalchemy import delete
+from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from main_api.core.broker import send_notification_to_queue
 from main_api.core.config import settings
 from main_api.core.email_templates import build_command_code_email_html
 from main_api.modules.audit_logs.services import send_audit_log
+from main_api.modules.feeders.models import CommandChallenge
 from main_api.modules.feeders.schemas import CommandConfirmRequest
 
 CODE_TTL_SECONDS = 90
 MAX_CODE_ATTEMPTS = 5
 ACTION_LABELS = {"connect": "وصل", "disconnect": "قطع"}
 
-_used_challenges: Dict[str, float] = {}
-_failed_attempts: Dict[str, int] = {}
-
 
 def _code_digest(jti: str, code: str) -> str:
     return hmac.new(settings.SECRET_KEY.encode(), f"cmd:{jti}:{code}".encode(), hashlib.sha256).hexdigest()
 
 
-def _prune() -> None:
-    now = time.time()
-    for jti in [j for j, exp in _used_challenges.items() if exp < now]:
-        _used_challenges.pop(jti, None)
-        _failed_attempts.pop(jti, None)
+async def _prune(db: AsyncSession) -> None:
+    await db.execute(delete(CommandChallenge).where(CommandChallenge.expires_at < datetime.now(timezone.utc)))
+    await db.commit()
+
+
+async def _record_failure(db: AsyncSession, jti: str, expires_at: datetime) -> int:
+    attempts = CommandChallenge.failed_attempts + 1
+    stmt = (
+        pg_insert(CommandChallenge)
+        .values(jti=jti, failed_attempts=1, consumed=False, expires_at=expires_at)
+        .on_conflict_do_update(
+            index_elements=[CommandChallenge.jti],
+            set_={"failed_attempts": attempts, "consumed": attempts >= MAX_CODE_ATTEMPTS},
+        )
+        .returning(CommandChallenge.failed_attempts)
+    )
+    result = (await db.execute(stmt)).scalar_one()
+    await db.commit()
+    return result
+
+
+async def _consume(db: AsyncSession, jti: str, expires_at: datetime) -> bool:
+    """Atomically mark a challenge as used; False if it was already used."""
+    stmt = (
+        pg_insert(CommandChallenge)
+        .values(jti=jti, consumed=True, expires_at=expires_at)
+        .on_conflict_do_update(
+            index_elements=[CommandChallenge.jti],
+            set_={"consumed": True},
+            where=CommandChallenge.consumed.is_(False),
+        )
+        .returning(CommandChallenge.jti)
+    )
+    consumed = (await db.execute(stmt)).scalar_one_or_none() is not None
+    await db.commit()
+    return consumed
 
 
 def _resolve_target(feeder) -> dict:
@@ -81,10 +111,10 @@ async def request_command(feeder, action: str, user) -> dict:
     return {"message": "کد تأیید به ایمیل شما ارسال شد.", "challenge_token": token, "expires_in": CODE_TTL_SECONDS}
 
 
-async def confirm_command(feeder, data: CommandConfirmRequest, user) -> dict:
+async def confirm_command(db: AsyncSession, feeder, data: CommandConfirmRequest, user) -> dict:
     from main_api.modules.telemetry.service import TelemetryService
 
-    _prune()
+    await _prune(db)
     invalid = HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="توکن فرمان منقضی شده یا نامعتبر است.")
     try:
         payload = jwt.decode(data.challenge_token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
@@ -92,17 +122,20 @@ async def confirm_command(feeder, data: CommandConfirmRequest, user) -> dict:
         raise invalid
     jti = payload.get("jti", "")
     if (payload.get("type") != "command_challenge" or payload.get("sub") != str(user.id)
-            or payload.get("feeder_id") != feeder.id or jti in _used_challenges):
+            or payload.get("feeder_id") != feeder.id or not jti):
+        raise invalid
+    expires_at = datetime.fromtimestamp(payload["exp"], tz=timezone.utc)
+    state = await db.get(CommandChallenge, jti)
+    if state is not None and state.consumed:
         raise invalid
 
     if not hmac.compare_digest(_code_digest(jti, data.code.strip()), payload.get("code_hash", "")):
-        _failed_attempts[jti] = _failed_attempts.get(jti, 0) + 1
-        if _failed_attempts[jti] >= MAX_CODE_ATTEMPTS:
-            _used_challenges[jti] = payload["exp"]
+        if await _record_failure(db, jti, expires_at) >= MAX_CODE_ATTEMPTS:
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,
                                 detail="تعداد تلاش‌های ناموفق زیاد بود؛ دوباره درخواست فرمان دهید.")
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="کد تأیید اشتباه است.")
-    _used_challenges[jti] = payload["exp"]
+    if not await _consume(db, jti, expires_at):
+        raise invalid
 
     action = payload["action"]
     action_label = ACTION_LABELS[action]

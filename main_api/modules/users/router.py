@@ -19,6 +19,7 @@ from main_api.core.domain import PAGES
 from main_api.modules.users.models import RoleEnum
 from main_api.modules.users.schemas import (
     UserResponse,
+    UserQueuedResponse,
     UserCreate,
     UserUpdate,
 )
@@ -71,7 +72,7 @@ async def get_user(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="شما مجوز لازم برای انجام این عملیات را ندارید.")
     return await service.get_user_by_id(user_id)
 
-@user_router.post("", response_model=UserResponse, status_code=status.HTTP_201_CREATED, summary="Create User (Admin Only)")
+@user_router.post("", response_model=UserQueuedResponse, status_code=status.HTTP_202_ACCEPTED, summary="Create User (Admin Only)")
 async def create_user(
     data: UserCreate,
     service: UserService = Depends(get_user_service),
@@ -79,7 +80,7 @@ async def create_user(
 ):
     return await service.create_user(data, current_user=current_admin)
 
-@user_router.put("/{user_id}", response_model=UserResponse, summary="Update User (Admin Only)")
+@user_router.put("/{user_id}", response_model=UserQueuedResponse, summary="Update User (Admin Only)")
 async def update_user(
     user_id: int,
     data: UserUpdate,
@@ -88,7 +89,7 @@ async def update_user(
 ):
     return await service.update_user(user_id, data, current_user=current_admin)
 
-@user_router.delete("/{user_id}", status_code=status.HTTP_200_OK, summary="Delete User (Admin Only)")
+@user_router.delete("/{user_id}", response_model=UserQueuedResponse, status_code=status.HTTP_200_OK, summary="Delete User (Admin Only)")
 async def delete_user(
     user_id: int,
     service: UserService = Depends(get_user_service),

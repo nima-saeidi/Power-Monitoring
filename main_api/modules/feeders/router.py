@@ -139,4 +139,4 @@ async def confirm_feeder_command(request: Request, feeder_id: int, data: Command
     feeder = await FeederRepository(db).get_feeder_by_id(feeder_id)
     if not feeder:
         raise HTTPException(status_code=404, detail="Feeder not found")
-    return await commands.confirm_command(feeder, data, current_user)
+    return await commands.confirm_command(db, feeder, data, current_user)
