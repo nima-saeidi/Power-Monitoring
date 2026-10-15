@@ -42,6 +42,8 @@ class ActiveFeederConfig(BaseModel):
     power_factor_register: Optional[int] = None
     register_scales: Dict[str, float] = {}
     signed_registers: List[str] = []
+    max_current: Optional[float] = None
+    feeder_type: Optional[str] = None
 
     class Config:
         from_attributes = True

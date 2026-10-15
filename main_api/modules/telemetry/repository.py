@@ -75,6 +75,8 @@ class TelemetryRepository:
                     power_factor_register=f.power_factor_register,
                     register_scales=overrides_of(f).get("register_scales") or {},
                     signed_registers=overrides_of(f).get("signed_registers") or [],
+                    max_current=f.max_current,
+                    feeder_type=f.feeder_type or (f.post.post_type if f.post else None),
                     **runtime_config,
                 )
             )

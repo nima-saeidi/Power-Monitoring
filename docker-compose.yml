@@ -289,3 +289,25 @@ services:
         condition: service_healthy
     networks:
       - power_net
+
+  # 14. Demo Telemetry (synthetic readings for offline feeders) - NOT started by default.
+  # Only for demo/test servers without reachable Modbus devices:
+  #   docker compose --profile demo up -d --build fake_telemetry
+  # Real (online) feeders are never touched unless FAKE_ONLY_OFFLINE=false.
+  fake_telemetry:
+    build:
+      context: ./fake_telemetry_service
+      dockerfile: Dockerfile
+    container_name: power_monitoring_fake_telemetry
+    profiles: ["demo"]
+    restart: unless-stopped
+    env_file: .env
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      influxdb:
+        condition: service_healthy
+      api:
+        condition: service_started
+    networks:
+      - power_net
