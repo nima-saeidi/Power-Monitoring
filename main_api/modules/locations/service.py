@@ -152,6 +152,9 @@ class LocationService:
     async def get_locations(self, skip: int = 0, limit: int = 100):
         return await self.repo.get_all_locations(skip=skip, limit=limit)
 
+    async def get_root_locations(self):
+        return await self.repo.get_root_locations()
+
     async def get_location(self, location_id: int):
         location = await self.repo.get_location_by_id(location_id)
         if not location:
