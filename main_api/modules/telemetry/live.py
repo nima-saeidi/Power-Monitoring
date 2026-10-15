@@ -50,6 +50,13 @@ class _StatusChange:
     current: Optional[float]
 
 
+def threshold_percent(value: float) -> float:
+    """Thresholds may be stored as a percent (75) or as the α/β coefficient of the
+    rated current (0.75); anything up to 1 is treated as a coefficient."""
+    value = float(value)
+    return round(value * 100, 3) if value <= 1 else value
+
+
 def evaluate_load(current: Optional[float], rated_current: Optional[float],
                   warning_pct: float, critical_pct: float) -> Tuple[str, Optional[float]]:
     if current is None or not rated_current or rated_current <= 0:
@@ -86,8 +93,8 @@ class LiveMonitor:
                 links = (await db.execute(select(Link))).scalars().all()
                 system_settings = await SettingService.get_or_create_settings(db)
 
-            self.warning_pct = float(system_settings.warning_threshold)
-            self.critical_pct = float(system_settings.critical_threshold)
+            self.warning_pct = threshold_percent(system_settings.warning_threshold)
+            self.critical_pct = threshold_percent(system_settings.critical_threshold)
             self.cooldown_seconds = int(system_settings.notification_cooldown_seconds or 0)
             self.feeders = {
                 f.id: _Entity("feeder", f.id, f.name, f.max_current, f.load_status or STATUS_UNKNOWN,

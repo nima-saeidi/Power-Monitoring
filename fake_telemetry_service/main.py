@@ -43,6 +43,10 @@ except Exception as _graylog_err:
     logger.warning(f"Could not attach Graylog handler: {_graylog_err}")
 
 
+def _sample(ts: datetime, feeder_id: int, cfg: dict) -> dict:
+    return sample(ts, feeder_id, cfg.get("max_current"), cfg.get("feeder_type"), settings.FAKE_MAX_LOAD_RATIO)
+
+
 async def fetch_feeders() -> Dict[int, dict]:
     url = f"{settings.MAIN_API_URL.rstrip('/')}/telemetry/active-feeders"
     try:
@@ -93,7 +97,7 @@ async def backfill(feeders: Dict[int, dict]) -> None:
             points, written, ts = [], 0, start
             while ts < now:
                 point = Point("feeder_telemetry").tag("feeder_id", str(fid))
-                for field, value in sample(ts, fid, cfg.get("max_current"), cfg.get("feeder_type")).items():
+                for field, value in _sample(ts, fid, cfg).items():
                     point = point.field(field, float(value))
                 points.append(point.time(ts, WritePrecision.S))
                 ts += step
@@ -127,8 +131,7 @@ async def run(stop: asyncio.Event) -> None:
 
             now = datetime.now(timezone.utc)
             for fid, cfg in feeders.items():
-                body = {"feeder_id": fid, **sample(now, fid, cfg.get("max_current"), cfg.get("feeder_type")),
-                        "timestamp": now.isoformat()}
+                body = {"feeder_id": fid, **_sample(now, fid, cfg), "timestamp": now.isoformat()}
                 await exchange.publish(
                     aio_pika.Message(json.dumps(body).encode("utf-8"), content_type="application/json",
                                      delivery_mode=aio_pika.DeliveryMode.PERSISTENT),

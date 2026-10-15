@@ -30,6 +30,9 @@ class Settings(BaseSettings):
     # History written straight to InfluxDB on start-up for feeders that have a gap.
     FAKE_BACKFILL_DAYS: int = 30
     FAKE_BACKFILL_STEP_SECONDS: int = 60
+    # Upper bound of current / rated current. Keep it below the warning threshold
+    # (system settings), otherwise demo data raises real load alerts.
+    FAKE_MAX_LOAD_RATIO: float = 0.35
 
     @property
     def RABBITMQ_URL(self) -> str:
