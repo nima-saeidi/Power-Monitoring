@@ -168,6 +168,7 @@ services:
       context: .
       dockerfile: ./main_api/Dockerfile
     container_name: power_monitoring_api
+    hostname: main_api
     restart: unless-stopped
     command: bash -c "alembic -c main_api/alembic.ini upgrade head && uvicorn main_api.main:app --host 0.0.0.0 --port 8000"
     ports:
@@ -191,6 +192,7 @@ services:
       context: ./postgres_storage_service
       dockerfile: Dockerfile
     container_name: power_monitoring_postgres_storage
+    hostname: postgres_storage
     restart: unless-stopped
     command: python main.py
     env_file: .env
@@ -210,6 +212,7 @@ services:
       context: ./timeseries_storage_service
       dockerfile: Dockerfile
     container_name: power_monitoring_timeseries_storage
+    hostname: timeseries_storage
     restart: unless-stopped
     command: python main.py
     env_file: .env
@@ -229,6 +232,7 @@ services:
       context: ./logging_service
       dockerfile: Dockerfile
     container_name: power_monitoring_logging
+    hostname: logging_service
     restart: unless-stopped
     command: uvicorn main:app --host 0.0.0.0 --port 8002
     ports:
@@ -250,6 +254,7 @@ services:
       context: ./telemetry_service
       dockerfile: Dockerfile
     container_name: power_monitoring_telemetry
+    hostname: telemetry_service
     restart: unless-stopped
     ports:
       - "127.0.0.1:8001:8001"
@@ -268,6 +273,7 @@ services:
       context: ./link_ingestion_service
       dockerfile: Dockerfile
     container_name: power_monitoring_link_ingestion
+    hostname: link_ingestion
     restart: unless-stopped
     command: python main.py
     env_file: .env
@@ -285,6 +291,7 @@ services:
       context: ./notification_service
       dockerfile: Dockerfile
     container_name: power_monitoring_notification
+    hostname: notification_service
     restart: unless-stopped
     command: python main.py
     env_file: .env
@@ -305,6 +312,7 @@ services:
       context: ./fake_telemetry_service
       dockerfile: Dockerfile
     container_name: power_monitoring_fake_telemetry
+    hostname: fake_telemetry
     profiles: ["demo"]
     restart: unless-stopped
     env_file: .env

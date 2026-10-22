@@ -54,7 +54,9 @@ class LoggingService:
             conditions.append(
                 or_(
                     AuditLog.action.ilike(search_term),
-                    AuditLog.service_name.ilike(search_term)
+                    AuditLog.service_name.ilike(search_term),
+                    AuditLog.details["description"].astext.ilike(search_term),
+                    AuditLog.details["username"].astext.ilike(search_term),
                 )
             )
         if filters.severity:

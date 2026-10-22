@@ -2,7 +2,7 @@ from typing import Optional
 from datetime import datetime
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from main_api.modules.users.models import RoleEnum, User
+from main_api.modules.users.models import User
 
 class UserRepository:
     def __init__(self, db: AsyncSession):
@@ -27,10 +27,6 @@ class UserRepository:
     async def get_all(self):
         result = await self.db.execute(select(User))
         return result.scalars().all()
-
-    async def admin_exists(self) -> bool:
-        result = await self.db.execute(select(User.id).where(User.role == RoleEnum.ADMIN).limit(1))
-        return result.first() is not None
 
     async def get_notification_enabled_emails(self) -> list[str]:
         result = await self.db.execute(

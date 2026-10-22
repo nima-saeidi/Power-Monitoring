@@ -20,7 +20,7 @@ async def fetch_logs(
     service_name: Optional[str] = Query(default=None, description="Filter by service name (e.g. main_api)"),
     action: Optional[str] = Query(default=None, description="Filter by action name"),
     user_id: Optional[int] = Query(default=None, description="Filter by User ID"),
-    search: Optional[str] = Query(default=None, description="Search keyword in action/service"),
+    search: Optional[str] = Query(default=None, description="Search keyword in action/service/description/username"),
     severity: Optional[str] = Query(default=None, description="Filter by severity (INFO/WARNING/ERROR/CRITICAL)"),
     success: Optional[bool] = Query(default=None, description="Filter by success flag"),
     start_date: Optional[datetime] = Query(default=None, description="Filter logs created at/after this time"),

@@ -6,21 +6,12 @@ from core.config import settings
 from modules.services import logging_service_instance
 from modules.schemas import LogCreate
 
-try:
-    from pygelf import GelfUdpHandler
-except ImportError:
-    GelfUdpHandler = None
-    logging.warning("pygelf is not installed. Logs will not be sent to Graylog.")
-
 logger = logging.getLogger(__name__)
 
+# Reaches Graylog through the root GELF handler set up in core.config; a second
+# handler here sent every audit message twice.
 graylog_logger = logging.getLogger("graylog_audit")
 graylog_logger.setLevel(logging.INFO)
-
-if GelfUdpHandler and not graylog_logger.handlers:
-    graylog_logger.addHandler(
-        GelfUdpHandler(host=settings.GRAYLOG_HOST, port=settings.GRAYLOG_PORT)
-    )
 
 
 
@@ -35,29 +26,28 @@ async def process_audit_message(message: aio_pika.IncomingMessage):
 
             await logging_service_instance.save_log(valid_log)
 
-            if GelfUdpHandler:
-                details = valid_log.details or {}
-                level_str = str(details.get("severity", "INFO")).upper()
-                level_map = {
-                    "DEBUG": logging.DEBUG,
-                    "INFO": logging.INFO,
-                    "WARNING": logging.WARNING,
-                    "ERROR": logging.ERROR,
-                    "CRITICAL": logging.CRITICAL
-                }
-                log_level = level_map.get(level_str, logging.INFO)
+            details = valid_log.details or {}
+            level_str = str(details.get("severity", "INFO")).upper()
+            level_map = {
+                "DEBUG": logging.DEBUG,
+                "INFO": logging.INFO,
+                "WARNING": logging.WARNING,
+                "ERROR": logging.ERROR,
+                "CRITICAL": logging.CRITICAL
+            }
+            log_level = level_map.get(level_str, logging.INFO)
 
-                extra_fields = {
-                    "_service_name": valid_log.service_name,
-                    "_audit_action": valid_log.action,
-                    "_user_id": valid_log.user_id,
-                    "_success": details.get("success"),
-                    "_username": details.get("username"),
-                    "_extra_data": str(details)
-                }
+            extra_fields = {
+                "service_name": valid_log.service_name,
+                "audit_action": valid_log.action,
+                "user_id": valid_log.user_id,
+                "success": details.get("success"),
+                "username": details.get("username"),
+                "extra_data": str(details)
+            }
 
-                msg_text = details.get("description") or f"Audit Log: {valid_log.action}"
-                graylog_logger.log(log_level, msg_text, extra=extra_fields)
+            msg_text = details.get("description") or f"Audit Log: {valid_log.action}"
+            graylog_logger.log(log_level, msg_text, extra=extra_fields)
 
         except json.JSONDecodeError as jde:
             logger.error(f"Failed to decode message JSON: {jde}")

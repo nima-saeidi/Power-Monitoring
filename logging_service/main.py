@@ -20,6 +20,8 @@ _EXTRA_INDEX_STATEMENTS = [
     "CREATE EXTENSION IF NOT EXISTS pg_trgm",
     "CREATE INDEX IF NOT EXISTS ix_service_logs_action_trgm ON service_logs USING gin (action gin_trgm_ops)",
     "CREATE INDEX IF NOT EXISTS ix_service_logs_service_name_trgm ON service_logs USING gin (service_name gin_trgm_ops)",
+    "CREATE INDEX IF NOT EXISTS ix_service_logs_description_trgm ON service_logs USING gin ((details->>'description') gin_trgm_ops)",
+    "CREATE INDEX IF NOT EXISTS ix_service_logs_username_trgm ON service_logs USING gin ((details->>'username') gin_trgm_ops)",
     "CREATE INDEX IF NOT EXISTS ix_service_logs_severity ON service_logs ((details->>'severity'))",
     "CREATE INDEX IF NOT EXISTS ix_service_logs_success ON service_logs ((details->>'success'))",
     "CREATE INDEX IF NOT EXISTS ix_service_logs_service_created ON service_logs (service_name, created_at DESC)",
