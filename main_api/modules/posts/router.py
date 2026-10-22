@@ -3,7 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List, Literal, Optional
 
 from main_api.core.database import get_db
-from main_api.core.broker import RabbitMQPublisher
+from main_api.core.broker import RabbitMQPublisher, get_rabbitmq_publisher
 
 from main_api.modules.posts.repository import PostRepository
 from main_api.modules.posts.service import PostService
@@ -14,18 +14,9 @@ from main_api.modules.auth.dependencies import require_any_user, require_tech_or
 posts_router = APIRouter(prefix="/posts", tags=["Posts (پست‌های برق)"])
 
 
-async def get_message_broker():
-    broker = RabbitMQPublisher()
-    await broker.connect()
-    try:
-        yield broker
-    finally:
-        pass
-
-
 def get_post_service(
     db: AsyncSession = Depends(get_db),
-    broker: RabbitMQPublisher = Depends(get_message_broker)
+    broker: RabbitMQPublisher = Depends(get_rabbitmq_publisher)
 ) -> PostService:
     repo = PostRepository(db)
     return PostService(repo=repo, broker=broker)

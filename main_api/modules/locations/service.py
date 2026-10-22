@@ -171,9 +171,9 @@ class LocationService:
 
             await self._publish("campus", "create", data=new_campus)
 
-            background_tasks.add_task(
-                send_audit_log, action="CREATE_CAMPUS", username=username, success=True, severity="INFO",
-                description=f"پردیس جدید '{getattr(data, 'name', 'نامشخص')}' به همراه زیرمجموعه‌ها ایجاد شد."
+            schedule_audit_log(
+                background_tasks, action="CREATE_CAMPUS", username=username, success=True, severity="INFO",
+                description=f"پردیس جدید '{data.campus_name}' به همراه زیرمجموعه‌ها ایجاد شد."
             )
             return new_campus
         except Exception as e:

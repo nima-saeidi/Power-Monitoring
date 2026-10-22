@@ -1,5 +1,9 @@
 FROM python:3.11-slim
 
+# Overridable package index (e.g. a local mirror where pypi.org is unreachable)
+ARG PIP_INDEX_URL=https://pypi.org/simple
+ARG PIP_DEFAULT_TIMEOUT=60
+
 # جلوگیری از نوشتن فایل‌های .pyc و بافر کردن لاگ‌ها
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1

@@ -4,7 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from main_api.modules.locations.models import Location
-from main_api.modules.locations.schemas import LocationCreate, LocationUpdate
+from main_api.modules.locations.schemas import CampusWithSubsectionsCreate, LocationCreate, LocationUpdate
 from main_api.modules.posts.models import Post
 
 
@@ -26,6 +26,17 @@ class LocationRepository:
         await self.db.refresh(location)
 
         return location
+
+    async def create_campus_with_subsections(self, data: CampusWithSubsectionsCreate) -> Optional[dict]:
+        campus = Location(name=data.campus_name, location_type="campus",
+                          description=data.description, address=data.address)
+        self.db.add(campus)
+        await self.db.flush()
+        for name in data.sub_sections:
+            self.db.add(Location(name=name, location_type="unit", parent_id=campus.id))
+        await self.db.commit()
+        return await self.get_location_by_id(campus.id)
+
     async def get_all_locations_flat(self, skip: int = 0, limit: int = 100) -> List[Location]:
         stmt = (
             select(Location)

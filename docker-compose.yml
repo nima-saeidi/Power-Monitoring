@@ -51,7 +51,7 @@ services:
       test: ["CMD-SHELL", "rabbitmq-diagnostics -q ping"]
       interval: 10s
       timeout: 10s
-      retries: 5
+      retries: 10
       start_period: 30s
     networks:
       - power_net
@@ -199,6 +199,8 @@ services:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
+      graylog:
+        condition: service_started
     networks:
       - power_net
 
@@ -216,6 +218,8 @@ services:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
+      graylog:
+        condition: service_started
     networks:
       - power_net
 
@@ -287,6 +291,8 @@ services:
     depends_on:
       rabbitmq:
         condition: service_healthy
+      graylog:
+        condition: service_started
     networks:
       - power_net
 

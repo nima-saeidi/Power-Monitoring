@@ -9,7 +9,7 @@ from io import BytesIO
 from main_api.core.database import get_db
 from main_api.core.errors import api_error
 from main_api.core.rate_limit import limiter, IMPORT_LIMIT, COMMAND_LIMIT
-from main_api.core.broker import RabbitMQPublisher
+from main_api.core.broker import RabbitMQPublisher, get_rabbitmq_publisher
 
 logger = logging.getLogger("main_api")
 
@@ -28,18 +28,9 @@ feeders_router = APIRouter(prefix="/feeders", tags=["Feeders (فیدرها و ت
 MAX_IMPORT_FILE_BYTES = 5 * 1024 * 1024
 
 
-async def get_message_broker():
-    broker = RabbitMQPublisher()
-    await broker.connect()
-    try:
-        yield broker
-    finally:
-        pass
-
-
 def get_feeder_service(
     db: AsyncSession = Depends(get_db),
-    broker: RabbitMQPublisher = Depends(get_message_broker)
+    broker: RabbitMQPublisher = Depends(get_rabbitmq_publisher)
 ) -> FeederService:
     repo = FeederRepository(db)
     return FeederService(repo=repo, broker=broker)

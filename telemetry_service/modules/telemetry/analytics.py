@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import os
 from collections import defaultdict
@@ -19,22 +20,26 @@ def flux_location() -> str:
     return f"timezone.fixed(offset: {minutes}m)"
 
 
+def _any_of(column: str, values) -> str:
+    # Equality predicates joined with `or` are pushed down to the storage engine;
+    # `contains()` is not and forces a scan of every series in the range (~100x slower).
+    return " or ".join(f'r["{column}"] == "{v}"' for v in values)
+
+
 def _feeder_filter(feeder_ids: List[int]) -> str:
-    ids = ", ".join(f'"{int(fid)}"' for fid in feeder_ids)
-    return f'filter(fn: (r) => contains(value: r["feeder_id"], set: [{ids}]))'
+    return f"filter(fn: (r) => {_any_of('feeder_id', (int(fid) for fid in feeder_ids))})"
 
 
 async def get_energy(
         feeder_ids: List[int], start_time: datetime, end_time: datetime, window: Optional[str] = None
 ) -> Dict[int, dict]:
-    fields = ", ".join(f'"{f}"' for f in ENERGY_FIELDS)
     base = f'''
     import "timezone"
     from(bucket: "{settings.INFLUX_BUCKET}")
       |> range(start: {start_time.isoformat()}, stop: {end_time.isoformat()})
       |> filter(fn: (r) => r["_measurement"] == "feeder_telemetry")
       |> {_feeder_filter(feeder_ids)}
-      |> filter(fn: (r) => contains(value: r["_field"], set: [{fields}]))
+      |> filter(fn: (r) => {_any_of("_field", ENERGY_FIELDS)})
     '''
     query_api = influx_manager.get_client().query_api()
     result: Dict[int, dict] = {
@@ -43,19 +48,23 @@ async def get_energy(
     }
     key_of = {"active_power": "active_energy_kwh", "reactive_power": "reactive_energy_kvarh"}
 
-    totals = await query_api.query(base + "|> integral(unit: 1h)", org=settings.INFLUX_ORG)
-    for table in totals:
-        for record in table.records:
-            fid = int(record.values["feeder_id"])
-            result[fid][key_of[record.get_field()]] = round(float(record.get_value() or 0.0), 3)
-
+    queries = [query_api.query(base + "|> integral(unit: 1h)", org=settings.INFLUX_ORG)]
     if window:
         series_query = base + f'''
           |> aggregateWindow(every: {window}, fn: (column, tables=<-) => tables |> integral(unit: 1h, column: column),
                              createEmpty: false, location: {flux_location()})
         '''
+        queries.append(query_api.query(series_query, org=settings.INFLUX_ORG))
+    totals, *series = await asyncio.gather(*queries)
+
+    for table in totals:
+        for record in table.records:
+            fid = int(record.values["feeder_id"])
+            result[fid][key_of[record.get_field()]] = round(float(record.get_value() or 0.0), 3)
+
+    if series:
         buckets: Dict[int, Dict[str, dict]] = defaultdict(dict)
-        for table in await query_api.query(series_query, org=settings.INFLUX_ORG):
+        for table in series[0]:
             for record in table.records:
                 fid = int(record.values["feeder_id"])
                 ts = record.get_time().isoformat()
@@ -67,14 +76,13 @@ async def get_energy(
 
 
 async def get_forecast(feeder_id: int, hours: int = 24, history_days: int = 7) -> dict:
-    fields = ", ".join(f'"{f}"' for f in ENERGY_FIELDS)
     query = f'''
     import "timezone"
     from(bucket: "{settings.INFLUX_BUCKET}")
       |> range(start: -{int(history_days)}d)
       |> filter(fn: (r) => r["_measurement"] == "feeder_telemetry")
       |> filter(fn: (r) => r["feeder_id"] == "{int(feeder_id)}")
-      |> filter(fn: (r) => contains(value: r["_field"], set: [{fields}]))
+      |> filter(fn: (r) => {_any_of("_field", ENERGY_FIELDS)})
       |> aggregateWindow(every: 1h, fn: mean, createEmpty: false, timeSrc: "_start", location: {flux_location()})
     '''
     profile: Dict[str, Dict[int, List[float]]] = {f: defaultdict(list) for f in ENERGY_FIELDS}

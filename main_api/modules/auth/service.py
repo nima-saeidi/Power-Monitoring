@@ -268,6 +268,14 @@ class AuthService:
 
 
     async def register_admin(self, data: AdminRegisterRequest, background_tasks: Optional[BackgroundTasks] = None):
+        # Bootstrap only: once an admin exists, further admins are created via POST /users by an admin.
+        if await self.repo.admin_exists():
+            schedule_audit_log(
+                background_tasks, action="REGISTER_ADMIN_REJECTED", username=data.email,
+                success=False, severity="WARNING", description="ثبت ادمین رد شد: ادمین اولیه قبلاً ایجاد شده است"
+            )
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
+                                detail="ادمین اولیه قبلاً ایجاد شده است؛ ادمین جدید را از بخش مدیریت کاربران بسازید.")
         if await self.repo.get_by_email(data.email):
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="این ایمیل قبلاً ثبت شده است.")
         if data.phone_number and await self.repo.get_by_phone_number(data.phone_number):

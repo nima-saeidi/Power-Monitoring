@@ -331,11 +331,24 @@ class TelemetryScheduler:
 
             await asyncio.sleep(sync_interval)
 
+    async def _run(self):
+        # RabbitMQ can accept connections a few seconds after its healthcheck passes; without
+        # retrying here a single refused connect left the service up but never polling.
+        delay = 2.0
+        while self.is_running:
+            try:
+                await self._init_rabbitmq()
+                break
+            except Exception:
+                logger.warning(f"Retrying RabbitMQ connection in {delay:.0f}s...")
+                await asyncio.sleep(delay)
+                delay = min(delay * 2, 30.0)
+        await self._sync_feeders_loop()
+
     async def start(self):
         self.is_running = True
         logger.info("🚀 Starting Dynamic Telemetry Scheduler...")
-        await self._init_rabbitmq()
-        self._sync_task = asyncio.create_task(self._sync_feeders_loop())
+        self._sync_task = asyncio.create_task(self._run())
 
     async def stop(self):
         logger.info("🛑 Stopping Telemetry Scheduler...")

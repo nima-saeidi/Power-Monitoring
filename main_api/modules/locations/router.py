@@ -3,7 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List
 
 from main_api.core.database import get_db
-from main_api.core.broker import RabbitMQPublisher
+from main_api.core.broker import RabbitMQPublisher, get_rabbitmq_publisher
 
 from main_api.modules.locations.repository import LocationRepository
 from main_api.modules.locations.service import LocationService
@@ -18,18 +18,9 @@ from main_api.modules.auth.dependencies import require_any_user, require_tech_or
 locations_router = APIRouter(prefix="/locations", tags=["Locations (مکان‌ها)"])
 
 
-async def get_message_broker():
-    broker = RabbitMQPublisher()
-    await broker.connect()
-    try:
-        yield broker
-    finally:
-        pass
-
-
 def get_location_service(
     db: AsyncSession = Depends(get_db),
-    broker: RabbitMQPublisher = Depends(get_message_broker)
+    broker: RabbitMQPublisher = Depends(get_rabbitmq_publisher)
 ) -> LocationService:
     repo = LocationRepository(db)
     return LocationService(repo=repo, broker=broker)

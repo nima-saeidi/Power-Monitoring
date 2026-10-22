@@ -1,6 +1,10 @@
 # استفاده از تصویر پایه پایتون ۳.۱۱
 FROM python:3.12-slim
 
+# Overridable package index (e.g. a local mirror where pypi.org is unreachable)
+ARG PIP_INDEX_URL=https://pypi.org/simple
+ARG PIP_DEFAULT_TIMEOUT=60
+
 # جلوگیری از نوشتن فایل‌های .pyc و بافر شدن خروجی‌ها در لاگ داکر
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
